@@ -4,7 +4,7 @@ import {
   BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
-  ArrowLeft, Save, RotateCcw
+  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2
 } from "lucide-react";
 
 const CATEGORIES = [
@@ -59,6 +59,8 @@ function App() {
   const [showDeckModal, setShowDeckModal] = useState(false);
   const [editingDeck, setEditingDeck] = useState(null);
   const [showQuestionModal, setShowQuestionModal] = useState(false);
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [aiDeckId, setAiDeckId] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [questionDeckId, setQuestionDeckId] = useState(null);
   const [showSessionModal, setShowSessionModal] = useState(false);
@@ -171,13 +173,14 @@ function App() {
       
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} setPage={setPage} setCategory={setCategory}/>} 
       {page==="decks" && <Decks decks={decks} questions={questions} questionStats={questionStats} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} deleteDeck={deleteDeck}/>} 
-      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)}/>} 
+      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} setShowSessionModal={setShowSessionModal}/>} 
 
       {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats}/>}
       {studyPool && <StudyModal study={studyPool} answer={answerStudy} next={nextStudy} close={()=>setStudyPool(null)}/>} 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck}/>} 
+      {showAIModal && <AIQuestionModal deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
       {showSessionModal && <SessionModal close={()=>setShowSessionModal(false)} save={data=>{setSessions(s=>[...s,{id:Date.now(),...data}]);setShowSessionModal(false)}}/>} 
       {showSettings && <SettingsModal close={()=>setShowSettings(false)}/>} 
@@ -236,9 +239,9 @@ function Decks({decks,questions,questionStats,setPage,openDeck,setShowDeckModal,
 
 function DeckCard({deck,questions,questionStats,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; return <div className="deck-card"><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"}</span><div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {deck.flashcards||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}><Play size={17}/> Open Deck</button></div>; }
 
-function DeckDetail({deck,questions,questionStats,onBack,onAdd,onEdit,onDelete,onStudy}) {
+function DeckDetail({deck,questions,questionStats,onBack,onAdd,onAI,onEdit,onDelete,onStudy}) {
   if(!deck) return null; const reviewed=questions.filter(q=>questionStats[q.id]?.attempts).length; const accuracy=questions.reduce((sum,q)=>sum+(questionStats[q.id]?.correct||0),0); const attempts=questions.reduce((sum,q)=>sum+(questionStats[q.id]?.attempts||0),0); const pct=questions.length?Math.round(reviewed/questions.length*100):0;
-  return <div><PageHeader title={deck.name} subtitle={<><span>{CATEGORIES.find(c=>c.id===deck.category)?.label} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/><div className="deck-detail-stats"><div><b>{questions.length}</b><span>Questions</span></div><div><b>{reviewed}</b><span>Reviewed</span></div><div><b>{pct}%</b><span>Deck progress</span></div><div><b>{attempts?Math.round(accuracy/attempts*100):0}%</b><span>Accuracy</span></div></div><div className="detail-toolbar"><button className="primary-btn" onClick={onStudy} disabled={!questions.length}><Play size={18}/> Study Now</button><span>{questions.length?"Answer questions and track your progress here.":"This deck is empty — add your first question to begin."}</span></div><section className="panel question-bank"><div className="section-head"><h2>Questions</h2><span className="muted">{questions.length} total</span></div>{questions.length?<div className="question-list">{questions.map((q,i)=><div className="question-row" key={q.id}><div className="question-number">{i+1}</div><div className="question-row-main"><b>{q.q}</b><span>{q.options.length} choices · {questionStats[q.id]?.attempts||0} attempts</span></div><div className="question-row-actions"><button onClick={()=>onEdit(q)} title="Edit"><Pencil size={17}/></button><button onClick={()=>onDelete(q.id)} title="Delete"><Trash2 size={17}/></button></div></div>)}</div>:<div className="empty"><FileText/><b>No questions yet</b><span>Add a multiple-choice question to this deck.</span><button className="primary-btn" onClick={onAdd}><Plus/> Add First Question</button></div>}</section></div>;
+  return <div><PageHeader title={deck.name} subtitle={<><span>{CATEGORIES.find(c=>c.id===deck.category)?.label} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="secondary-btn" onClick={onAI}><WandSparkles size={17}/> AI Generate</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/><div className="deck-detail-stats"><div><b>{questions.length}</b><span>Questions</span></div><div><b>{reviewed}</b><span>Reviewed</span></div><div><b>{pct}%</b><span>Deck progress</span></div><div><b>{attempts?Math.round(accuracy/attempts*100):0}%</b><span>Accuracy</span></div></div><div className="detail-toolbar"><button className="primary-btn" onClick={onStudy} disabled={!questions.length}><Play size={18}/> Study Now</button><span>{questions.length?"Answer questions and track your progress here.":"This deck is empty — add your first question to begin."}</span></div><section className="panel question-bank"><div className="section-head"><h2>Questions</h2><span className="muted">{questions.length} total</span></div>{questions.length?<div className="question-list">{questions.map((q,i)=><div className="question-row" key={q.id}><div className="question-number">{i+1}</div><div className="question-row-main"><b>{q.q}</b><span>{q.options.length} choices · {questionStats[q.id]?.attempts||0} attempts</span></div><div className="question-row-actions"><button onClick={()=>onEdit(q)} title="Edit"><Pencil size={17}/></button><button onClick={()=>onDelete(q.id)} title="Delete"><Trash2 size={17}/></button></div></div>)}</div>:<div className="empty"><FileText/><b>No questions yet</b><span>Add a multiple-choice question to this deck.</span><button className="primary-btn" onClick={onAdd}><Plus/> Add First Question</button></div>}</section></div>;
 }
 
 function buildExamPool(category, questions) {
@@ -343,6 +346,56 @@ function Schedule({sessions,setShowSessionModal}) { const now=new Date(); const 
 function StudyModal({study,answer,next,close}) { const q=study.pool[study.index]; const pct=(study.index/study.pool.length)*100; return <div className="modal-backdrop"><div className="drill-modal"><div className="modal-head"><span>{study.label} · {study.index+1}/{study.pool.length}</span><button onClick={close}><X/></button></div><div className="progress-track"><i style={{width:`${pct}%`}}/></div><div className="question"><span className="question-label">QUESTION {study.index+1}</span><h2>{q.q}</h2><div className="options">{q.options.map((o,i)=><button key={i} className={(study.checked&&i===q.answer?"correct ":"")+(study.checked&&i===study.selected&&i!==q.answer?"wrong":"")} disabled={study.checked} onClick={()=>answer(i)}><span>{String.fromCharCode(65+i)}</span>{o}</button>)}</div>{study.checked&&<div className={"explanation "+(study.selected===q.answer?"good":"bad")}><b>{study.selected===q.answer?"Correct!":"Not quite."}</b><p>{q.explanation}</p></div>}<div className="modal-foot">{study.checked?<button className="primary-btn" onClick={next}>{study.index===study.pool.length-1?"Finish":"Next Question"} <ChevronRight/></button>:<span>Select an answer to continue.</span>}</div></div></div></div>; }
 
 function DeckModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}>{CATEGORIES.slice(0,3).map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
+
+
+function AIQuestionModal({deck,close,saveQuestions}) {
+  const [material,setMaterial]=useState("");
+  const [sourceName,setSourceName]=useState("");
+  const [count,setCount]=useState(5);
+  const [difficulty,setDifficulty]=useState("mixed");
+  const [topic,setTopic]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const [generated,setGenerated]=useState([]);
+
+  const readFile=async e=>{
+    const file=e.target.files?.[0]; if(!file) return;
+    setSourceName(file.name); setError("");
+    if (!/\.(txt|md|csv)$/i.test(file.name)) {
+      setError("For V10, upload a TXT, MD, or CSV text material. PDF/DOCX parsing will be added in the next material-ingestion upgrade.");
+      return;
+    }
+    try { setMaterial(await file.text()); } catch { setError("I couldn't read that file. Please try a text file or paste the material instead."); }
+  };
+
+  const generate=async()=>{
+    if(!material.trim()) { setError("Add or paste study material first."); return; }
+    setBusy(true); setError("");
+    try {
+      const res=await fetch("/api/generate-questions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({material,category:deck?.category||"gened",topic,count,difficulty,sourceName})});
+      const data=await res.json();
+      if(!res.ok) throw new Error(data.error||"Generation failed.");
+      setGenerated(data.questions||[]);
+      if(!(data.questions||[]).length) throw new Error("The AI returned no usable questions. Try adding more source material.");
+    } catch(e) { setError(e.message||"Could not generate questions."); }
+    finally { setBusy(false); }
+  };
+
+  const save=()=>{
+    const normalized=generated.map((q,i)=>({id:Date.now()+i,deckId:deck.id,cat:deck.category,q:q.question,options:q.options,answer:Number(q.correctAnswer),explanation:q.rationale,topic:q.topic||topic||"AI Generated",difficulty:q.difficulty||difficulty,sourceMaterial:sourceName||"Uploaded material",aiGenerated:true}));
+    saveQuestions(normalized);
+  };
+
+  return <div className="modal-backdrop"><div className="ai-modal"><div className="modal-head"><div><h2><WandSparkles size={22}/> AI Question Generator</h2><span className="muted">Generate LET-style multiple-choice questions for <b>{deck?.name}</b>.</span></div><button onClick={close}><X/></button></div>
+    <div className="ai-note"><Sparkles size={18}/><div><b>Material-grounded generation</b><span>The AI is instructed to use your material as the primary source and include a meaningful rationale explaining why the correct answer is correct.</span></div></div>
+    <div className="ai-grid"><label className="ai-material">Study material<textarea value={material} onChange={e=>setMaterial(e.target.value)} placeholder="Paste your reviewer, lecture notes, textbook excerpt, or other study material here..."/><div className="file-row"><label className="file-btn"><Upload size={16}/> Upload text material<input type="file" accept=".txt,.md,.csv,text/plain,text/markdown" onChange={readFile}/></label>{sourceName&&<span>{sourceName}</span>}</div></label>
+      <div className="ai-settings"><label>Questions<select value={count} onChange={e=>setCount(Number(e.target.value))}>{[5,10,15,20].map(n=><option key={n}>{n}</option>)}</select></label><label>Difficulty<select value={difficulty} onChange={e=>setDifficulty(e.target.value)}><option value="mixed">Mixed</option><option value="easy">Easy</option><option value="moderate">Moderate</option><option value="difficult">Difficult</option></select></label><label>Topic <span className="muted">optional</span><input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. Assessment"/></label><button className="primary-btn wide" disabled={busy||!material.trim()} onClick={generate}>{busy?<><Loader2 className="spin" size={18}/> Generating...</>:<><WandSparkles size={18}/> Generate Questions</>}</button></div>
+    </div>
+    {error&&<div className="ai-error">{error}</div>}
+    {generated.length>0&&<div className="ai-preview"><div className="section-head"><div><h3>Generated Questions</h3><span className="muted">Review before saving. Each question includes a rationale.</span></div><span className="tag">{generated.length} ready</span></div>{generated.map((q,i)=><div className="ai-q" key={i}><div className="ai-q-head"><b>{i+1}. {q.question}</b><span className="tag">{q.difficulty||difficulty}</span></div><div className="ai-options">{q.options.map((o,j)=><div className={j===Number(q.correctAnswer)?"correct": ""} key={j}><b>{String.fromCharCode(65+j)}.</b> {o}</div>)}</div><div className="ai-rationale"><CheckCircle2 size={16}/><div><b>Correct answer: {String.fromCharCode(65+Number(q.correctAnswer))}</b><p>{q.rationale}</p></div></div></div>)}</div>}
+    <div className="modal-foot ai-footer"><button className="secondary-btn" onClick={close}>Cancel</button>{generated.length>0&&<button className="primary-btn" onClick={save}><Save size={17}/> Save {generated.length} Questions to Deck</button>}</div>
+  </div></div>;
+}
 
 function QuestionModal({close,save,initial,deckId}) {
   const [question,setQuestion]=useState(initial?.q||""); const [options,setOptions]=useState(initial?.options||["","","",""]); const [answer,setAnswer]=useState(initial?.answer??0); const [explanation,setExplanation]=useState(initial?.explanation||"");
