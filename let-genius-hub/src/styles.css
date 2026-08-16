@@ -211,3 +211,134 @@ body{background-color:var(--bg);background-image:radial-gradient(#d9dce2 1.5px,t
   .page-header h1{font-size:24px;}
   .panel,.metric,.deck-card,.mock-card,.chart-card,.calendar,.schedule-stats>div{border-radius:18px;}
 }
+
+
+/* V19 RESPONSIVE SHELL + SIDEBAR FIX
+   The sidebar is a fixed navigation rail. The main workspace reserves its
+   full width explicitly so dashboard panels can never sit underneath it. */
+.app-shell{min-height:100vh;width:100%;overflow-x:hidden}
+.sidebar{
+  width:255px!important;
+  min-width:255px!important;
+  box-sizing:border-box;
+  padding:0 10px;
+  align-items:stretch;
+  overflow-y:auto;
+  overflow-x:hidden;
+}
+.sidebar .brand-mark{
+  align-self:center;
+  flex:0 0 auto;
+}
+.sidebar nav{
+  width:100%;
+  align-items:stretch;
+  gap:6px;
+}
+.sidebar .nav-btn{
+  width:100%!important;
+  min-width:0;
+  height:48px;
+  padding:0 14px;
+  box-sizing:border-box;
+  justify-content:flex-start!important;
+  align-items:center;
+  gap:12px;
+  border-radius:12px;
+}
+.sidebar .nav-btn svg{
+  width:21px;
+  height:21px;
+  min-width:21px;
+  stroke-width:1.9;
+  flex:0 0 21px;
+}
+.sidebar .nav-btn span{
+  display:block!important;
+  opacity:1!important;
+  visibility:visible!important;
+  line-height:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.sidebar-bottom{
+  width:100%;
+  align-items:stretch;
+  gap:6px;
+  padding:16px 0 18px;
+}
+.sidebar-bottom .avatar-btn{
+  width:44px!important;
+  height:44px;
+  align-self:center;
+  padding:0;
+  justify-content:center!important;
+  border-radius:50%;
+}
+.sidebar-bottom .nav-btn{flex:0 0 48px}
+
+/* Reserve the sidebar's exact width. Do not use the legacy 88px offset. */
+.main{
+  margin-left:255px!important;
+  width:calc(100% - 255px)!important;
+  min-width:0;
+  max-width:none!important;
+  box-sizing:border-box;
+  padding:32px clamp(20px,3vw,48px) 70px;
+}
+.main > *{box-sizing:border-box}
+.page-header,
+.main>.page-header,
+.main>div:not(.modal-backdrop){
+  width:100%;
+  max-width:1700px;
+  margin-left:auto;
+  margin-right:auto;
+}
+
+/* Keep dashboard grids fluid rather than allowing fixed widths to overflow. */
+.metrics,.chart-grid,.drill-layout,.mock-layout,.calendar-layout,.deck-grid{
+  min-width:0;
+}
+.metrics>* ,.chart-grid>* ,.drill-layout>* ,.mock-layout>* ,.calendar-layout>* ,.deck-grid>*{
+  min-width:0;
+}
+
+/* Tablet: use a compact, still-expanded sidebar. */
+@media (max-width:1100px) and (min-width:761px){
+  .sidebar{width:220px!important;min-width:220px!important}
+  .main{
+    margin-left:220px!important;
+    width:calc(100% - 220px)!important;
+    padding:28px 24px 60px;
+  }
+  .sidebar .nav-btn{padding:0 12px}
+}
+
+/* Mobile: sidebar becomes an overlay and the workspace uses the full width. */
+@media (max-width:760px){
+  .sidebar{
+    width:min(285px,88vw)!important;
+    min-width:0!important;
+    margin-left:0;
+    padding:0 10px;
+    transform:translateX(-105%);
+  }
+  .sidebar.mobile-open{transform:translateX(0)}
+  .main{
+    margin-left:0!important;
+    width:100%!important;
+    max-width:none!important;
+    padding:18px 16px 45px;
+  }
+  .page-header,
+  .main>.page-header,
+  .main>div:not(.modal-backdrop){
+    width:100%;
+    max-width:none;
+  }
+}
+
+/* Prevent long content from widening the workspace. */
+.main,.main *{max-width:100%}
+.main .grid,.main [class*="grid"]{min-width:0}
