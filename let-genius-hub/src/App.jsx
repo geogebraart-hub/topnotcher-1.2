@@ -50,7 +50,8 @@ function App() {
   const [theme, setTheme] = usePersistedState("lgh-theme", "light");
   const [profile, setProfile] = usePersistedState("lgh-profile", {name:"Genius Learner", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60});
   const [category, setCategory] = usePersistedState("lgh-category", "gened");
-  const [streak, setStreak] = usePersistedState("lgh-streak", 14);
+  const [streak, setStreak] = usePersistedState("lgh-streak", 0);
+  const [lastActiveDate, setLastActiveDate] = usePersistedState("lgh-last-active-date", null);
   const [questions, setQuestions] = usePersistedState("lgh-questions", seedQuestions);
   const [decks, setDecks] = usePersistedState("lgh-decks", seedDecks);
   const [sessions, setSessions] = usePersistedState("lgh-sessions", []);
@@ -77,7 +78,19 @@ function App() {
   }, [theme]);
 
   useEffect(() => {
-    setPage("progress");
+    // Daily login/activity streak: opening the app counts as activity for today.
+    // Re-opening on the same day does not increment it; missing one or more days resets it.
+    const today = new Date();
+    const todayKey = today.toLocaleDateString("en-CA");
+    if (lastActiveDate === todayKey) return;
+    if (!lastActiveDate) {
+      setStreak(1);
+    } else {
+      const last = new Date(lastActiveDate + "T00:00:00");
+      const diffDays = Math.floor((new Date(todayKey + "T00:00:00") - last) / 86400000);
+      setStreak(diffDays === 1 ? Math.max(0, streak) + 1 : 1);
+    }
+    setLastActiveDate(todayKey);
   }, []);
 
   // Migration for users coming from V2: attach older unassigned questions to a matching deck.
@@ -135,7 +148,9 @@ function App() {
       if (d.index >= d.pool.length - 1) {
         const minutes = Math.max(1, Math.round((Date.now()-d.startedAt)/60000));
         setSessions(s => [...s, {id:Date.now(),type:d.label.includes("Drill")?"drill":"study",cat:current.cat,deckId:current.deckId,answered:nextAnswered,correct:nextCorrect,minutes}]);
-        if (d.label.includes("Drill") && nextCorrect > 0) setStreak(x => Math.max(x,14));
+        // A successful drill is recorded as today's activity. The login/activity streak
+        // itself is maintained once per calendar day by the app-open effect above.
+        if (d.label.includes("Drill") && nextCorrect > 0) setLastActiveDate(new Date().toLocaleDateString("en-CA"));
         return null;
       }
       return {...d,index:d.index+1,selected:null,checked:false,answered:nextAnswered,correct:nextCorrect};
@@ -167,6 +182,8 @@ function App() {
 
   function goTo(nextPage) { setPage(nextPage); setMobileNav(false); setSelectedDeckId(null); }
 
+  function jumpStudy(index) { setStudyPool(d => d ? {...d, index, selected:null, checked:false} : d); }
+
   const nav = [
     ["progress", LayoutDashboard, "Progress Dashboard"],
     ["decks", Library, "Study Decks"],
@@ -187,14 +204,14 @@ function App() {
       {page==="dashboard" && <Dashboard setPage={setPage} streak={streak} category={category} setCategory={setCategory} startDrill={startDrill} stats={stats} decks={decks} questions={questions}/>} 
       
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme}/>}
-      {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} setPage={setPage} setCategory={setCategory}/>} 
+      {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
       {page==="decks" && <Decks decks={decks} questions={questions} questionStats={questionStats} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} deleteDeck={deleteDeck}/>} 
       {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} setShowSessionModal={setShowSessionModal}/>} 
 
       {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats}/>}
-      {studyPool && <StudyModal study={studyPool} answer={answerStudy} next={nextStudy} close={()=>setStudyPool(null)}/>} 
+      {studyPool && <StudyModal study={studyPool} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile}/>} 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck}/>} 
       {showAIModal && <AIQuestionModal deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
@@ -219,7 +236,7 @@ function Dashboard({setPage,streak,category,setCategory,startDrill,stats,decks,q
 
 function DailyDrill({category,setCategory,startDrill,streak,questions}) { return <div><PageHeader title="Daily Drill" subtitle="Practice one question at a time and keep your streak going." action={<div className="streak-pill"><Flame size={20}/>{streak} day streak</div>}/><div className="drill-layout"><section className="panel"><div className="panel-title"><Target/> Choose a category</div><div className="choice-list">{CATEGORIES.slice(0,3).map(c=><button className={"choice-card "+(category===c.id?"chosen":"")} key={c.id} onClick={()=>setCategory(c.id)}><div className={"mini-icon "+c.color}><c.icon size={23}/></div><div><b>{c.title}</b><span>{questions.filter(q=>q.cat===c.id).length} questions available</span></div>{category===c.id&&<div className="check-dot">✓</div>}</button>)}</div><button className="primary-btn wide" onClick={()=>startDrill(category)}><Play size={19}/> Start {CATEGORIES.find(c=>c.id===category)?.label} Drill</button></section><aside className="panel tips"><h3>How it works</h3><p><Target/> Answer one question at a time.</p><p><Trophy/> A correct first answer helps your daily streak.</p><p><Sparkles/> Review the explanation after submitting.</p></aside></div></div>; }
 
-function Progress({stats,streak,decks,mockScores,questions,questionStats,setPage,setCategory}) {
+function Progress({stats,streak,decks,mockScores,questions,questionStats,setPage,setCategory,profile}) {
   const accuracy=stats.answered?stats.correct/stats.answered*100:0;
   const examDate=new Date("2026-09-28T00:00:00");
   const daysAway=Math.max(0,Math.ceil((examDate-new Date())/86400000));
@@ -236,7 +253,7 @@ function Progress({stats,streak,decks,mockScores,questions,questionStats,setPage
     {label:"Questions Answered",value:stats.answered,small:`${accuracy.toFixed(1)}% accuracy overall`,foot:"Open study decks",target:"decks"}
   ];
   return <div>
-    <PageHeader title="Progress Dashboard" subtitle={<><span>LET Exam Date: September 28, 2026</span><span className="date-badge">{daysAway} days away</span></>} action={<span className="updated">Updated {updated}</span>}/>
+    <PageHeader title="Progress Dashboard" subtitle={<><span>LET Exam Date: {examDateLabel}</span>{daysAway !== null && <span className="date-badge">{daysAway} days away</span>}</>} action={<span className="updated">Updated {updated}</span>}/>
     <div className="metrics">{metricCards.map((m,i)=><button key={m.label} className={`metric metric-button ${m.primary?"primary":""}`} onClick={()=>go(m.target)}><span>{m.label}</span><strong>{m.value}</strong><small>{m.small}</small><b className={i===1&&mockScores.length?"danger":""}>{m.foot}</b><ChevronRight className="metric-arrow" size={18}/></button>)}</div>
     <div className="progress-two-col">
       <section className="panel weak-card"><div className="section-head"><div><h2>Weak Areas</h2><p className="muted">Focus on the subjects with the lowest accuracy.</p></div><button onClick={()=>go("mock")}>Practice all <ChevronRight size={16}/></button></div><div className="weak-list">{weakAreas.map(c=><button className="weak-row" key={c.id} onClick={()=>go("mock",c.id)}><div className={`mini-icon ${c.color}`}><c.icon size={21}/></div><div className="weak-main"><div><b>{c.label}</b><span>{c.attempts?`${c.attempts} attempts`:"Not practiced yet"}</span></div><div className="progress-track"><i style={{width:`${Math.min(100,c.accuracy)}%`}}/></div></div><strong>{c.attempts?`${c.accuracy}%`:"—"}</strong><ChevronRight size={18}/></button>)}</div></section>
@@ -359,13 +376,22 @@ function ExamRunner({session,close,setMockScores,setMockHistory,setSessions,setQ
 
 function Schedule({sessions,setShowSessionModal}) { const now=new Date(); const [month,setMonth]=useState(new Date(now.getFullYear(),now.getMonth(),1)); const year=month.getFullYear(),mon=month.getMonth(),days=new Date(year,mon+1,0).getDate(),start=new Date(year,mon,1).getDay(),cells=[...Array(start),...Array.from({length:days},(_,i)=>i+1)]; const today=now.getDate(),currentMonth=now.getMonth(),currentYear=now.getFullYear(); return <div><PageHeader title="Study Schedule" subtitle="Plot and track your review sessions, mock exams, and daily drills" action={<button className="primary-btn" onClick={()=>setShowSessionModal(true)}><Plus/> Add Event</button>}/><div className="schedule-stats"><div><b>{sessions.length}</b><span>Total Events</span></div><div><b>{sessions.filter(s=>s.completed).length}</b><span>Completed</span></div><div><b>{sessions.filter(s=>s.type==="study").length}</b><span>Study Sessions</span></div><div><b>{sessions.filter(s=>s.type==="mock").length}</b><span>Mock Exams</span></div></div><div className="calendar-layout"><section className="panel calendar"><div className="calendar-head"><h2>{month.toLocaleString("en-US",{month:"long"})} {year}</h2><div><button onClick={()=>setMonth(new Date(year,mon-1,1))}><ChevronLeft/></button><button onClick={()=>setMonth(new Date(year,mon+1,1))}><ChevronRight/></button></div></div><div className="weekday">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map(x=><b key={x}>{x}</b>)}</div><div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{sessions.filter(s=>{const dt=new Date(s.date);return dt.getDate()===d&&dt.getMonth()===mon&&dt.getFullYear()===year}).map((s,j)=><i className={s.type} key={j}>{s.title}</i>)}</>}</div>)}</div></section><aside className="panel event-side"><h4>EVENT TYPES</h4><p><i className="dot study"/>Study Session</p><p><i className="dot mock"/>Mock Exam</p><p><i className="dot drill"/>Daily Drill</p><hr/><h4>UPCOMING THIS MONTH</h4>{sessions.length?sessions.slice(0,5).map(s=><div className="upcoming" key={s.id}><b>{s.title}</b><span>{s.date}</span></div>):<div className="empty"><CalendarDays/><span>Select a day to add events</span></div>}</aside></div></div>; }
 
-function StudyModal({study,answer,next,close}) {
+function StudyModal({study,answer,next,jump,close,goTo,profile}) {
   const q=study.pool[study.index];
-  const pct=(study.index/study.pool.length)*100;
+  const pct=((study.index+1)/study.pool.length)*100;
   const [elapsed,setElapsed]=useState(Math.max(0,Math.floor((Date.now()-study.startedAt)/1000)));
   useEffect(()=>{ const id=setInterval(()=>setElapsed(Math.max(0,Math.floor((Date.now()-study.startedAt)/1000))),1000); return ()=>clearInterval(id); },[study.startedAt]);
   const hh=String(Math.floor(elapsed/3600)).padStart(2,"0"), mm=String(Math.floor((elapsed%3600)/60)).padStart(2,"0"), ss=String(elapsed%60).padStart(2,"0");
+  const nav=[
+    ["progress",LayoutDashboard,"Progress Dashboard"],["decks",Library,"Study Decks"],["dashboard",Flame,"Daily Drill"],["mock",ClipboardCheck,"Mock Board Exam"],["schedule",CalendarDays,"Study Schedule"]
+  ];
+  const exitTo=(page)=>{ if(confirm("Exit this study session? Your completed answers will remain recorded, but this session will not be counted as finished.")){ close(); goTo(page); } };
   return <div className="study-fullscreen">
+    <div className="study-app-nav">
+      <div className="study-brand"><div className="brand-mark"><GraduationCap size={27}/></div><div><b>LET Genius Hub</b><span>Study Center</span></div></div>
+      <nav>{nav.map(([id,Icon,label])=><button key={id} className="nav-btn" onClick={()=>exitTo(id)}><Icon size={21}/><span>{label}</span></button>)}</nav>
+      <div className="study-app-nav-bottom"><button className="nav-btn" onClick={()=>{if(confirm("Exit this study session?")){close();}}}><Settings size={21}/><span>Settings</span></button><button className="study-profile-mini" onClick={()=>exitTo("profile")}><span>{(profile?.name||"G").trim().charAt(0).toUpperCase()}</span><b>{profile?.name||"Profile"}</b></button></div>
+    </div>
     <div className="study-shell">
       <header className="study-header">
         <div className="study-title"><span className="question-label">STUDY SESSION</span><h1>{study.label}</h1><span>{study.pool.length} questions · self-paced review</span></div>
@@ -373,12 +399,6 @@ function StudyModal({study,answer,next,close}) {
         <button className="icon-close" aria-label="Exit study session" onClick={()=>{if(confirm("Exit this study session? Your completed answers will remain recorded, but this session will not be counted as finished.")) close();}}><X/></button>
       </header>
       <div className="study-body">
-        <aside className="study-sidebar">
-          <div className="study-side-head"><b>Questions</b><span>{study.index+1} of {study.pool.length}</span></div>
-          <div className="study-progress"><span>Progress</span><b>{Math.round((study.index/study.pool.length)*100)}%</b></div>
-          <div className="study-question-jump">{study.pool.map((item,i)=><button key={item.id} className={i===study.index?"current":i<study.index?"completed":""} onClick={()=>{ if(i<=study.index) { /* navigation is intentionally forward-safe */ } }}>{i+1}</button>)}</div>
-          <div className="study-side-note"><Flame size={17}/><span>Take your time and focus on understanding the rationale.</span></div>
-        </aside>
         <main className="study-main">
           <div className="study-main-top"><div><span className="question-label">QUESTION {study.index+1}</span><span>of {study.pool.length}</span></div><span className="study-answered">{study.answered} answered</span></div>
           <div className="study-progress-track"><i style={{width:`${pct}%`}}/></div>
@@ -387,16 +407,18 @@ function StudyModal({study,answer,next,close}) {
             <div className="options">{q.options.map((o,i)=><button key={i} className={(study.checked&&i===q.answer?"correct ":"")+(study.checked&&i===study.selected&&i!==q.answer?"wrong":"")} disabled={study.checked} onClick={()=>answer(i)}><span>{String.fromCharCode(65+i)}</span>{o}</button>)}</div>
             {study.checked&&<div className={"explanation "+(study.selected===q.answer?"good":"bad")}><b>{study.selected===q.answer?"Correct!":"Not quite."}</b><p>{q.explanation}</p></div>}
           </section>
-          <div className="study-navigation">
-            <span>{study.checked?"Review the rationale, then continue.":"Select an answer to continue."}</span>
-            {study.checked&&<button className="primary-btn" onClick={next}>{study.index===study.pool.length-1?"Finish Study Session":"Next Question"}<ChevronRight/></button>}
-          </div>
+          <div className="study-navigation"><span>{study.checked?"Review the rationale, then continue.":"Select an answer to continue."}</span>{study.checked&&<div className="study-nav-actions"><button className="secondary-btn" disabled={study.index===0} onClick={()=>jump(Math.max(0,study.index-1))}><ChevronLeft/> Previous</button><button className="primary-btn" onClick={next}>{study.index===study.pool.length-1?"Finish Study Session":"Next Question"}<ChevronRight/></button></div>}</div>
         </main>
+        <aside className="study-sidebar study-question-sidebar">
+          <div className="study-side-head"><b>Question Navigator</b><span>{study.index+1} of {study.pool.length}</span></div>
+          <div className="study-progress"><span>Progress</span><b>{Math.round(study.answered/study.pool.length*100)}%</b></div>
+          <div className="study-question-jump">{study.pool.map((item,i)=><button key={item.id} className={i===study.index?"current":i<study.index?"completed":""} onClick={()=>jump(i)}>{i+1}</button>)}</div>
+          <div className="study-side-note"><Flame size={17}/><span>Take your time and focus on understanding the rationale.</span></div>
+        </aside>
       </div>
     </div>
   </div>;
 }
-
 function DeckModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}>{CATEGORIES.slice(0,3).map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
 
 
