@@ -156,8 +156,11 @@ function App() {
   function goTo(nextPage) { setPage(nextPage); setMobileNav(false); setSelectedDeckId(null); }
 
   const nav = [
-    ["dashboard", GraduationCap, "Dashboard"], ["progress", BarChart3, "Progress"],
-    ["decks", Layers3, "Study Decks"], ["mock", FileText, "Mock Board"], ["schedule", CalendarDays, "Study Schedule"]
+    ["progress", BarChart3, "Progress Dashboard"],
+    ["decks", Layers3, "Study Decks"],
+    ["dashboard", Flame, "Daily Drill"],
+    ["mock", FileText, "Mock Board Exam"],
+    ["schedule", CalendarDays, "Study Schedule"]
   ];
 
   return <div className="app-shell">
@@ -343,7 +346,43 @@ function ExamRunner({session,close,setMockScores,setMockHistory,setSessions,setQ
 
 function Schedule({sessions,setShowSessionModal}) { const now=new Date(); const [month,setMonth]=useState(new Date(now.getFullYear(),now.getMonth(),1)); const year=month.getFullYear(),mon=month.getMonth(),days=new Date(year,mon+1,0).getDate(),start=new Date(year,mon,1).getDay(),cells=[...Array(start),...Array.from({length:days},(_,i)=>i+1)]; const today=now.getDate(),currentMonth=now.getMonth(),currentYear=now.getFullYear(); return <div><PageHeader title="Study Schedule" subtitle="Plot and track your review sessions, mock exams, and daily drills" action={<button className="primary-btn" onClick={()=>setShowSessionModal(true)}><Plus/> Add Event</button>}/><div className="schedule-stats"><div><b>{sessions.length}</b><span>Total Events</span></div><div><b>{sessions.filter(s=>s.completed).length}</b><span>Completed</span></div><div><b>{sessions.filter(s=>s.type==="study").length}</b><span>Study Sessions</span></div><div><b>{sessions.filter(s=>s.type==="mock").length}</b><span>Mock Exams</span></div></div><div className="calendar-layout"><section className="panel calendar"><div className="calendar-head"><h2>{month.toLocaleString("en-US",{month:"long"})} {year}</h2><div><button onClick={()=>setMonth(new Date(year,mon-1,1))}><ChevronLeft/></button><button onClick={()=>setMonth(new Date(year,mon+1,1))}><ChevronRight/></button></div></div><div className="weekday">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map(x=><b key={x}>{x}</b>)}</div><div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{sessions.filter(s=>{const dt=new Date(s.date);return dt.getDate()===d&&dt.getMonth()===mon&&dt.getFullYear()===year}).map((s,j)=><i className={s.type} key={j}>{s.title}</i>)}</>}</div>)}</div></section><aside className="panel event-side"><h4>EVENT TYPES</h4><p><i className="dot study"/>Study Session</p><p><i className="dot mock"/>Mock Exam</p><p><i className="dot drill"/>Daily Drill</p><hr/><h4>UPCOMING THIS MONTH</h4>{sessions.length?sessions.slice(0,5).map(s=><div className="upcoming" key={s.id}><b>{s.title}</b><span>{s.date}</span></div>):<div className="empty"><CalendarDays/><span>Select a day to add events</span></div>}</aside></div></div>; }
 
-function StudyModal({study,answer,next,close}) { const q=study.pool[study.index]; const pct=(study.index/study.pool.length)*100; return <div className="modal-backdrop"><div className="drill-modal"><div className="modal-head"><span>{study.label} · {study.index+1}/{study.pool.length}</span><button onClick={close}><X/></button></div><div className="progress-track"><i style={{width:`${pct}%`}}/></div><div className="question"><span className="question-label">QUESTION {study.index+1}</span><h2>{q.q}</h2><div className="options">{q.options.map((o,i)=><button key={i} className={(study.checked&&i===q.answer?"correct ":"")+(study.checked&&i===study.selected&&i!==q.answer?"wrong":"")} disabled={study.checked} onClick={()=>answer(i)}><span>{String.fromCharCode(65+i)}</span>{o}</button>)}</div>{study.checked&&<div className={"explanation "+(study.selected===q.answer?"good":"bad")}><b>{study.selected===q.answer?"Correct!":"Not quite."}</b><p>{q.explanation}</p></div>}<div className="modal-foot">{study.checked?<button className="primary-btn" onClick={next}>{study.index===study.pool.length-1?"Finish":"Next Question"} <ChevronRight/></button>:<span>Select an answer to continue.</span>}</div></div></div></div>; }
+function StudyModal({study,answer,next,close}) {
+  const q=study.pool[study.index];
+  const pct=(study.index/study.pool.length)*100;
+  const [elapsed,setElapsed]=useState(Math.max(0,Math.floor((Date.now()-study.startedAt)/1000)));
+  useEffect(()=>{ const id=setInterval(()=>setElapsed(Math.max(0,Math.floor((Date.now()-study.startedAt)/1000))),1000); return ()=>clearInterval(id); },[study.startedAt]);
+  const hh=String(Math.floor(elapsed/3600)).padStart(2,"0"), mm=String(Math.floor((elapsed%3600)/60)).padStart(2,"0"), ss=String(elapsed%60).padStart(2,"0");
+  return <div className="study-fullscreen">
+    <div className="study-shell">
+      <header className="study-header">
+        <div className="study-title"><span className="question-label">STUDY SESSION</span><h1>{study.label}</h1><span>{study.pool.length} questions · self-paced review</span></div>
+        <div className="study-timer"><span>TIME ELAPSED</span><strong>{hh}:{mm}:{ss}</strong></div>
+        <button className="icon-close" aria-label="Exit study session" onClick={()=>{if(confirm("Exit this study session? Your completed answers will remain recorded, but this session will not be counted as finished.")) close();}}><X/></button>
+      </header>
+      <div className="study-body">
+        <aside className="study-sidebar">
+          <div className="study-side-head"><b>Questions</b><span>{study.index+1} of {study.pool.length}</span></div>
+          <div className="study-progress"><span>Progress</span><b>{Math.round((study.index/study.pool.length)*100)}%</b></div>
+          <div className="study-question-jump">{study.pool.map((item,i)=><button key={item.id} className={i===study.index?"current":i<study.index?"completed":""} onClick={()=>{ if(i<=study.index) { /* navigation is intentionally forward-safe */ } }}>{i+1}</button>)}</div>
+          <div className="study-side-note"><Flame size={17}/><span>Take your time and focus on understanding the rationale.</span></div>
+        </aside>
+        <main className="study-main">
+          <div className="study-main-top"><div><span className="question-label">QUESTION {study.index+1}</span><span>of {study.pool.length}</span></div><span className="study-answered">{study.answered} answered</span></div>
+          <div className="study-progress-track"><i style={{width:`${pct}%`}}/></div>
+          <section className="study-question-card">
+            <h2>{q.q}</h2>
+            <div className="options">{q.options.map((o,i)=><button key={i} className={(study.checked&&i===q.answer?"correct ":"")+(study.checked&&i===study.selected&&i!==q.answer?"wrong":"")} disabled={study.checked} onClick={()=>answer(i)}><span>{String.fromCharCode(65+i)}</span>{o}</button>)}</div>
+            {study.checked&&<div className={"explanation "+(study.selected===q.answer?"good":"bad")}><b>{study.selected===q.answer?"Correct!":"Not quite."}</b><p>{q.explanation}</p></div>}
+          </section>
+          <div className="study-navigation">
+            <span>{study.checked?"Review the rationale, then continue.":"Select an answer to continue."}</span>
+            {study.checked&&<button className="primary-btn" onClick={next}>{study.index===study.pool.length-1?"Finish Study Session":"Next Question"}<ChevronRight/></button>}
+          </div>
+        </main>
+      </div>
+    </div>
+  </div>;
+}
 
 function DeckModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}>{CATEGORIES.slice(0,3).map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
 
