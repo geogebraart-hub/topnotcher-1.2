@@ -45,8 +45,40 @@ function usePersistedState(key, initial) {
   return [value, setValue];
 }
 
+
+function AppSidebar({page, profile, onNavigate, onSettings, mobileOpen=false, studyMode=false}) {
+  const nav = [
+    ["progress", LayoutDashboard, "Progress Dashboard"],
+    ["decks", Library, "Study Decks"],
+    ["dashboard", Flame, "Daily Drill"],
+    ["mock", ClipboardCheck, "Mock Board Exam"],
+    ["schedule", CalendarDays, "Study Schedule"]
+  ];
+  return <aside className={"sidebar unified-sidebar "+(mobileOpen?"mobile-open ":"")+(studyMode?"study-app-sidebar":"")}>
+    <div className="sidebar-brand">
+      <div className="brand-mark"><GraduationCap size={27}/></div>
+      <div className="sidebar-brand-copy"><strong>LET Genius</strong><span>Hub</span></div>
+    </div>
+    <div className="sidebar-section-label">MAIN MENU</div>
+    <nav className="sidebar-nav">
+      {nav.map(([id,Icon,label])=><button key={id} className={"nav-btn "+((page===id || (page==="deck-detail"&&id==="decks"))?"active":"")} title={label} onClick={()=>onNavigate(id)}>
+        <Icon size={20}/><span>{label}</span>
+      </button>)}
+    </nav>
+    <div className="sidebar-spacer"/>
+    <div className="sidebar-bottom">
+      <button className="nav-btn" title="Settings" onClick={onSettings}><Settings size={20}/><span>Settings</span></button>
+      <button className="profile-nav-btn" title="Profile" onClick={()=>onNavigate("profile")}>
+        <span className="avatar avatar-btn">{(profile?.name||"G").trim().charAt(0).toUpperCase()}</span>
+        <span className="profile-nav-copy"><strong>{profile?.name||"Profile"}</strong><small>View profile</small></span><ChevronRight size={16}/>
+      </button>
+      <button className="nav-btn signout-btn" title="Sign out"><LogOut size={20}/><span>Sign out</span></button>
+    </div>
+  </aside>;
+}
+
 function App() {
-  const [page, setPage] = usePersistedState("lgh-page", "progress");
+  const [page, setPage] = useState("progress");
   const [theme, setTheme] = usePersistedState("lgh-theme", "light");
   const [profile, setProfile] = usePersistedState("lgh-profile", {name:"Genius Learner", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60});
   const [category, setCategory] = usePersistedState("lgh-category", "gened");
@@ -184,30 +216,9 @@ function App() {
 
   function jumpStudy(index) { setStudyPool(d => d ? {...d, index, selected:null, checked:false} : d); }
 
-  const nav = [
-    ["progress", LayoutDashboard, "Progress Dashboard"],
-    ["decks", Library, "Study Decks"],
-    ["dashboard", Flame, "Daily Drill"],
-    ["mock", ClipboardCheck, "Mock Board Exam"],
-    ["schedule", CalendarDays, "Study Schedule"]
-  ];
-
   return <div className={`app-shell theme-${theme}`}>
     {mobileNav && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)} />}
-    <aside className={"sidebar "+(mobileNav?"mobile-open":"")}>
-      <div className="sidebar-brand">
-        <div className="brand-mark"><GraduationCap size={28}/></div>
-        <div className="sidebar-brand-copy"><strong>LET Genius</strong><span>Hub</span></div>
-      </div>
-      <div className="sidebar-section-label">MAIN MENU</div>
-      <nav className="sidebar-nav">{nav.map(([id,Icon,label])=><button key={id} className={"nav-btn "+(page===id|| (page==="deck-detail"&&id==="decks")?"active":"")} title={label} onClick={()=>goTo(id)}><Icon size={20}/><span>{label}</span></button>)}</nav>
-      <div className="sidebar-spacer" />
-      <div className="sidebar-bottom">
-        <button className="nav-btn" title="Settings" onClick={()=>setShowSettings(true)}><Settings size={20}/><span>Settings</span></button>
-        <button className="profile-nav-btn" title="Profile" onClick={()=>goTo("profile")}><span className="avatar avatar-btn">{(profile.name||"G").trim().charAt(0).toUpperCase()}</span><span className="profile-nav-copy"><strong>{profile.name||"Profile"}</strong><small>View profile</small></span><ChevronRight size={16}/></button>
-        <button className="nav-btn signout-btn" title="Sign out"><LogOut size={20}/><span>Sign out</span></button>
-      </div>
-    </aside>
+    <AppSidebar page={page} profile={profile} onNavigate={goTo} onSettings={()=>setShowSettings(true)} mobileOpen={mobileNav} />
     <main className="main">
       <header className="mobile-header"><div className="brand-mark"><GraduationCap size={24}/></div><button className="icon-btn" aria-label="Open navigation" onClick={()=>setMobileNav(v=>!v)}><Menu/></button></header>
       {page==="dashboard" && <Dashboard setPage={setPage} streak={streak} category={category} setCategory={setCategory} startDrill={startDrill} stats={stats} decks={decks} questions={questions}/>} 
@@ -397,20 +408,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile}) {
   ];
   const exitTo=(page)=>{ if(confirm("Exit this study session? Your completed answers will remain recorded, but this session will not be counted as finished.")){ close(); goTo(page); } };
   return <div className="study-fullscreen">
-    <aside className="sidebar study-app-sidebar">
-      <div className="sidebar-brand">
-        <div className="brand-mark"><GraduationCap size={28}/></div>
-        <div className="sidebar-brand-copy"><strong>LET Genius</strong><span>Hub</span></div>
-      </div>
-      <div className="sidebar-section-label">MAIN MENU</div>
-      <nav className="sidebar-nav">{nav.map(([id,Icon,label])=><button key={id} className="nav-btn" onClick={()=>exitTo(id)}><Icon size={20}/><span>{label}</span></button>)}</nav>
-      <div className="sidebar-spacer" />
-      <div className="sidebar-bottom">
-        <button className="nav-btn" onClick={()=>{if(confirm("Exit this study session?")){close();}}}><Settings size={20}/><span>Settings</span></button>
-        <button className="profile-nav-btn" onClick={()=>exitTo("profile")}><span className="avatar avatar-btn">{(profile?.name||"G").trim().charAt(0).toUpperCase()}</span><span className="profile-nav-copy"><strong>{profile?.name||"Profile"}</strong><small>View profile</small></span><ChevronRight size={16}/></button>
-        <button className="nav-btn signout-btn" onClick={()=>{if(confirm("Exit this study session?")){close();}}}><LogOut size={20}/><span>Sign out</span></button>
-      </div>
-    </aside>
+    <AppSidebar page="decks" profile={profile} onNavigate={exitTo} onSettings={()=>{if(confirm("Exit this study session?")){close();}}} studyMode />
     <div className="study-shell">
       <header className="study-header">
         <div className="study-title"><span className="question-label">STUDY SESSION</span><h1>{study.label}</h1><span>{study.pool.length} questions · self-paced review</span></div>
@@ -455,11 +453,35 @@ function AIQuestionModal({deck,close,saveQuestions}) {
   const readFile=async e=>{
     const file=e.target.files?.[0]; if(!file) return;
     setSourceName(file.name); setError("");
-    if (!/\.(txt|md|csv)$/i.test(file.name)) {
-      setError("For V11, upload a TXT, MD, or CSV text material. PDF/DOCX parsing will be added in the next material-ingestion upgrade.");
-      return;
+    try {
+      if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+        const pdfjs = await import("pdfjs-dist");
+        if (pdfjs.GlobalWorkerOptions) {
+          pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
+        }
+        const bytes = new Uint8Array(await file.arrayBuffer());
+        const pdf = await pdfjs.getDocument({data: bytes}).promise;
+        const pages=[];
+        for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
+          const page=await pdf.getPage(pageNo);
+          const content=await page.getTextContent();
+          pages.push(content.items.map(item=>item.str||"").join(" "));
+        }
+        const text=pages.join("\n\n").replace(/\s{3,}/g,"  ").trim();
+        if (!text) throw new Error("empty-pdf");
+        setMaterial(text);
+        return;
+      }
+      if (!/\.(txt|md|csv)$/i.test(file.name)) {
+        setError("Supported materials are PDF, TXT, MD, and CSV. For DOCX/PPTX, paste the extracted text for now.");
+        return;
+      }
+      setMaterial(await file.text());
+    } catch (err) {
+      console.error(err);
+      setMaterial("");
+      setError("I couldn't extract readable text from that file. Please try another PDF or paste the material instead.");
     }
-    try { setMaterial(await file.text()); } catch { setError("I couldn't read that file. Please try a text file or paste the material instead."); }
   };
 
   const generate=async()=>{
@@ -506,9 +528,9 @@ function AIQuestionModal({deck,close,saveQuestions}) {
       <div className="ai-step-card ai-material-card">
         <div className="ai-step-head"><div className="ai-step-number">1</div><div><h3>Study Material</h3><span>Add the material the AI should use as its primary source.</span></div></div>
         <label className={"ai-dropzone "+(sourceName?"has-file":"")}>
-          <input type="file" accept=".txt,.md,.csv,text/plain,text/markdown" onChange={readFile}/>
+          <input type="file" accept=".pdf,.txt,.md,.csv,application/pdf,text/plain,text/markdown,text/csv" onChange={readFile}/>
           <div className="ai-upload-icon"><Upload size={22}/></div>
-          {sourceName?<><b>{sourceName}</b><span>Material loaded · click to replace</span></>:<><b>Upload your reviewer</b><span>TXT, MD, or CSV · or click to browse</span></>}
+          {sourceName?<><b>{sourceName}</b><span>Material loaded · click to replace</span></>:<><b>Upload your reviewer</b><span>PDF, TXT, MD, or CSV · or click to browse</span></>}
         </label>
         <div className="ai-or"><span>OR</span></div>
         <textarea className="ai-material-input" value={material} onChange={e=>{setMaterial(e.target.value);if(sourceName)setSourceName("")}} placeholder="Paste your reviewer, lecture notes, textbook excerpt, or study material here..."/>
