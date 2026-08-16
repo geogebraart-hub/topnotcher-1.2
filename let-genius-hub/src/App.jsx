@@ -221,6 +221,13 @@ function buildExamPool(category, questions) {
   return questions.filter(q => q.cat === category);
 }
 
+function Toggle({label,hint,value,setValue}) {
+  return <div className="toggle-row">
+    <div>{label && <b>{label}</b>}{hint && <span>{hint}</span>}</div>
+    <button type="button" className={"switch "+(value?"on":"")} aria-pressed={value} aria-label={label || "Toggle"} onClick={()=>setValue(v=>!v)}><i/></button>
+  </div>;
+}
+
 function MockBoard({category,setCategory,mockScores,mockHistory,setExamSession,questions}) {
   const selected=CATEGORIES.find(c=>c.id===category)||CATEGORIES[0];
   const [count,setCount]=useState(150);
