@@ -49,6 +49,7 @@ function App() {
   const [decks, setDecks] = usePersistedState("lgh-decks", seedDecks);
   const [sessions, setSessions] = usePersistedState("lgh-sessions", []);
   const [mockScores, setMockScores] = usePersistedState("lgh-mock-scores", []);
+  const [mockHistory, setMockHistory] = usePersistedState("lgh-mock-history", []);
   const [questionStats, setQuestionStats] = usePersistedState("lgh-question-stats", {});
   const [selectedDeckId, setSelectedDeckId] = useState(null);
   const [studyPool, setStudyPool] = useState(null);
@@ -60,6 +61,7 @@ function App() {
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [examSession, setExamSession] = useState(null);
 
   // Migration for users coming from V2: attach older unassigned questions to a matching deck.
   useEffect(() => {
@@ -167,8 +169,10 @@ function App() {
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats}/>} 
       {page==="decks" && <Decks decks={decks} questions={questions} questionStats={questionStats} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} deleteDeck={deleteDeck}/>} 
       {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)}/>} 
-      {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} setMockScores={setMockScores} setSessions={setSessions} questions={questions}/>} 
+      {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} setShowSessionModal={setShowSessionModal}/>} 
+
+      {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats}/>}
       {studyPool && <StudyModal study={studyPool} answer={answerStudy} next={nextStudy} close={()=>setStudyPool(null)}/>} 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck}/>} 
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
@@ -212,8 +216,68 @@ function DeckDetail({deck,questions,questionStats,onBack,onAdd,onEdit,onDelete,o
   return <div><PageHeader title={deck.name} subtitle={<><span>{CATEGORIES.find(c=>c.id===deck.category)?.label} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/><div className="deck-detail-stats"><div><b>{questions.length}</b><span>Questions</span></div><div><b>{reviewed}</b><span>Reviewed</span></div><div><b>{pct}%</b><span>Deck progress</span></div><div><b>{attempts?Math.round(accuracy/attempts*100):0}%</b><span>Accuracy</span></div></div><div className="detail-toolbar"><button className="primary-btn" onClick={onStudy} disabled={!questions.length}><Play size={18}/> Study Now</button><span>{questions.length?"Answer questions and track your progress here.":"This deck is empty — add your first question to begin."}</span></div><section className="panel question-bank"><div className="section-head"><h2>Questions</h2><span className="muted">{questions.length} total</span></div>{questions.length?<div className="question-list">{questions.map((q,i)=><div className="question-row" key={q.id}><div className="question-number">{i+1}</div><div className="question-row-main"><b>{q.q}</b><span>{q.options.length} choices · {questionStats[q.id]?.attempts||0} attempts</span></div><div className="question-row-actions"><button onClick={()=>onEdit(q)} title="Edit"><Pencil size={17}/></button><button onClick={()=>onDelete(q.id)} title="Delete"><Trash2 size={17}/></button></div></div>)}</div>:<div className="empty"><FileText/><b>No questions yet</b><span>Add a multiple-choice question to this deck.</span><button className="primary-btn" onClick={onAdd}><Plus/> Add First Question</button></div>}</section></div>;
 }
 
-function MockBoard({category,setCategory,mockScores,setMockScores,setSessions,questions}) { const selected=CATEGORIES.find(c=>c.id===category)||CATEGORIES[0]; const [count,setCount]=useState(150); const [shuffle,setShuffle]=useState(true); const [explain,setExplain]=useState(false); const start=()=>{const pool=questions.filter(q=>q.cat===category);if(!pool.length){alert("No questions are available for this category yet. Add questions to a study deck first.");return;}const score=Math.round(60+Math.random()*28);setMockScores(s=>[...s,score].slice(-10));setSessions(s=>[...s,{type:"mock",cat:category,answered:Math.min(count,pool.length),correct:Math.round(Math.min(count,pool.length)*score/100),minutes:Math.round(count*.8)}]);alert(`Mock exam demo completed. Score: ${score}%.`);};return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><div><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.items} items</span><span>◷ {c.hours}</span></div></button>)}</div><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/></div><aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Category</dt><dd>{selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Time limit</dt><dd>{Math.round(count*.8)} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div><h4>RECENT SCORES</h4>{mockScores.length?<div className="recent-scores">{mockScores.slice(-5).reverse().map((s,i)=><span key={i}>{s}%</span>)}</div>:<p className="muted">No attempts yet</p>}<button className="primary-btn wide" onClick={start}>Start Exam <ChevronRight/></button></aside></div></div>; }
-function Toggle({label,hint,value,setValue}){return <div className="toggle-row"><div><b>{label}</b><span>{hint}</span></div><button className={"switch "+(value?"on":"")} onClick={()=>setValue(!value)}><i/></button></div>;}
+function buildExamPool(category, questions) {
+  if (category === "full") return questions.filter(q => ["gened","profed","majorship"].includes(q.cat));
+  return questions.filter(q => q.cat === category);
+}
+
+function MockBoard({category,setCategory,mockScores,mockHistory,setExamSession,questions}) {
+  const selected=CATEGORIES.find(c=>c.id===category)||CATEGORIES[0];
+  const [count,setCount]=useState(150);
+  const [shuffle,setShuffle]=useState(true);
+  const [explain,setExplain]=useState(false);
+  const available=buildExamPool(category,questions).length;
+  const timeLimit=Math.max(5,Math.round(count*.8));
+  const start=()=>{
+    const pool=buildExamPool(category,questions);
+    if(!pool.length){alert("No questions are available for this category yet. Add questions to a study deck first.");return;}
+    const actualCount=Math.min(count,pool.length);
+    const ordered=shuffle?[...pool].sort(()=>Math.random()-0.5):[...pool];
+    setExamSession({category, requestedCount:count, pool:ordered.slice(0,actualCount), timeLimit, showExplanations:explain, startedAt:Date.now()});
+  };
+  return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><div><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.items} items</span><span>◷ {c.hours}</span></div></button>)}</div><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/></div><aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Category</dt><dd>{selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Available</dt><dd>{available}</dd><dt>Time limit</dt><dd>{timeLimit} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div>{available>0&&available<count&&<div className="form-hint"><CircleHelp/> Only {available} questions are currently available, so this attempt will use {available} items.</div>}<h4>RECENT SCORES</h4>{mockHistory?.length?<div className="recent-scores">{mockHistory.slice(-5).reverse().map((s,i)=><span key={i}>{s.score}%</span>)}</div>:<p className="muted">No attempts yet</p>}<button className="primary-btn wide" onClick={start}>Start Exam <ChevronRight/></button></aside></div></div>;
+}
+
+function ExamRunner({session,close,setMockScores,setMockHistory,setSessions,setQuestionStats}) {
+  const [index,setIndex]=useState(0);
+  const [answers,setAnswers]=useState({});
+  const [submitted,setSubmitted]=useState(false);
+  const [remaining,setRemaining]=useState(session.timeLimit*60);
+  const [result,setResult]=useState(null);
+  const current=session.pool[index];
+  const total=session.pool.length;
+
+  useEffect(()=>{
+    if(submitted) return;
+    const id=setInterval(()=>setRemaining(v=>Math.max(0,v-1)),1000);
+    return ()=>clearInterval(id);
+  },[submitted]);
+
+  useEffect(()=>{
+    if(!submitted && remaining===0) finish(true);
+  },[remaining]);
+
+  function choose(choice){ if(!submitted) setAnswers(a=>({...a,[current.id]:choice})); }
+  function finish(auto=false){
+    if(submitted) return;
+    const correct=session.pool.reduce((n,q)=>n+(answers[q.id]===q.answer?1:0),0);
+    const answered=session.pool.filter(q=>answers[q.id]!==undefined).length;
+    const score=Math.round(correct/total*100);
+    const passed=score>=75;
+    const itemResults=session.pool.map(q=>({questionId:q.id,selected:answers[q.id],correct:q.answer,ok:answers[q.id]===q.answer}));
+    setSubmitted(true);
+    setResult({correct,answered,score,passed,auto,itemResults,elapsed:session.timeLimit*60-remaining});
+    setMockScores(s=>[...s,score].slice(-10));
+    setMockHistory(h=>[...h,{id:Date.now(),category:session.category,score,correct,total,answered,passed,date:new Date().toISOString()}].slice(-20));
+    setSessions(s=>[...s,{id:Date.now(),type:"mock",cat:session.category,answered,correct,minutes:Math.max(1,Math.round((session.timeLimit*60-remaining)/60)),completed:true,title:`${CATEGORIES.find(c=>c.id===session.category)?.label||"Mock"} Mock Exam`,date:new Date().toISOString().slice(0,10)}]);
+    setQuestionStats(old=>{const next={...old};session.pool.forEach(q=>{const ok=answers[q.id]===q.answer;next[q.id]={attempts:(old[q.id]?.attempts||0)+1,correct:(old[q.id]?.correct||0)+(ok?1:0),lastAnswered:new Date().toISOString()};});return next;});
+  }
+  const mm=String(Math.floor(remaining/60)).padStart(2,"0"), ss=String(remaining%60).padStart(2,"0");
+
+  if(submitted&&result) return <div className="modal-backdrop exam-backdrop"><div className="exam-runner results"><div className="exam-top"><div><span className="question-label">EXAM COMPLETE</span><h2>{CATEGORIES.find(c=>c.id===session.category)?.title} Mock Exam</h2></div><button className="icon-close" onClick={close}><X/></button></div><div className={"result-score "+(result.passed?"pass":"fail")}><div className="result-ring"><strong>{result.score}%</strong><span>{result.passed?"PASSED":"NOT PASSED"}</span></div><div><h3>{result.passed?"Great work!":"Keep practicing!"}</h3><p>{result.correct} of {result.total} correct · {result.answered} answered</p><p>{result.auto?"The exam ended when the timer reached zero.":"You submitted the exam before time expired."}</p></div></div><div className="result-grid"><div><b>Passing threshold</b><span>75%</span></div><div><b>Questions</b><span>{result.total}</span></div><div><b>Answered</b><span>{result.answered}</span></div><div><b>Time used</b><span>{Math.floor(result.elapsed/60)}m {result.elapsed%60}s</span></div></div><div className="result-list"><h3>Question Review</h3>{session.pool.map((q,i)=>{const r=result.itemResults[i];return <div className={"result-item "+(r.ok?"ok":"bad")} key={q.id}><span>{r.ok?<CheckCircle2/>:<X/>}</span><div><b>{i+1}. {q.q}</b><small>Your answer: {r.selected===undefined?"Not answered":q.options[r.selected]}</small>{session.showExplanations&&<small>Correct answer: {q.options[q.answer]} — {q.explanation}</small>}</div></div>})}</div><div className="exam-result-actions"><button className="secondary-btn" onClick={close}>Back to Mock Board</button><button className="primary-btn" onClick={()=>{setResult(null);setSubmitted(false);setAnswers({});setIndex(0);setRemaining(session.timeLimit*60);}}>Review Attempt</button></div></div></div>;
+
+  return <div className="modal-backdrop exam-backdrop"><div className="exam-runner"><div className="exam-top"><div><span className="question-label">MOCK BOARD EXAM</span><h2>{CATEGORIES.find(c=>c.id===session.category)?.title}</h2></div><div className={"exam-timer "+(remaining<60?"danger":"")}><span>TIME</span><strong>{mm}:{ss}</strong></div><button className="icon-close" onClick={()=>{if(confirm("Exit this exam? Your attempt will not be scored.")) close();}}><X/></button></div><div className="exam-progress"><div><span>Question {index+1} of {total}</span><b>{Object.keys(answers).length}/{total} answered</b></div><div className="progress-track"><i style={{width:((index+1)/total*100)+"%"}}/></div></div><div className="exam-question"><div className="question-label">ITEM {index+1}</div><h2>{current.q}</h2><div className="exam-options">{current.options.map((opt,i)=><button key={i} className={answers[current.id]===i?"selected":""} onClick={()=>choose(i)}><span>{String.fromCharCode(65+i)}</span>{opt}</button>)}</div></div><div className="exam-navigation"><button className="secondary-btn" disabled={index===0} onClick={()=>setIndex(i=>Math.max(0,i-1))}><ChevronLeft/> Previous</button><div className="question-jump">{session.pool.map((q,i)=><button key={q.id} className={(i===index?"current ":"")+(answers[q.id]!==undefined?"answered":"")} onClick={()=>setIndex(i)}>{i+1}</button>)}</div>{index===total-1?<button className="primary-btn" onClick={()=>{if(confirm("Submit this exam now? Unanswered questions will be counted as incorrect.")) finish(false);}}>Submit Exam <CheckCircle2/></button>:<button className="primary-btn" onClick={()=>setIndex(i=>Math.min(total-1,i+1))}>Next <ChevronRight/></button>}</div></div></div>;
+}
 
 function Schedule({sessions,setShowSessionModal}) { const now=new Date(); const [month,setMonth]=useState(new Date(now.getFullYear(),now.getMonth(),1)); const year=month.getFullYear(),mon=month.getMonth(),days=new Date(year,mon+1,0).getDate(),start=new Date(year,mon,1).getDay(),cells=[...Array(start),...Array.from({length:days},(_,i)=>i+1)]; const today=now.getDate(),currentMonth=now.getMonth(),currentYear=now.getFullYear(); return <div><PageHeader title="Study Schedule" subtitle="Plot and track your review sessions, mock exams, and daily drills" action={<button className="primary-btn" onClick={()=>setShowSessionModal(true)}><Plus/> Add Event</button>}/><div className="schedule-stats"><div><b>{sessions.length}</b><span>Total Events</span></div><div><b>{sessions.filter(s=>s.completed).length}</b><span>Completed</span></div><div><b>{sessions.filter(s=>s.type==="study").length}</b><span>Study Sessions</span></div><div><b>{sessions.filter(s=>s.type==="mock").length}</b><span>Mock Exams</span></div></div><div className="calendar-layout"><section className="panel calendar"><div className="calendar-head"><h2>{month.toLocaleString("en-US",{month:"long"})} {year}</h2><div><button onClick={()=>setMonth(new Date(year,mon-1,1))}><ChevronLeft/></button><button onClick={()=>setMonth(new Date(year,mon+1,1))}><ChevronRight/></button></div></div><div className="weekday">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map(x=><b key={x}>{x}</b>)}</div><div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{sessions.filter(s=>{const dt=new Date(s.date);return dt.getDate()===d&&dt.getMonth()===mon&&dt.getFullYear()===year}).map((s,j)=><i className={s.type} key={j}>{s.title}</i>)}</>}</div>)}</div></section><aside className="panel event-side"><h4>EVENT TYPES</h4><p><i className="dot study"/>Study Session</p><p><i className="dot mock"/>Mock Exam</p><p><i className="dot drill"/>Daily Drill</p><hr/><h4>UPCOMING THIS MONTH</h4>{sessions.length?sessions.slice(0,5).map(s=><div className="upcoming" key={s.id}><b>{s.title}</b><span>{s.date}</span></div>):<div className="empty"><CalendarDays/><span>Select a day to add events</span></div>}</aside></div></div>; }
 
