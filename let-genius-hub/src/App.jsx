@@ -195,9 +195,18 @@ function App() {
   return <div className={`app-shell theme-${theme}`}>
     {mobileNav && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)} />}
     <aside className={"sidebar "+(mobileNav?"mobile-open":"")}>
-      <div className="brand-mark"><GraduationCap size={30}/></div>
-      <nav>{nav.map(([id,Icon,label])=><button key={id} className={"nav-btn "+(page===id|| (page==="deck-detail"&&id==="decks")?"active":"")} title={label} onClick={()=>goTo(id)}><Icon size={23}/><span>{label}</span></button>)}</nav>
-      <div className="sidebar-bottom"><button className="nav-btn" title="Settings" onClick={()=>setShowSettings(true)}><Settings size={22}/><span>Settings</span></button><button className="avatar avatar-btn" title="Profile" onClick={()=>goTo("profile")}>{(profile.name||"G").trim().charAt(0).toUpperCase()}</button><button className="nav-btn" title="Sign out"><LogOut size={22}/><span>Sign out</span></button></div>
+      <div className="sidebar-brand">
+        <div className="brand-mark"><GraduationCap size={28}/></div>
+        <div className="sidebar-brand-copy"><strong>LET Genius</strong><span>Hub</span></div>
+      </div>
+      <div className="sidebar-section-label">MAIN MENU</div>
+      <nav className="sidebar-nav">{nav.map(([id,Icon,label])=><button key={id} className={"nav-btn "+(page===id|| (page==="deck-detail"&&id==="decks")?"active":"")} title={label} onClick={()=>goTo(id)}><Icon size={20}/><span>{label}</span></button>)}</nav>
+      <div className="sidebar-spacer" />
+      <div className="sidebar-bottom">
+        <button className="nav-btn" title="Settings" onClick={()=>setShowSettings(true)}><Settings size={20}/><span>Settings</span></button>
+        <button className="profile-nav-btn" title="Profile" onClick={()=>goTo("profile")}><span className="avatar avatar-btn">{(profile.name||"G").trim().charAt(0).toUpperCase()}</span><span className="profile-nav-copy"><strong>{profile.name||"Profile"}</strong><small>View profile</small></span><ChevronRight size={16}/></button>
+        <button className="nav-btn signout-btn" title="Sign out"><LogOut size={20}/><span>Sign out</span></button>
+      </div>
     </aside>
     <main className="main">
       <header className="mobile-header"><div className="brand-mark"><GraduationCap size={24}/></div><button className="icon-btn" aria-label="Open navigation" onClick={()=>setMobileNav(v=>!v)}><Menu/></button></header>
@@ -388,11 +397,20 @@ function StudyModal({study,answer,next,jump,close,goTo,profile}) {
   ];
   const exitTo=(page)=>{ if(confirm("Exit this study session? Your completed answers will remain recorded, but this session will not be counted as finished.")){ close(); goTo(page); } };
   return <div className="study-fullscreen">
-    <div className="study-app-nav">
-      <div className="study-brand"><div className="brand-mark"><GraduationCap size={27}/></div><div><b>LET Genius Hub</b><span>Study Center</span></div></div>
-      <nav>{nav.map(([id,Icon,label])=><button key={id} className="nav-btn" onClick={()=>exitTo(id)}><Icon size={21}/><span>{label}</span></button>)}</nav>
-      <div className="study-app-nav-bottom"><button className="nav-btn" onClick={()=>{if(confirm("Exit this study session?")){close();}}}><Settings size={21}/><span>Settings</span></button><button className="study-profile-mini" onClick={()=>exitTo("profile")}><span>{(profile?.name||"G").trim().charAt(0).toUpperCase()}</span><b>{profile?.name||"Profile"}</b></button></div>
-    </div>
+    <aside className="sidebar study-app-sidebar">
+      <div className="sidebar-brand">
+        <div className="brand-mark"><GraduationCap size={28}/></div>
+        <div className="sidebar-brand-copy"><strong>LET Genius</strong><span>Hub</span></div>
+      </div>
+      <div className="sidebar-section-label">MAIN MENU</div>
+      <nav className="sidebar-nav">{nav.map(([id,Icon,label])=><button key={id} className="nav-btn" onClick={()=>exitTo(id)}><Icon size={20}/><span>{label}</span></button>)}</nav>
+      <div className="sidebar-spacer" />
+      <div className="sidebar-bottom">
+        <button className="nav-btn" onClick={()=>{if(confirm("Exit this study session?")){close();}}}><Settings size={20}/><span>Settings</span></button>
+        <button className="profile-nav-btn" onClick={()=>exitTo("profile")}><span className="avatar avatar-btn">{(profile?.name||"G").trim().charAt(0).toUpperCase()}</span><span className="profile-nav-copy"><strong>{profile?.name||"Profile"}</strong><small>View profile</small></span><ChevronRight size={16}/></button>
+        <button className="nav-btn signout-btn" onClick={()=>{if(confirm("Exit this study session?")){close();}}}><LogOut size={20}/><span>Sign out</span></button>
+      </div>
+    </aside>
     <div className="study-shell">
       <header className="study-header">
         <div className="study-title"><span className="question-label">STUDY SESSION</span><h1>{study.label}</h1><span>{study.pool.length} questions · self-paced review</span></div>
