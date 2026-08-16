@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { expandedQuestionBank, QUESTION_BANK_COUNTS } from "./questionBank";
 import {
   BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
+  LayoutDashboard, Library, ClipboardCheck, UserCircle,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
   ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2
@@ -45,7 +46,9 @@ function usePersistedState(key, initial) {
 }
 
 function App() {
-  const [page, setPage] = usePersistedState("lgh-page", "dashboard");
+  const [page, setPage] = usePersistedState("lgh-page", "progress");
+  const [theme, setTheme] = usePersistedState("lgh-theme", "light");
+  const [profile, setProfile] = usePersistedState("lgh-profile", {name:"Genius Learner", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60});
   const [category, setCategory] = usePersistedState("lgh-category", "gened");
   const [streak, setStreak] = usePersistedState("lgh-streak", 14);
   const [questions, setQuestions] = usePersistedState("lgh-questions", seedQuestions);
@@ -67,6 +70,15 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [examSession, setExamSession] = usePersistedState("lgh-active-exam", null);
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    document.body.dataset.theme = theme;
+  }, [theme]);
+
+  useEffect(() => {
+    setPage("progress");
+  }, []);
 
   // Migration for users coming from V2: attach older unassigned questions to a matching deck.
   useEffect(() => {
@@ -156,24 +168,25 @@ function App() {
   function goTo(nextPage) { setPage(nextPage); setMobileNav(false); setSelectedDeckId(null); }
 
   const nav = [
-    ["progress", BarChart3, "Progress Dashboard"],
-    ["decks", Layers3, "Study Decks"],
+    ["progress", LayoutDashboard, "Progress Dashboard"],
+    ["decks", Library, "Study Decks"],
     ["dashboard", Flame, "Daily Drill"],
-    ["mock", FileText, "Mock Board Exam"],
+    ["mock", ClipboardCheck, "Mock Board Exam"],
     ["schedule", CalendarDays, "Study Schedule"]
   ];
 
-  return <div className="app-shell">
+  return <div className={`app-shell theme-${theme}`}>
     {mobileNav && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)} />}
     <aside className={"sidebar "+(mobileNav?"mobile-open":"")}>
       <div className="brand-mark"><GraduationCap size={30}/></div>
       <nav>{nav.map(([id,Icon,label])=><button key={id} className={"nav-btn "+(page===id|| (page==="deck-detail"&&id==="decks")?"active":"")} title={label} onClick={()=>goTo(id)}><Icon size={23}/><span>{label}</span></button>)}</nav>
-      <div className="sidebar-bottom"><button className="nav-btn" title="Settings" onClick={()=>setShowSettings(true)}><Settings size={22}/><span>Settings</span></button><div className="avatar">G</div><button className="nav-btn" title="Sign out"><LogOut size={22}/><span>Sign out</span></button></div>
+      <div className="sidebar-bottom"><button className="nav-btn" title="Settings" onClick={()=>setShowSettings(true)}><Settings size={22}/><span>Settings</span></button><button className="avatar avatar-btn" title="Profile" onClick={()=>goTo("profile")}>{(profile.name||"G").trim().charAt(0).toUpperCase()}</button><button className="nav-btn" title="Sign out"><LogOut size={22}/><span>Sign out</span></button></div>
     </aside>
     <main className="main">
       <header className="mobile-header"><div className="brand-mark"><GraduationCap size={24}/></div><button className="icon-btn" aria-label="Open navigation" onClick={()=>setMobileNav(v=>!v)}><Menu/></button></header>
       {page==="dashboard" && <Dashboard setPage={setPage} streak={streak} category={category} setCategory={setCategory} startDrill={startDrill} stats={stats} decks={decks} questions={questions}/>} 
       
+      {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme}/>}
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} setPage={setPage} setCategory={setCategory}/>} 
       {page==="decks" && <Decks decks={decks} questions={questions} questionStats={questionStats} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} deleteDeck={deleteDeck}/>} 
       {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)}/>} 
@@ -186,7 +199,7 @@ function App() {
       {showAIModal && <AIQuestionModal deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
       {showSessionModal && <SessionModal close={()=>setShowSessionModal(false)} save={data=>{setSessions(s=>[...s,{id:Date.now(),...data}]);setShowSessionModal(false)}}/>} 
-      {showSettings && <SettingsModal close={()=>setShowSettings(false)}/>} 
+      {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
   </div>;
 }
@@ -489,7 +502,14 @@ function QuestionModal({close,save,initial,deckId}) {
   return <div className="modal-backdrop"><div className="small-modal question-modal"><div className="modal-head"><div><h2>{initial?"Edit Question":"Add Question"}</h2><span className="muted">Multiple-choice question</span></div><button onClick={close}><X/></button></div><label>Question<textarea className="question-input" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Enter the question stem..."/></label><div className="option-editor"><b>Answer choices</b>{options.map((o,i)=><label key={i}><span className={answer===i?"answer-dot selected":"answer-dot"} onClick={()=>setAnswer(i)}>{String.fromCharCode(65+i)}</span><input value={o} onChange={e=>updateOption(i,e.target.value)} placeholder={`Choice ${String.fromCharCode(65+i)}`}/></label>)}</div><label>Explanation<textarea value={explanation} onChange={e=>setExplanation(e.target.value)} placeholder="Explain why the correct answer is correct..."/></label><div className="form-hint"><CheckCircle2 size={17}/> Select the letter beside the correct answer.</div><button className="primary-btn wide" disabled={!question.trim()||options.some(o=>!o.trim())||!explanation.trim()} onClick={submit}><Save size={17}/>{initial?"Save Question":"Add Question"}</button></div></div>;
 }
 
-function SettingsModal({close}) { const [compact,setCompact]=useState(false); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><h2>Settings</h2><button onClick={close}><X/></button></div><div className="settings-item"><div><b>Compact layout</b><span>Use tighter spacing across study pages.</span></div><Toggle label="" hint="" value={compact} setValue={setCompact}/></div><div className="settings-note"><Settings size={18}/><span>Your study data is stored locally in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
+function SettingsModal({close,theme,setTheme,profile,openProfile}) { return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your LET Genius Hub experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, theme, and study data are stored locally in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
+function Profile({profile,setProfile,setPage,theme}) {
+  const [draft,setDraft]=useState(profile);
+  const save=()=>setProfile({...draft, dailyGoal:Number(draft.dailyGoal)||60});
+  const initials=(draft.name||"G").trim().split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase();
+  return <div><PageHeader title="Profile" subtitle="Manage your learner profile and LET study goals." action={<button className="secondary-btn compact" onClick={()=>setPage("progress")}><ArrowLeft size={17}/> Back to Progress</button>}/><div className="profile-layout"><section className="panel profile-card"><div className="profile-hero"><div className="profile-avatar-large">{initials||"G"}</div><div><h2>{draft.name||"Genius Learner"}</h2><p>{draft.goal||"Pass the LET"}</p><span className="tag">{theme==="dark"?"Dark mode":"Light mode"}</span></div></div><div className="profile-form"><label>Display name<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} placeholder="Your name"/></label><label>Study goal<input value={draft.goal} onChange={e=>setDraft({...draft,goal:e.target.value})} placeholder="e.g. Pass the LET"/></label><label>LET exam date<input type="date" value={draft.examDate} onChange={e=>setDraft({...draft,examDate:e.target.value})}/></label><label>Daily study goal (minutes)<input type="number" min="10" max="720" value={draft.dailyGoal} onChange={e=>setDraft({...draft,dailyGoal:e.target.value})}/></label><button className="primary-btn wide" onClick={save}><Save size={17}/> Save Profile</button></div></section><aside className="panel profile-summary"><h3>Your Study Identity</h3><div className="profile-stat"><span>Daily goal</span><b>{draft.dailyGoal||60} min</b></div><div className="profile-stat"><span>Exam date</span><b>{draft.examDate?new Date(draft.examDate+"T00:00:00").toLocaleDateString():"Not set"}</b></div><div className="profile-stat"><span>Appearance</span><b>{theme==="dark"?"Dark":"Light"}</b></div><div className="profile-tip"><UserCircle size={18}/><span>Your profile is saved locally, so you can personalize the reviewer without creating an account.</span></div></aside></div></div>;
+}
+
 function SessionModal({close,save}) { const [title,setTitle]=useState("Study Session"); const [date,setDate]=useState(new Date().toISOString().slice(0,10)); const [type,setType]=useState("study"); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><h2>Add Schedule Event</h2><button onClick={close}><X/></button></div><label>Title<input value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Event type<select value={type} onChange={e=>setType(e.target.value)}><option value="study">Study Session</option><option value="mock">Mock Exam</option><option value="drill">Daily Drill</option></select></label><button className="primary-btn wide" onClick={()=>save({title,date,type,completed:false})}>Add Event</button></div></div>; }
 
 export default App;
