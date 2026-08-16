@@ -592,3 +592,19 @@ body{background-color:var(--bg);background-image:radial-gradient(#d9dce2 1.5px,t
 
 /* Keep PDF upload visibly supported in the AI Generator. */
 .ai-upload-card input[type="file"]{cursor:pointer}
+
+/* V26: Study Now navigator result states. Result color remains visible even on the current item. */
+.study-question-jump button.unanswered{background:#fff;color:#7d8da4;border:1px solid #dbe2ea}
+.study-question-jump button.correct{background:#eaf8f1!important;color:#17845b!important;border:1px solid #55bb8a!important}
+.study-question-jump button.wrong{background:#fff0f0!important;color:#c43d3d!important;border:1px solid #e77979!important}
+.study-question-jump button.current{box-shadow:0 0 0 3px rgba(81,71,223,.12)!important}
+.study-question-jump button.correct.current{border:2px solid #5147df!important;box-shadow:0 0 0 2px rgba(81,71,223,.12)!important}
+.study-question-jump button.wrong.current{border:2px solid #5147df!important;box-shadow:0 0 0 2px rgba(81,71,223,.12)!important}
+.study-question-jump button.unanswered.current{border:2px solid #5147df!important;box-shadow:0 0 0 2px rgba(81,71,223,.12)!important}
+.app-shell.theme-dark .study-question-jump button.unanswered{background:#171c25;color:#9eacbe;border-color:var(--line)}
+.app-shell.theme-dark .study-question-jump button.correct{background:#102b24!important;color:#43d5a0!important;border-color:#1e6b55!important}
+.app-shell.theme-dark .study-question-jump button.wrong{background:#332022!important;color:#ff8f8f!important;border-color:#8f4141!important}
+
+/* V26: PDF upload is a supported material source. */
+.ai-dropzone input[type="file"]{display:block;position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;z-index:2}
+.ai-dropzone{position:relative;cursor:pointer}
