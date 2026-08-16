@@ -239,7 +239,7 @@ function DailyDrill({category,setCategory,startDrill,streak,questions}) { return
 function Progress({stats,streak,decks,mockScores,questions,questionStats,setPage,setCategory,profile}) {
   const accuracy=stats.answered?stats.correct/stats.answered*100:0;
   const examDate = profile?.examDate ? new Date(profile.examDate + "T00:00:00") : null;
-  const examDateLabel = examDate ? examDate.toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric"}) : "Not set";
+  const examDateText = examDate ? examDate.toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric"}) : "Not set";
   const daysAway = examDate ? Math.max(0, Math.ceil((examDate - new Date()) / 86400000)) : null;
   const updated=new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}).format(new Date());
   const subjectStats=CATEGORIES.slice(0,3).map(c=>{const qs=questions.filter(q=>q.cat===c.id);const attempts=qs.reduce((n,q)=>n+(questionStats[q.id]?.attempts||0),0);const correct=qs.reduce((n,q)=>n+(questionStats[q.id]?.correct||0),0);return {...c,attempts,correct,accuracy:attempts?Math.round(correct/attempts*100):0};});
@@ -254,7 +254,7 @@ function Progress({stats,streak,decks,mockScores,questions,questionStats,setPage
     {label:"Questions Answered",value:stats.answered,small:`${accuracy.toFixed(1)}% accuracy overall`,foot:"Open study decks",target:"decks"}
   ];
   return <div>
-    <PageHeader title="Progress Dashboard" subtitle={<><span>LET Exam Date: {examDateLabel}</span>{daysAway !== null && <span className="date-badge">{daysAway} days away</span>}</>} action={<span className="updated">Updated {updated}</span>}/>
+    <PageHeader title="Progress Dashboard" subtitle={<><span>LET Exam Date: {examDateText}</span>{daysAway !== null && <span className="date-badge">{daysAway} days away</span>}</>} action={<span className="updated">Updated {updated}</span>}/>
     <div className="metrics">{metricCards.map((m,i)=><button key={m.label} className={`metric metric-button ${m.primary?"primary":""}`} onClick={()=>go(m.target)}><span>{m.label}</span><strong>{m.value}</strong><small>{m.small}</small><b className={i===1&&mockScores.length?"danger":""}>{m.foot}</b><ChevronRight className="metric-arrow" size={18}/></button>)}</div>
     <div className="progress-two-col">
       <section className="panel weak-card"><div className="section-head"><div><h2>Weak Areas</h2><p className="muted">Focus on the subjects with the lowest accuracy.</p></div><button onClick={()=>go("mock")}>Practice all <ChevronRight size={16}/></button></div><div className="weak-list">{weakAreas.map(c=><button className="weak-row" key={c.id} onClick={()=>go("mock",c.id)}><div className={`mini-icon ${c.color}`}><c.icon size={21}/></div><div className="weak-main"><div><b>{c.label}</b><span>{c.attempts?`${c.attempts} attempts`:"Not practiced yet"}</span></div><div className="progress-track"><i style={{width:`${Math.min(100,c.accuracy)}%`}}/></div></div><strong>{c.attempts?`${c.accuracy}%`:"—"}</strong><ChevronRight size={18}/></button>)}</div></section>
