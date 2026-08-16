@@ -155,7 +155,7 @@ function App() {
       alert("This deck has no questions yet. Add a question first.");
       return;
     }
-    setStudyPool({ label, pool:[...pool].sort(()=>Math.random()-0.5), index:0, correct:0, answered:0, selected:null, checked:false, startedAt:Date.now() });
+    setStudyPool({ label, pool:[...pool].sort(()=>Math.random()-0.5), index:0, correct:0, answered:0, selected:null, checked:false, results:{}, startedAt:Date.now() });
   }
 
   function startDrill(cat = category) {
@@ -185,7 +185,7 @@ function App() {
         if (d.label.includes("Drill") && nextCorrect > 0) setLastActiveDate(new Date().toLocaleDateString("en-CA"));
         return null;
       }
-      return {...d,index:d.index+1,selected:null,checked:false,answered:nextAnswered,correct:nextCorrect};
+      return {...d,index:d.index+1,selected:null,checked:false,answered:nextAnswered,correct:nextCorrect,results:{...d.results,[current.id]:wasCorrect?"correct":"wrong"}};
     });
   }
 
@@ -429,7 +429,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile}) {
         <aside className="study-sidebar study-question-sidebar">
           <div className="study-side-head"><b>Question Navigator</b><span>{study.index+1} of {study.pool.length}</span></div>
           <div className="study-progress"><span>Progress</span><b>{Math.round(study.answered/study.pool.length*100)}%</b></div>
-          <div className="study-question-jump">{study.pool.map((item,i)=><button key={item.id} className={i===study.index?"current":i<study.index?"completed":""} onClick={()=>jump(i)}>{i+1}</button>)}</div>
+          <div className="study-question-jump">{study.pool.map((item,i)=>{const status=study.results?.[item.id]; return <button key={item.id} className={(i===study.index?"current ":"")+(status||"")} onClick={()=>jump(i)}>{i+1}</button>})}</div>
           <div className="study-side-note"><Flame size={17}/><span>Take your time and focus on understanding the rationale.</span></div>
         </aside>
       </div>
