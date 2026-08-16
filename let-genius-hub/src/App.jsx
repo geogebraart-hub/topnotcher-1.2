@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { expandedQuestionBank, QUESTION_BANK_COUNTS } from "./questionBank";
 import {
   BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
@@ -32,6 +33,8 @@ const seedDecks = [
   {id:2,name:"Professional Education Basics",category:"profed",description:"Core ProfEd concepts",flashcards:0},
   {id:3,name:"Majorship Fundamentals",category:"majorship",description:"Starter major topics",flashcards:0}
 ];
+
+const BUILTIN_MOCK_BANK = [...seedQuestions, ...expandedQuestionBank];
 
 function usePersistedState(key, initial) {
   const [value, setValue] = useState(() => {
@@ -217,8 +220,19 @@ function DeckDetail({deck,questions,questionStats,onBack,onAdd,onEdit,onDelete,o
 }
 
 function buildExamPool(category, questions) {
-  if (category === "full") return questions.filter(q => ["gened","profed","majorship"].includes(q.cat));
-  return questions.filter(q => q.cat === category);
+  // The mock board uses the built-in LET-style bank so exam length is not
+  // limited by the user-created study decks. User-created questions are
+  // added on top, with duplicate IDs removed.
+  const merged = [...BUILTIN_MOCK_BANK, ...questions];
+  const seen = new Set();
+  const unique = merged.filter(q => {
+    const key = String(q.id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  if (category === "full") return unique.filter(q => ["gened","profed","majorship"].includes(q.cat));
+  return unique.filter(q => q.cat === category);
 }
 
 function Toggle({label,hint,value,setValue}) {
@@ -242,7 +256,7 @@ function MockBoard({category,setCategory,mockScores,mockHistory,setExamSession,q
     const ordered=shuffle?[...pool].sort(()=>Math.random()-0.5):[...pool];
     setExamSession({id:Date.now(), category, requestedCount:count, pool:ordered.slice(0,actualCount), timeLimit, showExplanations:explain, startedAt:Date.now()});
   };
-  return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><div><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.items} items</span><span>◷ {c.hours}</span></div></button>)}</div><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150,200,250,300,350,400,420].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/></div><aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Category</dt><dd>{selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Available</dt><dd>{available}</dd><dt>Time limit</dt><dd>{timeLimit} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div>{available>0&&available<count&&<div className="form-hint"><CircleHelp/> Only {available} questions are currently available, so this attempt will use {available} items.</div>}<h4>RECENT SCORES</h4>{mockHistory?.length?<div className="recent-scores">{mockHistory.slice(-5).reverse().map((s,i)=><span key={i}>{s.score}%</span>)}</div>:<p className="muted">No attempts yet</p>}<button className="primary-btn wide" onClick={start}>Start Exam <ChevronRight/></button></aside></div></div>;
+  return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><div><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.id==="full"?QUESTION_BANK_COUNTS.full:QUESTION_BANK_COUNTS[c.id]}+ items</span><span>◷ {c.hours}</span></div></button>)}</div><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150,200,250,300,350,400,420].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/></div><aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Category</dt><dd>{selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Available</dt><dd>{available}</dd><dt>Time limit</dt><dd>{timeLimit} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div>{available>0&&available<count&&<div className="form-hint"><CircleHelp/> Only {available} questions are currently available, so this attempt will use {available} items.</div>}<div className="bank-ready"><CheckCircle2/> <span><b>Question bank ready.</b> Built-in LET-style items are available for long-form practice.</span></div><h4>RECENT SCORES</h4>{mockHistory?.length?<div className="recent-scores">{mockHistory.slice(-5).reverse().map((s,i)=><span key={i}>{s.score}%</span>)}</div>:<p className="muted">No attempts yet</p>}<button className="primary-btn wide" onClick={start}>Start Exam <ChevronRight/></button></aside></div></div>;
 }
 
 function ExamRunner({session,close,setMockScores,setMockHistory,setSessions,setQuestionStats}) {
