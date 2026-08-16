@@ -238,8 +238,9 @@ function DailyDrill({category,setCategory,startDrill,streak,questions}) { return
 
 function Progress({stats,streak,decks,mockScores,questions,questionStats,setPage,setCategory,profile}) {
   const accuracy=stats.answered?stats.correct/stats.answered*100:0;
-  const examDate=new Date("2026-09-28T00:00:00");
-  const daysAway=Math.max(0,Math.ceil((examDate-new Date())/86400000));
+  const examDate=profile?.examDate ? new Date(profile.examDate + "T00:00:00") : null;
+  const examDateLabel=examDate ? examDate.toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric"}) : "Not set";
+  const daysAway=examDate ? Math.max(0, Math.ceil((examDate-new Date())/86400000)) : null;
   const updated=new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}).format(new Date());
   const subjectStats=CATEGORIES.slice(0,3).map(c=>{const qs=questions.filter(q=>q.cat===c.id);const attempts=qs.reduce((n,q)=>n+(questionStats[q.id]?.attempts||0),0);const correct=qs.reduce((n,q)=>n+(questionStats[q.id]?.correct||0),0);return {...c,attempts,correct,accuracy:attempts?Math.round(correct/attempts*100):0};});
   const weakAreas=[...subjectStats].sort((a,b)=>a.accuracy-b.accuracy);
