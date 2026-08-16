@@ -429,7 +429,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile}) {
         <aside className="study-sidebar study-question-sidebar">
           <div className="study-side-head"><b>Question Navigator</b><span>{study.index+1} of {study.pool.length}</span></div>
           <div className="study-progress"><span>Progress</span><b>{Math.round(study.answered/study.pool.length*100)}%</b></div>
-          <div className="study-question-jump">{study.pool.map((item,i)=>{const status=study.results?.[item.id]; return <button key={item.id} className={(i===study.index?"current ":"")+(status||"")} onClick={()=>jump(i)}>{i+1}</button>})}</div>
+          <div className="study-question-jump">{study.pool.map((item,i)=>{const status=study.results?.[item.id]; return <button key={item.id} className={`${status||"unanswered"}${i===study.index?" current":""}`} onClick={()=>jump(i)}>{i+1}</button>})}</div>
           <div className="study-side-note"><Flame size={17}/><span>Take your time and focus on understanding the rationale.</span></div>
         </aside>
       </div>
@@ -455,12 +455,17 @@ function AIQuestionModal({deck,close,saveQuestions}) {
     setSourceName(file.name); setError("");
     try {
       if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
-        const pdfjs = await import("pdfjs-dist");
-        if (pdfjs.GlobalWorkerOptions) {
-          pdfjs.GlobalWorkerOptions.workerSrc = new URL("pdfjs-dist/build/pdf.worker.min.mjs", import.meta.url).toString();
-        }
+        // Use the legacy PDF.js build with the worker disabled. This is more reliable
+        // when Vite/Vercel serves the app from a deployment where the PDF worker
+        // asset cannot be resolved. Text extraction still happens entirely in-browser.
+        const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
         const bytes = new Uint8Array(await file.arrayBuffer());
-        const pdf = await pdfjs.getDocument({data: bytes}).promise;
+        const pdf = await pdfjs.getDocument({
+          data: bytes,
+          disableWorker: true,
+          useWorkerFetch: false,
+          isEvalSupported: false
+        }).promise;
         const pages=[];
         for (let pageNo=1; pageNo<=pdf.numPages; pageNo++) {
           const page=await pdf.getPage(pageNo);
@@ -470,6 +475,7 @@ function AIQuestionModal({deck,close,saveQuestions}) {
         const text=pages.join("\n\n").replace(/\s{3,}/g,"  ").trim();
         if (!text) throw new Error("empty-pdf");
         setMaterial(text);
+        setError("");
         return;
       }
       if (!/\.(txt|md|csv)$/i.test(file.name)) {
@@ -478,9 +484,13 @@ function AIQuestionModal({deck,close,saveQuestions}) {
       }
       setMaterial(await file.text());
     } catch (err) {
-      console.error(err);
+      console.error("Material upload error:", err);
       setMaterial("");
-      setError("I couldn't extract readable text from that file. Please try another PDF or paste the material instead.");
+      if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+        setError("This PDF could not be read. Make sure it is not password-protected and contains selectable text. Scanned/image-only PDFs need OCR or pasted text.");
+      } else {
+        setError("I couldn't read that material. Please try another PDF, TXT, MD, or CSV file, or paste the material instead.");
+      }
     }
   };
 
