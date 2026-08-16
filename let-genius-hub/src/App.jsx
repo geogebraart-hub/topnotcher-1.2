@@ -351,7 +351,8 @@ function DeckModal({close,save,initial}) { const [name,setName]=useState(initial
 function AIQuestionModal({deck,close,saveQuestions}) {
   const [material,setMaterial]=useState("");
   const [sourceName,setSourceName]=useState("");
-  const [count,setCount]=useState(5);
+  const [count,setCount]=useState(50);
+  const [progress,setProgress]=useState(0);
   const [difficulty,setDifficulty]=useState("mixed");
   const [topic,setTopic]=useState("");
   const [busy,setBusy]=useState(false);
@@ -362,7 +363,7 @@ function AIQuestionModal({deck,close,saveQuestions}) {
     const file=e.target.files?.[0]; if(!file) return;
     setSourceName(file.name); setError("");
     if (!/\.(txt|md|csv)$/i.test(file.name)) {
-      setError("For V10, upload a TXT, MD, or CSV text material. PDF/DOCX parsing will be added in the next material-ingestion upgrade.");
+      setError("For V11, upload a TXT, MD, or CSV text material. PDF/DOCX parsing will be added in the next material-ingestion upgrade.");
       return;
     }
     try { setMaterial(await file.text()); } catch { setError("I couldn't read that file. Please try a text file or paste the material instead."); }
@@ -370,29 +371,74 @@ function AIQuestionModal({deck,close,saveQuestions}) {
 
   const generate=async()=>{
     if(!material.trim()) { setError("Add or paste study material first."); return; }
-    setBusy(true); setError("");
+    setBusy(true); setError(""); setGenerated([]); setProgress(0);
     try {
-      const res=await fetch("/api/generate-questions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({material,category:deck?.category||"gened",topic,count,difficulty,sourceName})});
-      const data=await res.json();
-      if(!res.ok) throw new Error(data.error||"Generation failed.");
-      setGenerated(data.questions||[]);
-      if(!(data.questions||[]).length) throw new Error("The AI returned no usable questions. Try adding more source material.");
-    } catch(e) { setError(e.message||"Could not generate questions."); }
+      const all=[];
+      const batches=Math.ceil(count/20);
+      for(let batch=0; batch<batches; batch++){
+        const batchCount=Math.min(20,count-all.length);
+        const res=await fetch("/api/generate-questions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({material,category:deck?.category||"gened",topic,count:batchCount,difficulty,sourceName})});
+        const data=await res.json();
+        if(!res.ok) throw new Error(data.error||`Generation failed on batch ${batch+1}.`);
+        const qs=data.questions||[];
+        if(!qs.length) throw new Error(`The AI returned no usable questions on batch ${batch+1}. Try adding more source material.`);
+        all.push(...qs);
+        setGenerated([...all]);
+        setProgress(Math.round(all.length/count*100));
+      }
+    } catch(e) { setError(e.message||"Could not generate questions. Any completed batches remain available below."); }
     finally { setBusy(false); }
   };
 
   const save=()=>{
-    const normalized=generated.map((q,i)=>({id:Date.now()+i,deckId:deck.id,cat:deck.category,q:q.question,options:q.options,answer:Number(q.correctAnswer),explanation:q.rationale,topic:q.topic||topic||"AI Generated",difficulty:q.difficulty||difficulty,sourceMaterial:sourceName||"Uploaded material",aiGenerated:true}));
+    const normalized=generated.map((q,i)=>({id:Date.now()+i,deckId:deck.id,cat:deck.category,q:q.question,options:q.options,answer:Number(q.correctAnswer),explanation:q.rationale,topic:q.topic||topic||"AI Generated",difficulty:q.difficulty||difficulty,sourceMaterial:sourceName||"Pasted material",aiGenerated:true}));
     saveQuestions(normalized);
   };
 
-  return <div className="modal-backdrop"><div className="ai-modal"><div className="modal-head"><div><h2><WandSparkles size={22}/> AI Question Generator</h2><span className="muted">Generate LET-style multiple-choice questions for <b>{deck?.name}</b>.</span></div><button onClick={close}><X/></button></div>
-    <div className="ai-note"><Sparkles size={18}/><div><b>Material-grounded generation</b><span>The AI is instructed to use your material as the primary source and include a meaningful rationale explaining why the correct answer is correct.</span></div></div>
-    <div className="ai-grid"><label className="ai-material">Study material<textarea value={material} onChange={e=>setMaterial(e.target.value)} placeholder="Paste your reviewer, lecture notes, textbook excerpt, or other study material here..."/><div className="file-row"><label className="file-btn"><Upload size={16}/> Upload text material<input type="file" accept=".txt,.md,.csv,text/plain,text/markdown" onChange={readFile}/></label>{sourceName&&<span>{sourceName}</span>}</div></label>
-      <div className="ai-settings"><label>Questions<select value={count} onChange={e=>setCount(Number(e.target.value))}>{[5,10,15,20].map(n=><option key={n}>{n}</option>)}</select></label><label>Difficulty<select value={difficulty} onChange={e=>setDifficulty(e.target.value)}><option value="mixed">Mixed</option><option value="easy">Easy</option><option value="moderate">Moderate</option><option value="difficult">Difficult</option></select></label><label>Topic <span className="muted">optional</span><input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. Assessment"/></label><button className="primary-btn wide" disabled={busy||!material.trim()} onClick={generate}>{busy?<><Loader2 className="spin" size={18}/> Generating...</>:<><WandSparkles size={18}/> Generate Questions</>}</button></div>
+  const questionOptions=[50,100,150,200,300,400];
+  const difficultyOptions=[
+    {value:"mixed",label:"Mixed",desc:"Balanced difficulty",icon:"◈"},
+    {value:"easy",label:"Easy",desc:"Recall & foundations",icon:"○"},
+    {value:"moderate",label:"Moderate",desc:"Understanding & application",icon:"◉"},
+    {value:"difficult",label:"Difficult",desc:"Analysis & challenging items",icon:"◆"}
+  ];
+
+  return <div className="modal-backdrop"><div className="ai-modal ai-modal-v2">
+    <div className="modal-head ai-hero-head">
+      <div className="ai-title-wrap"><div className="ai-title-icon"><WandSparkles size={22}/></div><div><h2>AI Question Generator</h2><span className="muted">Turn your study material into LET-style questions for <b>{deck?.name}</b>.</span></div></div>
+      <button onClick={close}><X/></button>
     </div>
+
+    <div className="ai-step-grid">
+      <div className="ai-step-card ai-material-card">
+        <div className="ai-step-head"><div className="ai-step-number">1</div><div><h3>Study Material</h3><span>Add the material the AI should use as its primary source.</span></div></div>
+        <label className={"ai-dropzone "+(sourceName?"has-file":"")}>
+          <input type="file" accept=".txt,.md,.csv,text/plain,text/markdown" onChange={readFile}/>
+          <div className="ai-upload-icon"><Upload size={22}/></div>
+          {sourceName?<><b>{sourceName}</b><span>Material loaded · click to replace</span></>:<><b>Upload your reviewer</b><span>TXT, MD, or CSV · or click to browse</span></>}
+        </label>
+        <div className="ai-or"><span>OR</span></div>
+        <textarea className="ai-material-input" value={material} onChange={e=>{setMaterial(e.target.value);if(sourceName)setSourceName("")}} placeholder="Paste your reviewer, lecture notes, textbook excerpt, or study material here..."/>
+        <div className="ai-material-meta"><span><FileText size={14}/> {material.trim()?`${material.trim().length.toLocaleString()} characters ready`:`No material added yet`}</span>{sourceName&&<span className="ai-file-name">{sourceName}</span>}</div>
+      </div>
+
+      <div className="ai-step-card ai-settings-card">
+        <div className="ai-step-head"><div className="ai-step-number">2</div><div><h3>Question Settings</h3><span>Choose the size and difficulty of your question set.</span></div></div>
+        <div className="ai-setting-block"><div className="ai-setting-label"><b>Number of Questions</b><span>{count} items</span></div><div className="ai-choice-grid count-grid">{questionOptions.map(n=><button type="button" key={n} className={count===n?"selected":""} onClick={()=>setCount(n)} disabled={busy}>{n}</button>)}</div></div>
+        <div className="ai-setting-block"><div className="ai-setting-label"><b>Difficulty</b><span>{difficultyOptions.find(x=>x.value===difficulty)?.label}</span></div><div className="ai-difficulty-list">{difficultyOptions.map(o=><button type="button" key={o.value} className={difficulty===o.value?"selected":""} onClick={()=>setDifficulty(o.value)} disabled={busy}><span className="ai-difficulty-icon">{o.icon}</span><span><b>{o.label}</b><small>{o.desc}</small></span></button>)}</div></div>
+        <label className="ai-topic-field"><span>Topic / Focus <em>optional</em></span><input value={topic} onChange={e=>setTopic(e.target.value)} placeholder="e.g. Assessment, Philippine History" disabled={busy}/></label>
+      </div>
+    </div>
+
+    <div className="ai-generator-footer">
+      <div className="ai-generator-note"><Sparkles size={17}/><div><b>Material-grounded generation</b><span>Every question includes a meaningful rationale explaining why the correct answer is correct.</span></div></div>
+      <button className="primary-btn ai-generate-btn" disabled={busy||!material.trim()} onClick={generate}>{busy?<><Loader2 className="spin" size={18}/> Generating {generated.length} / {count}...</>:<><WandSparkles size={18}/> Generate {count} Questions</>}</button>
+    </div>
+
+    {busy&&<div className="ai-generation-progress"><div className="ai-progress-top"><div><b>Generating your LET questions...</b><span>Creating questions in small batches to keep large sets reliable.</span></div><strong>{progress}%</strong></div><div className="progress-track"><i style={{width:progress+"%"}}/></div><div className="ai-progress-meta"><span>{generated.length} of {count} questions ready</span><span>Please keep this window open</span></div></div>}
     {error&&<div className="ai-error">{error}</div>}
-    {generated.length>0&&<div className="ai-preview"><div className="section-head"><div><h3>Generated Questions</h3><span className="muted">Review before saving. Each question includes a rationale.</span></div><span className="tag">{generated.length} ready</span></div>{generated.map((q,i)=><div className="ai-q" key={i}><div className="ai-q-head"><b>{i+1}. {q.question}</b><span className="tag">{q.difficulty||difficulty}</span></div><div className="ai-options">{q.options.map((o,j)=><div className={j===Number(q.correctAnswer)?"correct": ""} key={j}><b>{String.fromCharCode(65+j)}.</b> {o}</div>)}</div><div className="ai-rationale"><CheckCircle2 size={16}/><div><b>Correct answer: {String.fromCharCode(65+Number(q.correctAnswer))}</b><p>{q.rationale}</p></div></div></div>)}</div>}
+
+    {generated.length>0&&!busy&&<div className="ai-preview ai-preview-v2"><div className="section-head"><div><h3>Generated Questions</h3><span className="muted">Review the questions and rationales before saving them to your deck.</span></div><span className="tag">{generated.length} ready</span></div>{generated.map((q,i)=><div className="ai-q" key={i}><div className="ai-q-head"><b>{i+1}. {q.question}</b><span className="tag">{q.difficulty||difficulty}</span></div><div className="ai-options">{q.options.map((o,j)=><div className={j===Number(q.correctAnswer)?"correct":""} key={j}><b>{String.fromCharCode(65+j)}.</b> {o}</div>)}</div><div className="ai-rationale"><CheckCircle2 size={16}/><div><b>Correct answer: {String.fromCharCode(65+Number(q.correctAnswer))}</b><p>{q.rationale}</p></div></div></div>)}</div>}
     <div className="modal-foot ai-footer"><button className="secondary-btn" onClick={close}>Cancel</button>{generated.length>0&&<button className="primary-btn" onClick={save}><Save size={17}/> Save {generated.length} Questions to Deck</button>}</div>
   </div></div>;
 }
