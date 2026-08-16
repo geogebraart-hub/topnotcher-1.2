@@ -155,7 +155,7 @@ function App() {
       alert("This deck has no questions yet. Add a question first.");
       return;
     }
-    setStudyPool({ label, pool:[...pool].sort(()=>Math.random()-0.5), index:0, correct:0, answered:0, selected:null, checked:false, results:{}, startedAt:Date.now() });
+    setStudyPool({ label, pool:[...pool].sort(()=>Math.random()-0.5), index:0, correct:0, answered:0, selected:null, checked:false, answers:{}, results:{}, startedAt:Date.now(), finishedRecorded:false });
   }
 
   function startDrill(cat = category) {
@@ -164,28 +164,51 @@ function App() {
   }
 
   function answerStudy(choice) {
-    setStudyPool(d => ({...d, selected:choice, checked:true}));
-  }
-
-  function nextStudy() {
     setStudyPool(d => {
+      if (!d) return d;
       const current = d.pool[d.index];
-      const wasCorrect = d.selected === current.answer;
+      // Once a question has been answered in this session, keep that answer
+      // and never count it again just because the learner navigates away/back.
+      if (d.answers?.[current.id] !== undefined) return d;
+      const wasCorrect = choice === current.answer;
       const nextAnswered = d.answered + 1;
       const nextCorrect = d.correct + (wasCorrect ? 1 : 0);
       setQuestionStats(old => ({
         ...old,
-        [current.id]: {attempts:(old[current.id]?.attempts||0)+1, correct:(old[current.id]?.correct||0)+(wasCorrect?1:0), lastAnswered:new Date().toISOString()}
+        [current.id]: {
+          attempts:(old[current.id]?.attempts||0)+1,
+          correct:(old[current.id]?.correct||0)+(wasCorrect?1:0),
+          lastAnswered:new Date().toISOString()
+        }
       }));
+      return {
+        ...d,
+        selected:choice,
+        checked:true,
+        answered:nextAnswered,
+        correct:nextCorrect,
+        answers:{...d.answers,[current.id]:choice},
+        results:{...d.results,[current.id]:wasCorrect?"correct":"wrong"}
+      };
+    });
+  }
+
+  function nextStudy() {
+    setStudyPool(d => {
+      if (!d) return d;
       if (d.index >= d.pool.length - 1) {
-        const minutes = Math.max(1, Math.round((Date.now()-d.startedAt)/60000));
-        setSessions(s => [...s, {id:Date.now(),type:d.label.includes("Drill")?"drill":"study",cat:current.cat,deckId:current.deckId,answered:nextAnswered,correct:nextCorrect,minutes}]);
-        // A successful drill is recorded as today's activity. The login/activity streak
-        // itself is maintained once per calendar day by the app-open effect above.
-        if (d.label.includes("Drill") && nextCorrect > 0) setLastActiveDate(new Date().toLocaleDateString("en-CA"));
-        return null;
+        if (!d.finishedRecorded) {
+          const minutes = Math.max(1, Math.round((Date.now()-d.startedAt)/60000));
+          const current = d.pool[d.index];
+          setSessions(s => [...s, {id:Date.now(),type:d.label.includes("Drill")?"drill":"study",cat:current.cat,deckId:current.deckId,answered:d.answered,correct:d.correct,minutes}]);
+          if (d.label.includes("Drill") && d.correct > 0) setLastActiveDate(new Date().toLocaleDateString("en-CA"));
+        }
+        return {...d,finishedRecorded:true};
       }
-      return {...d,index:d.index+1,selected:null,checked:false,answered:nextAnswered,correct:nextCorrect,results:{...d.results,[current.id]:wasCorrect?"correct":"wrong"}};
+      const nextIndex=d.index+1;
+      const nextQuestion=d.pool[nextIndex];
+      const nextSelected=d.answers?.[nextQuestion.id];
+      return {...d,index:nextIndex,selected:nextSelected===undefined?null:nextSelected,checked:nextSelected!==undefined};
     });
   }
 
@@ -214,7 +237,7 @@ function App() {
 
   function goTo(nextPage) { setPage(nextPage); setMobileNav(false); setSelectedDeckId(null); }
 
-  function jumpStudy(index) { setStudyPool(d => d ? {...d, index, selected:null, checked:false} : d); }
+  function jumpStudy(index) { setStudyPool(d => { if (!d) return d; const item=d.pool[index]; const saved=d.answers?.[item.id]; return {...d,index,selected:saved===undefined?null:saved,checked:saved!==undefined}; }); }
 
   return <div className={`app-shell theme-${theme}`}>
     {mobileNav && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)} />}
