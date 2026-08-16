@@ -100,6 +100,7 @@ function App() {
   const [editingQuestion, setEditingQuestion] = useState(null);
   const [questionDeckId, setQuestionDeckId] = useState(null);
   const [showSessionModal, setShowSessionModal] = useState(false);
+  const [editingSession, setEditingSession] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [examSession, setExamSession] = usePersistedState("lgh-active-exam", null);
@@ -251,14 +252,14 @@ function App() {
       {page==="decks" && <Decks decks={decks} questions={questions} questionStats={questionStats} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} deleteDeck={deleteDeck}/>} 
       {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
-      {page==="schedule" && <Schedule sessions={sessions} setShowSessionModal={setShowSessionModal}/>} 
+      {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id))} onToggleDone={id=>setSessions(ss=>ss.map(s=>s.id===id?{...s,completed:!s.completed}:s))}/>} 
 
       {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats}/>}
       {studyPool && <StudyModal study={studyPool} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile}/>} 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck}/>} 
       {showAIModal && <AIQuestionModal deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
-      {showSessionModal && <SessionModal close={()=>setShowSessionModal(false)} save={data=>{setSessions(s=>[...s,{id:Date.now(),...data}]);setShowSessionModal(false)}}/>} 
+      {showSessionModal && <SessionModal close={()=>{setShowSessionModal(false);setEditingSession(null)}} save={data=>{if(editingSession?.id){setSessions(ss=>ss.map(s=>s.id===editingSession.id?{...s,...data,id:editingSession.id}:s));}else{setSessions(ss=>[...ss,{id:Date.now(),...data}]);}setShowSessionModal(false);setEditingSession(null)}} initial={editingSession}/>} 
       {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
   </div>;
@@ -418,7 +419,46 @@ function ExamRunner({session,close,setMockScores,setMockHistory,setSessions,setQ
   return <div className="exam-fullscreen"><div className="exam-shell"><header className="exam-header"><div className="exam-title"><span className="question-label">MOCK BOARD EXAM</span><h1>{CATEGORIES.find(c=>c.id===session.category)?.title}</h1><span className="exam-meta">{total} items · 75% passing threshold</span></div><div className={"exam-timer " + (remaining<60?"danger":"")}><span>TIME REMAINING</span><strong>{hh}:{mm}:{ss}</strong></div><button className="icon-close" aria-label="Exit exam" onClick={()=>{if(confirm("Exit this exam? Your attempt will not be scored. If the page is refreshed accidentally, your answers will remain saved.")) closeExam();}}><X/></button></header><div className="exam-body"><aside className="exam-sidebar"><div className="navigator-head"><div><b>Question Navigator</b><span>{Object.keys(answers).length} of {total} answered</span></div><div className="navigator-legend"><span><i className="legend-dot answered"/>Answered</span><span><i className="legend-dot unanswered"/>Unanswered</span><span><i className="legend-dot current"/>Current</span></div></div><div className="navigator-progress"><div><span>Progress</span><b>{Math.round(Object.keys(answers).length/total*100)}%</b></div><div className="progress-track"><i style={{width:(Object.keys(answers).length/total*100)+"%"}}/></div></div><div className="question-jump question-jump-grid">{session.pool.map((q,i)=>{const answered=answers[q.id]!==undefined; return <button key={q.id} aria-label={`Question ${i+1}${answered?", answered":""}`} className={(i===index?"current ":"")+(answered?"answered":"unanswered")+(marked[q.id]?" marked":"")} onClick={()=>setIndex(i)}>{i+1}</button>})}</div><div className="navigator-footer"><span><b>{index+1}</b> / {total}</span><button className="navigator-action" onClick={goUnanswered}>Go to unanswered</button><button className={`navigator-action ${marked[current.id]?"marked":""}`} onClick={toggleMark}>{marked[current.id]?"Marked for review":"Mark for review"}</button></div></aside><main className="exam-main"><div className="exam-main-top"><div><span className="question-label">ITEM {index+1}</span><span className="exam-progress-copy">Question {index+1} of {total}</span></div><div className="exam-top-actions"><span className="answered-count">{Object.keys(answers).length} answered</span><button className={`secondary-btn compact ${marked[current.id]?"review-marked":""}`} onClick={toggleMark}><Star size={16}/>{marked[current.id]?"Marked":"Mark for review"}</button></div></div><div className="exam-question"><h2>{current.q}</h2><div className="exam-options">{current.options.map((opt,i)=><button key={i} className={answers[current.id]===i?"selected":""} onClick={()=>choose(i)}><span>{String.fromCharCode(65+i)}</span><b>{opt}</b></button>)}</div></div><div className="exam-navigation"><button className="secondary-btn" disabled={index===0} onClick={()=>setIndex(i=>Math.max(0,i-1))}><ChevronLeft/> Previous</button><div className="exam-nav-status"><span>Question <b>{index+1}</b> / {total}</span><div className="progress-track"><i style={{width:((index+1)/total*100)+"%"}}/></div></div>{index===total-1?<button className="primary-btn" onClick={()=>{if(confirm("Submit this exam now? Unanswered questions will be counted as incorrect.")) finish(false);}}>Submit Exam <CheckCircle2/></button>:<button className="primary-btn" onClick={()=>setIndex(i=>Math.min(total-1,i+1))}>Next <ChevronRight/></button>}</div></main></div></div></div>;
 }
 
-function Schedule({sessions,setShowSessionModal}) { const now=new Date(); const [month,setMonth]=useState(new Date(now.getFullYear(),now.getMonth(),1)); const year=month.getFullYear(),mon=month.getMonth(),days=new Date(year,mon+1,0).getDate(),start=new Date(year,mon,1).getDay(),cells=[...Array(start),...Array.from({length:days},(_,i)=>i+1)]; const today=now.getDate(),currentMonth=now.getMonth(),currentYear=now.getFullYear(); return <div><PageHeader title="Study Schedule" subtitle="Plot and track your review sessions, mock exams, and daily drills" action={<button className="primary-btn" onClick={()=>setShowSessionModal(true)}><Plus/> Add Event</button>}/><div className="schedule-stats"><div><b>{sessions.length}</b><span>Total Events</span></div><div><b>{sessions.filter(s=>s.completed).length}</b><span>Completed</span></div><div><b>{sessions.filter(s=>s.type==="study").length}</b><span>Study Sessions</span></div><div><b>{sessions.filter(s=>s.type==="mock").length}</b><span>Mock Exams</span></div></div><div className="calendar-layout"><section className="panel calendar"><div className="calendar-head"><h2>{month.toLocaleString("en-US",{month:"long"})} {year}</h2><div><button onClick={()=>setMonth(new Date(year,mon-1,1))}><ChevronLeft/></button><button onClick={()=>setMonth(new Date(year,mon+1,1))}><ChevronRight/></button></div></div><div className="weekday">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map(x=><b key={x}>{x}</b>)}</div><div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{sessions.filter(s=>{const dt=new Date(s.date);return dt.getDate()===d&&dt.getMonth()===mon&&dt.getFullYear()===year}).map((s,j)=><i className={s.type} key={j}>{s.title}</i>)}</>}</div>)}</div></section><aside className="panel event-side"><h4>EVENT TYPES</h4><p><i className="dot study"/>Study Session</p><p><i className="dot mock"/>Mock Exam</p><p><i className="dot drill"/>Daily Drill</p><hr/><h4>UPCOMING THIS MONTH</h4>{sessions.length?sessions.slice(0,5).map(s=><div className="upcoming" key={s.id}><b>{s.title}</b><span>{s.date}</span></div>):<div className="empty"><CalendarDays/><span>Select a day to add events</span></div>}</aside></div></div>; }
+function Schedule({sessions,onAdd,onEdit,onDelete,onToggleDone}) {
+  const now=new Date();
+  const [month,setMonth]=useState(new Date(now.getFullYear(),now.getMonth(),1));
+  const year=month.getFullYear(), mon=month.getMonth();
+  const days=new Date(year,mon+1,0).getDate(), start=new Date(year,mon,1).getDay();
+  const cells=[...Array(start),...Array.from({length:days},(_,i)=>i+1)];
+  const today=now.getDate(), currentMonth=now.getMonth(), currentYear=now.getFullYear();
+  const monthSessions=sessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getMonth()===mon&&dt.getFullYear()===year}).sort((a,b)=>a.date.localeCompare(b.date));
+  const typeLabel=t=>t==="mock"?"Mock Exam":t==="drill"?"Daily Drill":"Study Session";
+  return <div>
+    <PageHeader title="Study Schedule" subtitle="Plot, edit, complete, and track your review sessions." action={<button className="primary-btn" onClick={onAdd}><Plus/> Add Schedule</button>}/>
+    <div className="schedule-stats">
+      <div><b>{sessions.length}</b><span>Total Schedules</span></div>
+      <div><b>{sessions.filter(s=>s.completed).length}</b><span>Completed</span></div>
+      <div><b>{sessions.filter(s=>!s.completed).length}</b><span>Pending</span></div>
+      <div><b>{monthSessions.length}</b><span>This Month</span></div>
+    </div>
+    <div className="calendar-layout">
+      <section className="panel calendar">
+        <div className="calendar-head"><h2>{month.toLocaleString("en-US",{month:"long"})} {year}</h2><div className="calendar-nav"><button aria-label="Previous month" onClick={()=>setMonth(new Date(year,mon-1,1))}><ChevronLeft/></button><button aria-label="Next month" onClick={()=>setMonth(new Date(year,mon+1,1))}><ChevronRight/></button></div></div>
+        <div className="weekday">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map(x=><b key={x}>{x}</b>)}</div>
+        <div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{monthSessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getDate()===d}).map(s=><button type="button" className={`calendar-event ${s.type} ${s.completed?"done":""}`} key={s.id} title={`${s.title} — ${typeLabel(s.type)}`} onClick={()=>onEdit(s)}><span>{s.title}</span>{s.completed&&<CheckCircle2 size={11}/>}</button>)}</>}</div>)}</div>
+      </section>
+      <aside className="panel event-side schedule-list-panel">
+        <div className="schedule-side-head"><div><h3>Schedules</h3><span>{monthSessions.length} this month</span></div><button className="secondary-btn compact" onClick={onAdd}><Plus size={16}/> Add</button></div>
+        <div className="schedule-event-list">
+          {monthSessions.length ? monthSessions.map(s=><div className={`schedule-event-card ${s.completed?"is-done":""}`} key={s.id}>
+            <div className={`schedule-event-dot ${s.type}`}></div>
+            <div className="schedule-event-info"><strong className={s.completed?"completed-title":""}>{s.title}</strong><span>{new Date(s.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})} · {typeLabel(s.type)}</span></div>
+            <div className="schedule-event-actions">
+              <button title={s.completed?"Mark as pending":"Mark as done"} className={s.completed?"done-action":""} onClick={()=>onToggleDone(s.id)}><CheckCircle2 size={17}/></button>
+              <button title="Edit schedule" onClick={()=>onEdit(s)}><Pencil size={16}/></button>
+              <button title="Delete schedule" className="danger-action" onClick={()=>{if(confirm(`Delete “${s.title}”?`)) onDelete(s.id)}}><Trash2 size={16}/></button>
+            </div>
+          </div>) : <div className="empty schedule-empty"><CalendarDays/><span>No schedules this month.</span><button className="secondary-btn compact" onClick={onAdd}><Plus size={15}/> Add your first schedule</button></div>}
+        </div>
+      </aside>
+    </div>
+  </div>;
+}
 
 function StudyModal({study,answer,next,jump,close,goTo,profile}) {
   const q=study.pool[study.index];
@@ -606,6 +646,20 @@ function Profile({profile,setProfile,setPage,theme}) {
   return <div><PageHeader title="Profile" subtitle="Manage your learner profile and LET study goals." action={<button className="secondary-btn compact" onClick={()=>setPage("progress")}><ArrowLeft size={17}/> Back to Progress</button>}/><div className="profile-layout"><section className="panel profile-card"><div className="profile-hero"><div className="profile-avatar-large">{initials||"G"}</div><div><h2>{draft.name||"Genius Learner"}</h2><p>{draft.goal||"Pass the LET"}</p><span className="tag">{theme==="dark"?"Dark mode":"Light mode"}</span></div></div><div className="profile-form"><label>Display name<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} placeholder="Your name"/></label><label>Study goal<input value={draft.goal} onChange={e=>setDraft({...draft,goal:e.target.value})} placeholder="e.g. Pass the LET"/></label><label>LET exam date<input type="date" value={draft.examDate} onChange={e=>setDraft({...draft,examDate:e.target.value})}/></label><label>Daily study goal (minutes)<input type="number" min="10" max="720" value={draft.dailyGoal} onChange={e=>setDraft({...draft,dailyGoal:e.target.value})}/></label><button className="primary-btn wide" onClick={save}><Save size={17}/> Save Profile</button></div></section><aside className="panel profile-summary"><h3>Your Study Identity</h3><div className="profile-stat"><span>Daily goal</span><b>{draft.dailyGoal||60} min</b></div><div className="profile-stat"><span>Exam date</span><b>{draft.examDate?new Date(draft.examDate+"T00:00:00").toLocaleDateString():"Not set"}</b></div><div className="profile-stat"><span>Appearance</span><b>{theme==="dark"?"Dark":"Light"}</b></div><div className="profile-tip"><UserCircle size={18}/><span>Your profile is saved locally, so you can personalize the reviewer without creating an account.</span></div></aside></div></div>;
 }
 
-function SessionModal({close,save}) { const [title,setTitle]=useState("Study Session"); const [date,setDate]=useState(new Date().toISOString().slice(0,10)); const [type,setType]=useState("study"); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><h2>Add Schedule Event</h2><button onClick={close}><X/></button></div><label>Title<input value={title} onChange={e=>setTitle(e.target.value)}/></label><label>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><label>Event type<select value={type} onChange={e=>setType(e.target.value)}><option value="study">Study Session</option><option value="mock">Mock Exam</option><option value="drill">Daily Drill</option></select></label><button className="primary-btn wide" onClick={()=>save({title,date,type,completed:false})}>Add Event</button></div></div>; }
+function SessionModal({close,save,initial}) {
+  const [title,setTitle]=useState(initial?.title||"Study Session");
+  const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
+  const [type,setType]=useState(initial?.type||"study");
+  const [completed,setCompleted]=useState(Boolean(initial?.completed));
+  const submit=()=>{if(!title.trim()||!date)return;save({title:title.trim(),date,type,completed});};
+  return <div className="modal-backdrop"><div className="small-modal schedule-modal">
+    <div className="modal-head"><div><h2>{initial?"Edit Schedule":"Add Schedule"}</h2><span className="muted">Plan a study session, mock exam, or daily drill.</span></div><button onClick={close}><X/></button></div>
+    <label>Schedule title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Review Assessment of Learning"/></label>
+    <label>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label>
+    <label>Schedule type<select value={type} onChange={e=>setType(e.target.value)}><option value="study">Study Session</option><option value="mock">Mock Exam</option><option value="drill">Daily Drill</option></select></label>
+    {initial&&<label className="schedule-check"><input type="checkbox" checked={completed} onChange={e=>setCompleted(e.target.checked)}/><span>Mark this schedule as done</span></label>}
+    <button className="primary-btn wide" disabled={!title.trim()||!date} onClick={submit}><Save size={17}/>{initial?"Save Changes":"Add Schedule"}</button>
+  </div></div>;
+}
 
 export default App;
