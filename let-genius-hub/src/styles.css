@@ -1138,3 +1138,84 @@ body{background-color:var(--bg);background-image:radial-gradient(#d9dce2 1.5px,t
 .app-shell.theme-dark .sidebar .sidebar-brand-copy strong,.app-shell.theme-dark .mobile-brand-lockup .sidebar-brand-copy strong{color:#f8fafc!important}
 .app-shell.theme-dark .sidebar .sidebar-brand-copy span,.app-shell.theme-dark .mobile-brand-lockup .sidebar-brand-copy span{color:#aab4c3!important}
 /* Remove old product naming anywhere it may still appear in supporting UI. */
+
+
+/* V40 — definitive TOPNOTCHER! brand; single source of truth */
+.topnotcher-brand{
+  display:flex !important;
+  align-items:center !important;
+  justify-content:flex-start !important;
+  gap:12px !important;
+  width:max-content !important;
+  min-width:0 !important;
+  margin:0 !important;
+  padding:0 !important;
+  text-align:left !important;
+  color:#101828 !important;
+}
+.topnotcher-brand .topnotcher-medal{
+  flex:0 0 42px !important;
+  width:42px !important;
+  height:50px !important;
+  fill:none !important;
+  stroke:#101828 !important;
+  stroke-width:2.1 !important;
+  stroke-linecap:round !important;
+  stroke-linejoin:round !important;
+}
+.topnotcher-wordmark{
+  display:flex !important;
+  flex-direction:column !important;
+  align-items:flex-start !important;
+  justify-content:center !important;
+  min-width:0 !important;
+  text-align:left !important;
+}
+.topnotcher-name{
+  margin:0 !important;
+  padding:0 !important;
+  font-family:Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+  font-size:22px !important;
+  line-height:1 !important;
+  font-weight:800 !important;
+  letter-spacing:-.035em !important;
+  white-space:nowrap !important;
+  text-align:left !important;
+}
+.topnotcher-tagline{
+  margin:5px 0 0 !important;
+  padding:0 !important;
+  font-family:Georgia, "Times New Roman", serif !important;
+  font-size:11px !important;
+  line-height:1.1 !important;
+  font-style:italic !important;
+  font-weight:500 !important;
+  letter-spacing:.01em !important;
+  white-space:nowrap !important;
+  text-align:left !important;
+}
+.topnotcher-brand-compact .topnotcher-medal{
+  flex-basis:34px !important;
+  width:34px !important;
+  height:42px !important;
+}
+.topnotcher-brand-compact .topnotcher-name{font-size:18px !important;}
+.topnotcher-brand-compact .topnotcher-tagline{font-size:9px !important;margin-top:4px !important;}
+
+.dark .topnotcher-brand,
+[data-theme="dark"] .topnotcher-brand,
+.dark-mode .topnotcher-brand{
+  color:#fff !important;
+}
+.dark .topnotcher-brand .topnotcher-medal,
+[data-theme="dark"] .topnotcher-brand .topnotcher-medal,
+.dark-mode .topnotcher-brand .topnotcher-medal{
+  stroke:#fff !important;
+}
+
+@media (max-width: 900px){
+  .topnotcher-brand{gap:9px !important;}
+  .topnotcher-brand .topnotcher-medal{width:36px !important;height:44px !important;flex-basis:36px !important;}
+  .topnotcher-name{font-size:19px !important;}
+  .topnotcher-tagline{font-size:10px !important;}
+}
