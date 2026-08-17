@@ -613,3 +613,33 @@ body{background-color:var(--bg);background-image:radial-gradient(#d9dce2 1.5px,t
 .calendar-nav{display:flex;gap:6px}.calendar-nav button{width:38px;height:38px;border:1px solid var(--line);background:var(--surface);border-radius:10px;display:grid;place-items:center;cursor:pointer}.calendar-event{width:100%;border:0;text-align:left;display:flex;align-items:center;justify-content:space-between;gap:4px;font-size:11px;margin-top:7px;border-radius:7px;padding:5px 6px;font-style:normal;overflow:hidden;white-space:nowrap;cursor:pointer}.calendar-event span{overflow:hidden;text-overflow:ellipsis}.calendar-event.study{background:#e7f0ff;color:#2563eb}.calendar-event.mock{background:#ffe9e9;color:#dc2626}.calendar-event.drill{background:#fff1d7;color:#d97706}.calendar-event.done{opacity:.58;text-decoration:line-through}.schedule-list-panel{padding:22px}.schedule-side-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}.schedule-side-head h3{margin:0;font-size:18px}.schedule-side-head span{display:block;color:#8ca0bd;font-size:12px;margin-top:3px}.schedule-event-list{display:flex;flex-direction:column;gap:10px;max-height:600px;overflow:auto}.schedule-event-card{display:grid;grid-template-columns:10px minmax(0,1fr) auto;align-items:center;gap:10px;padding:12px;border:1px solid var(--line);border-radius:13px;background:var(--surface);transition:.15s}.schedule-event-card:hover{border-color:#cfd8e8;transform:translateY(-1px)}.schedule-event-card.is-done{background:rgba(239,247,242,.7)}.schedule-event-dot{width:9px;height:9px;border-radius:50%}.schedule-event-dot.study{background:var(--blue)}.schedule-event-dot.mock{background:var(--red)}.schedule-event-dot.drill{background:var(--orange)}.schedule-event-info{min-width:0;display:flex;flex-direction:column;gap:4px}.schedule-event-info strong{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.schedule-event-info span{font-size:11px;color:#8ca0bd;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.completed-title{color:#6f7f96;text-decoration:line-through}.schedule-event-actions{display:flex;gap:3px}.schedule-event-actions button{width:30px;height:30px;border:0;background:transparent;color:#71829c;border-radius:8px;display:grid;place-items:center;cursor:pointer}.schedule-event-actions button:hover{background:#f0f3f8;color:#33445f}.schedule-event-actions .done-action{color:#22a06b}.schedule-event-actions .danger-action:hover{background:#fff0f0;color:#dc2626}.schedule-empty{min-height:220px}.schedule-empty .secondary-btn{margin-top:4px}.schedule-modal{max-width:520px}.schedule-check{display:flex!important;flex-direction:row!important;align-items:center;gap:10px;cursor:pointer}.schedule-check input{width:17px!important;height:17px!important;accent-color:var(--primary)}
 .app-shell.theme-dark .calendar-event.study{background:#182d4d;color:#8bb8ff}.app-shell.theme-dark .calendar-event.mock{background:#47252a;color:#ff9da5}.app-shell.theme-dark .calendar-event.drill{background:#49371c;color:#ffc56a}.app-shell.theme-dark .schedule-event-card.is-done{background:#1c3026}.app-shell.theme-dark .schedule-event-actions button:hover{background:#252c38}
 @media(max-width:900px){.schedule-event-list{max-height:none}.calendar-grid{grid-auto-rows:minmax(88px,1fr)}}
+
+/* V31 — definitive workspace geometry fix.
+   Remove the old max-width/zoom rules that caused large right-side gaps.
+   The floating sidebar is 275px wide and the main workspace consumes all
+   remaining viewport width with equal, modest breathing room. */
+@media (min-width:1101px){
+  .app-shell{zoom:1!important;width:100%!important;min-height:100vh!important}
+  .sidebar{width:275px!important;min-width:275px!important;top:14px!important;bottom:14px!important;left:14px!important}
+  .main{box-sizing:border-box!important;margin-left:305px!important;margin-right:0!important;width:calc(100vw - 321px)!important;max-width:none!important;padding:24px 24px 48px!important}
+  .main > div:not(.modal-backdrop),
+  .main > section:not(.modal-backdrop),
+  .main > .page-header{width:100%!important;max-width:none!important;margin-left:0!important;margin-right:0!important}
+  .main .grid,.main [class*="grid"]{width:100%!important;max-width:none!important}
+}
+@media (max-width:1100px) and (min-width:821px){
+  .app-shell{zoom:1!important;width:100%!important;min-height:100vh!important}
+  .sidebar{width:235px!important;min-width:235px!important;top:12px!important;bottom:12px!important;left:12px!important}
+  .main{box-sizing:border-box!important;margin-left:263px!important;margin-right:0!important;width:calc(100vw - 275px)!important;max-width:none!important;padding:20px 20px 42px!important}
+  .main > div:not(.modal-backdrop),
+  .main > section:not(.modal-backdrop),
+  .main > .page-header{width:100%!important;max-width:none!important;margin-left:0!important;margin-right:0!important}
+  .main .grid,.main [class*="grid"]{width:100%!important;max-width:none!important}
+}
+@media (max-width:820px){
+  .app-shell{zoom:1!important;width:100%!important;min-height:100vh!important}
+  .main{box-sizing:border-box!important;margin-left:0!important;margin-right:0!important;width:100%!important;max-width:none!important;padding:18px 16px 42px!important}
+  .main > div:not(.modal-backdrop),
+  .main > section:not(.modal-backdrop),
+  .main > .page-header{width:100%!important;max-width:none!important;margin-left:0!important;margin-right:0!important}
+}
