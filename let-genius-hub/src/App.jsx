@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { expandedQuestionBank, QUESTION_BANK_COUNTS } from "./questionBank";
+import { auth, googleProvider } from "./firebase";
+import { onAuthStateChanged, signInWithPopup, signOut } from "firebase/auth";
 import {
   BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
@@ -103,10 +105,68 @@ function AppSidebar({page, profile, onNavigate, onSettings, mobileOpen=false, st
   </aside>;
 }
 
-function App() {
+
+function AuthGate() {
+  const [user, setUser] = useState(undefined);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, currentUser => setUser(currentUser || null));
+    return unsubscribe;
+  }, []);
+
+  const login = async () => {
+    setError("");
+    try {
+      await signInWithPopup(auth, googleProvider);
+    } catch (err) {
+      console.error("Google sign-in error:", err);
+      setError(err?.code === "auth/popup-blocked"
+        ? "Your browser blocked the Google sign-in window. Please allow pop-ups and try again."
+        : err?.code === "auth/unauthorized-domain"
+        ? "This website domain is not authorized in Firebase Authentication."
+        : err?.message || "Google sign-in failed. Please try again.");
+    }
+  };
+
+  if (user === undefined) {
+    return <div className="auth-screen"><div className="auth-loading"><div className="auth-spinner" /><span>Checking your account…</span></div></div>;
+  }
+
+  if (!user) {
+    return <div className="auth-screen">
+      <div className="auth-card">
+        <TopnotcherBrand compact />
+        <div className="auth-copy">
+          <h1>Welcome to TOPNOTCHER!</h1>
+          <p>Sign in with your Google account to access your LET reviewer.</p>
+        </div>
+        <button className="google-signin-btn" onClick={login}>
+          <span className="google-g">G</span><span>Continue with Google</span>
+        </button>
+        {error && <div className="auth-error" role="alert">{error}</div>}
+        <p className="auth-note">Google sign-in is required to access TOPNOTCHER!.</p>
+      </div>
+    </div>;
+  }
+
+  return <App firebaseUser={user} />;
+}
+
+function App({ firebaseUser }) {
   const [page, setPage] = useState("progress");
   const [theme, setTheme] = usePersistedState("lgh-theme", "light");
   const [profile, setProfile] = usePersistedState("lgh-profile", {name:"Genius Learner", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60});
+  useEffect(() => {
+    if (!firebaseUser) return;
+    setProfile(prev => ({
+      ...prev,
+      name: prev.name === "Genius Learner" ? (firebaseUser.displayName || firebaseUser.email?.split("@")[0] || "Google User") : prev.name,
+      email: firebaseUser.email || prev.email || "",
+      photoURL: firebaseUser.photoURL || prev.photoURL || ""
+    }));
+  }, [firebaseUser]);
+
   const [category, setCategory] = usePersistedState("lgh-category", "gened");
   const [streak, setStreak] = usePersistedState("lgh-streak", 0);
   const [lastActiveDate, setLastActiveDate] = usePersistedState("lgh-last-active-date", null);
@@ -414,7 +474,12 @@ function ExamRunner({session,close,setMockScores,setMockHistory,setSessions,setQ
     const tick=()=>setRemaining(Math.max(0,Math.ceil((deadline-Date.now())/1000)));
     tick();
     const id=setInterval(tick,250);
-    return ()=>clearInterval(id);
+    const handleAppSignOut = async () => {
+    try { await signOut(auth); setPage("progress"); }
+    catch (err) { console.error("Sign out failed:", err); }
+  };
+
+  return ()=>clearInterval(id);
   },[submitted,deadline]);
 
   useEffect(()=>{
@@ -692,4 +757,4 @@ function SessionModal({close,save,initial}) {
   </div></div>;
 }
 
-export default App;
+export default AuthGate;
