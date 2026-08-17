@@ -3,7 +3,7 @@ import { expandedQuestionBank, QUESTION_BANK_COUNTS } from "./questionBank";
 import {
   BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
-  FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
+  FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play, Medal,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
   ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2
 } from "lucide-react";
@@ -56,8 +56,8 @@ function AppSidebar({page, profile, onNavigate, onSettings, mobileOpen=false, st
   ];
   return <aside className={"sidebar unified-sidebar "+(mobileOpen?"mobile-open ":"")+(studyMode?"study-app-sidebar":"")}>
     <div className="sidebar-brand">
-      <div className="brand-mark"><GraduationCap size={27}/></div>
-      <div className="sidebar-brand-copy"><strong>LET Genius</strong><span>Hub</span></div>
+      <div className="brand-mark topnotcher-medal" aria-hidden="true"><Medal size={27}/></div>
+      <div className="sidebar-brand-copy"><strong>TOPNOTCHER!</strong><span>By God’s Grace</span></div>
     </div>
     <div className="sidebar-section-label">MAIN MENU</div>
     <nav className="sidebar-nav">
@@ -244,7 +244,7 @@ function App() {
     {mobileNav && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)} />}
     <AppSidebar page={page} profile={profile} onNavigate={goTo} onSettings={()=>setShowSettings(true)} mobileOpen={mobileNav} />
     <main className="main">
-      <header className="mobile-header"><div className="brand-mark"><GraduationCap size={24}/></div><button className="icon-btn" aria-label="Open navigation" onClick={()=>setMobileNav(v=>!v)}><Menu/></button></header>
+      <header className="mobile-header"><div className="mobile-brand-lockup"><div className="brand-mark topnotcher-medal" aria-hidden="true"><Medal size={24}/></div><div className="sidebar-brand-copy"><strong>TOPNOTCHER!</strong><span>By God’s Grace</span></div></div><button className="icon-btn" aria-label="Open navigation" onClick={()=>setMobileNav(v=>!v)}><Menu/></button></header>
       {page==="dashboard" && <Dashboard setPage={setPage} streak={streak} category={category} setCategory={setCategory} startDrill={startDrill} stats={stats} decks={decks} questions={questions}/>} 
       
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme}/>}
