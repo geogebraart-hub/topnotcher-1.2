@@ -8,6 +8,22 @@ import {
   ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2
 } from "lucide-react";
 
+function TopnotcherBrand({ compact = false }) {
+  return (
+    <div className={`topnotcher-brand ${compact ? "topnotcher-brand-compact" : ""}`} aria-label="TOPNOTCHER! By God's Grace">
+      <svg className="topnotcher-medal" viewBox="0 0 48 56" aria-hidden="true">
+        <path d="M13 4h8l3 10 3-10h8l-5 18H18L13 4Z" />
+        <circle cx="24" cy="34" r="13" />
+        <path d="M24 26l2.2 4.6 5.1.7-3.7 3.6.9 5.1-4.5-2.4-4.5 2.4.9-5.1-3.7-3.6 5.1-.7L24 26Z" />
+      </svg>
+      <div className="topnotcher-wordmark">
+        <div className="topnotcher-name">TOPNOTCHER!</div>
+        <div className="topnotcher-tagline">By God's Grace</div>
+      </div>
+    </div>
+  );
+}
+
 const CATEGORIES = [
   { id:"gened", label:"GenEd", title:"General Education", short:"GenEd", icon:BookOpen, color:"purple", desc:"English, Mathematics, Science, Filipino, Social Studies", items:150, hours:"2 hrs" },
   { id:"profed", label:"ProfEd", title:"Professional Education", short:"ProfEd", icon:GraduationCap, color:"green", desc:"Child Development, Curriculum, Teaching Strategies, Assessment", items:150, hours:"3 hrs" },
@@ -68,10 +84,7 @@ function AppSidebar({page, profile, onNavigate, onSettings, mobileOpen=false, st
     ["schedule", CalendarDays, "Study Schedule"]
   ];
   return <aside className={"sidebar unified-sidebar "+(mobileOpen?"mobile-open ":"")+(studyMode?"study-app-sidebar":"")}>
-    <div className="sidebar-brand">
-      <div className="brand-mark topnotcher-medal" aria-hidden="true"><TopnotcherMedal size={28}/></div>
-      <div className="sidebar-brand-copy"><strong>TOPNOTCHER!</strong><span>By God’s Grace</span></div>
-    </div>
+    <TopnotcherBrand />
     <div className="sidebar-section-label">MAIN MENU</div>
     <nav className="sidebar-nav">
       {nav.map(([id,Icon,label])=><button key={id} className={"nav-btn "+((page===id || (page==="deck-detail"&&id==="decks"))?"active":"")} title={label} onClick={()=>onNavigate(id)}>
