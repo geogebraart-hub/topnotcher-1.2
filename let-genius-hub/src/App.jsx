@@ -522,6 +522,10 @@ function AIQuestionModal({deck,close,saveQuestions}) {
         // when Vite/Vercel serves the app from a deployment where the PDF worker
         // asset cannot be resolved. Text extraction still happens entirely in-browser.
         const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+        // PDF.js v4 requires an explicit worker source in Vite production builds.
+        // Bundle the worker through Vite instead of relying on a /pdf.worker.mjs URL.
+        const workerUrl = (await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url")).default;
+        pdfjs.GlobalWorkerOptions.workerSrc = workerUrl;
         const bytes = new Uint8Array(await file.arrayBuffer());
         const pdf = await pdfjs.getDocument({
           data: bytes,
