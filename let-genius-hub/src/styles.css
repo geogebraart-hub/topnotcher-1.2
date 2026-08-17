@@ -725,3 +725,68 @@ body{background-color:var(--bg);background-image:radial-gradient(#d9dce2 1.5px,t
   .main{box-sizing:border-box!important;margin-left:0!important;margin-right:0!important;width:100%!important;max-width:none!important;padding:18px 16px 42px!important;}
   .study-fullscreen{zoom:1!important;width:100%!important;height:100dvh!important;}
 }
+
+
+/* V35 — definitive desktop workspace geometry
+   Keep the floating sidebar at its real visual size. Scale ONLY the dashboard
+   page content to the requested 80% density, while giving its unscaled layout
+   125% width so the scaled result reaches the right breathing-space edge. */
+@media (min-width:1101px){
+  .app-shell{
+    zoom:1!important;
+    width:100%!important;
+    min-height:100vh!important;
+  }
+  .sidebar{
+    width:275px!important;
+    min-width:275px!important;
+    left:14px!important;
+    top:14px!important;
+    bottom:14px!important;
+  }
+  .main{
+    box-sizing:border-box!important;
+    margin-left:305px!important;
+    margin-right:0!important;
+    width:calc(100vw - 321px)!important;
+    max-width:none!important;
+    min-width:0!important;
+    padding:24px 0 48px!important;
+    transform:none!important;
+  }
+  .main > div:not(.modal-backdrop):not(.mobile-header),
+  .main > section:not(.modal-backdrop){
+    box-sizing:border-box!important;
+    width:125%!important;
+    max-width:none!important;
+    min-width:0!important;
+    transform:scale(.8)!important;
+    transform-origin:top left!important;
+  }
+  .main > .mobile-header{transform:none!important;width:auto!important;}
+  /* Keep the full-width page root from reintroducing centered max-widths. */
+  .main > div:not(.modal-backdrop):not(.mobile-header) > *,
+  .main > section:not(.modal-backdrop) > *{
+    max-width:none!important;
+  }
+  /* Modals must remain viewport-sized and unscaled. */
+  .main > .modal-backdrop{
+    transform:none!important;
+    width:100%!important;
+  }
+}
+
+@media (min-width:821px) and (max-width:1100px){
+  .app-shell{zoom:1!important;width:100%!important;min-height:100vh!important;}
+  .sidebar{width:235px!important;min-width:235px!important;left:12px!important;top:12px!important;bottom:12px!important;}
+  .main{margin-left:263px!important;margin-right:0!important;width:calc(100vw - 275px)!important;max-width:none!important;padding:20px 0 42px!important;}
+  .main > div:not(.modal-backdrop):not(.mobile-header),
+  .main > section:not(.modal-backdrop){width:116.27907%!important;max-width:none!important;}
+}
+
+@media (max-width:820px){
+  .app-shell{zoom:1!important;width:100%!important;min-height:100vh!important;}
+  .main{margin-left:0!important;margin-right:0!important;width:100%!important;max-width:none!important;padding:18px 16px 42px!important;}
+  .main > div:not(.modal-backdrop):not(.mobile-header),
+  .main > section:not(.modal-backdrop){width:100%!important;max-width:none!important;transform:none!important;}
+}
