@@ -3,7 +3,7 @@ import { expandedQuestionBank, QUESTION_BANK_COUNTS } from "./questionBank";
 import {
   BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
-  FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play, Medal,
+  FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
   ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2
 } from "lucide-react";
@@ -46,6 +46,19 @@ function usePersistedState(key, initial) {
 }
 
 
+function TopnotcherMedal({size=28}) {
+  return (
+    <svg className="topnotcher-medal-svg" width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
+      <path d="M16 5h6l2 12h-6L16 5Z" />
+      <path d="M26 5h6l-2 12h-6l2-12Z" />
+      <circle cx="24" cy="28" r="11.5" />
+      <circle cx="24" cy="28" r="7.2" />
+      <path d="M24 22.8l1.55 3.25 3.58.52-2.59 2.52.61 3.56L24 30.97l-3.15 1.66.6-3.56-2.58-2.52 3.57-.52L24 22.8Z" />
+      <path d="M17.2 37.2 13.5 44l10.5-4.3L34.5 44l-3.7-6.8" />
+    </svg>
+  );
+}
+
 function AppSidebar({page, profile, onNavigate, onSettings, mobileOpen=false, studyMode=false}) {
   const nav = [
     ["progress", LayoutDashboard, "Progress Dashboard"],
@@ -56,7 +69,7 @@ function AppSidebar({page, profile, onNavigate, onSettings, mobileOpen=false, st
   ];
   return <aside className={"sidebar unified-sidebar "+(mobileOpen?"mobile-open ":"")+(studyMode?"study-app-sidebar":"")}>
     <div className="sidebar-brand">
-      <div className="brand-mark topnotcher-medal" aria-hidden="true"><Medal size={27}/></div>
+      <div className="brand-mark topnotcher-medal" aria-hidden="true"><TopnotcherMedal size={28}/></div>
       <div className="sidebar-brand-copy"><strong>TOPNOTCHER!</strong><span>By God’s Grace</span></div>
     </div>
     <div className="sidebar-section-label">MAIN MENU</div>
@@ -244,7 +257,7 @@ function App() {
     {mobileNav && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)} />}
     <AppSidebar page={page} profile={profile} onNavigate={goTo} onSettings={()=>setShowSettings(true)} mobileOpen={mobileNav} />
     <main className="main">
-      <header className="mobile-header"><div className="mobile-brand-lockup"><div className="brand-mark topnotcher-medal" aria-hidden="true"><Medal size={24}/></div><div className="sidebar-brand-copy"><strong>TOPNOTCHER!</strong><span>By God’s Grace</span></div></div><button className="icon-btn" aria-label="Open navigation" onClick={()=>setMobileNav(v=>!v)}><Menu/></button></header>
+      <header className="mobile-header"><div className="mobile-brand-lockup"><div className="brand-mark topnotcher-medal" aria-hidden="true"><TopnotcherMedal size={25}/></div><div className="sidebar-brand-copy"><strong>TOPNOTCHER!</strong><span>By God’s Grace</span></div></div><button className="icon-btn" aria-label="Open navigation" onClick={()=>setMobileNav(v=>!v)}><Menu/></button></header>
       {page==="dashboard" && <Dashboard setPage={setPage} streak={streak} category={category} setCategory={setCategory} startDrill={startDrill} stats={stats} decks={decks} questions={questions}/>} 
       
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme}/>}
@@ -642,7 +655,7 @@ function QuestionModal({close,save,initial,deckId}) {
   return <div className="modal-backdrop"><div className="small-modal question-modal"><div className="modal-head"><div><h2>{initial?"Edit Question":"Add Question"}</h2><span className="muted">Multiple-choice question</span></div><button onClick={close}><X/></button></div><label>Question<textarea className="question-input" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Enter the question stem..."/></label><div className="option-editor"><b>Answer choices</b>{options.map((o,i)=><label key={i}><span className={answer===i?"answer-dot selected":"answer-dot"} onClick={()=>setAnswer(i)}>{String.fromCharCode(65+i)}</span><input value={o} onChange={e=>updateOption(i,e.target.value)} placeholder={`Choice ${String.fromCharCode(65+i)}`}/></label>)}</div><label>Explanation<textarea value={explanation} onChange={e=>setExplanation(e.target.value)} placeholder="Explain why the correct answer is correct..."/></label><div className="form-hint"><CheckCircle2 size={17}/> Select the letter beside the correct answer.</div><button className="primary-btn wide" disabled={!question.trim()||options.some(o=>!o.trim())||!explanation.trim()} onClick={submit}><Save size={17}/>{initial?"Save Question":"Add Question"}</button></div></div>;
 }
 
-function SettingsModal({close,theme,setTheme,profile,openProfile}) { return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your LET Genius Hub experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, theme, and study data are stored locally in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
+function SettingsModal({close,theme,setTheme,profile,openProfile}) { return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your TOPNOTCHER! experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, theme, and study data are stored locally in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
 function Profile({profile,setProfile,setPage,theme}) {
   const [draft,setDraft]=useState(profile);
   const save=()=>setProfile({...draft, dailyGoal:Number(draft.dailyGoal)||60});
