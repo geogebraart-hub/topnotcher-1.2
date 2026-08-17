@@ -1101,3 +1101,40 @@ body{background-color:var(--bg);background-image:radial-gradient(#d9dce2 1.5px,t
     transform:none!important;
   }
 }
+
+
+/* V39 — TOPNOTCHER! final brand lockup
+   Custom outline medal + exact wordmark/subheader alignment. */
+.sidebar .brand-mark.topnotcher-medal,
+.mobile-brand-lockup .brand-mark.topnotcher-medal{
+  border:0!important;
+  background:transparent!important;
+  box-shadow:none!important;
+  color:#101828!important;
+  width:44px!important;
+  height:44px!important;
+  border-radius:0!important;
+  display:grid!important;
+  place-items:center!important;
+  flex:0 0 44px!important;
+}
+.topnotcher-medal-svg{
+  display:block;
+  color:#101828;
+  stroke:currentColor;
+  stroke-width:1.65;
+  stroke-linecap:round;
+  stroke-linejoin:round;
+}
+.sidebar .sidebar-brand{align-items:center!important;gap:11px!important;padding:3px 8px 20px!important}
+.sidebar .sidebar-brand-copy{display:flex!important;flex-direction:column!important;align-items:flex-start!important;text-align:left!important;justify-content:center!important;line-height:1!important}
+.sidebar .sidebar-brand-copy strong{font-size:18px!important;font-weight:900!important;color:#101828!important;letter-spacing:-.55px!important;line-height:1.05!important;white-space:nowrap!important}
+.sidebar .sidebar-brand-copy span{font-family:Georgia,"Times New Roman",serif!important;font-size:10.5px!important;font-style:italic!important;font-weight:500!important;color:#667085!important;letter-spacing:0!important;text-transform:none!important;margin-top:5px!important;line-height:1!important;padding:0!important;white-space:nowrap!important}
+.mobile-brand-lockup .brand-mark.topnotcher-medal{width:42px!important;height:42px!important;flex-basis:42px!important}
+.mobile-brand-lockup .sidebar-brand-copy strong{font-size:14px!important;font-weight:900!important;color:#101828!important;letter-spacing:-.3px!important}
+.mobile-brand-lockup .sidebar-brand-copy span{font-family:Georgia,"Times New Roman",serif!important;font-size:9px!important;font-style:italic!important;font-weight:500!important;color:#667085!important;letter-spacing:0!important;text-transform:none!important;margin-top:4px!important}
+/* Keep the same lockup in dark mode, converted to a white one-color version. */
+.app-shell.theme-dark .topnotcher-medal-svg{color:#f8fafc!important}
+.app-shell.theme-dark .sidebar .sidebar-brand-copy strong,.app-shell.theme-dark .mobile-brand-lockup .sidebar-brand-copy strong{color:#f8fafc!important}
+.app-shell.theme-dark .sidebar .sidebar-brand-copy span,.app-shell.theme-dark .mobile-brand-lockup .sidebar-brand-copy span{color:#aab4c3!important}
+/* Remove old product naming anywhere it may still appear in supporting UI. */
