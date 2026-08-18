@@ -2569,3 +2569,69 @@ body > .flashcard-view-backdrop .flashcard-view-modal{transform:none!important;z
   .flashcard-view-modal{width:calc(100vw - 28px)!important;max-height:88dvh!important}
   .study-header-floaters{opacity:.7}
 }
+
+
+/* V56 — Study Deck controls: slightly larger bubble with a left-indented action row. */
+.deck-action-row{
+  min-height:66px!important;
+  padding:10px 18px 10px 26px!important;
+  border-radius:20px!important;
+  box-sizing:border-box!important;
+  justify-content:flex-start!important;
+  overflow-x:auto!important;
+}
+.deck-action-row .detail-primary-actions{
+  justify-content:flex-start!important;
+  margin-left:0!important;
+}
+
+/* V56 — smaller, calmer Question / Flashcard viewers. */
+body > .question-view-backdrop .question-view-modal{
+  width:min(650px,calc(100vw - 64px))!important;
+  max-width:650px!important;
+  max-height:78dvh!important;
+  padding:18px!important;
+  border-radius:18px!important;
+}
+body > .flashcard-view-backdrop .flashcard-view-modal{
+  width:min(630px,calc(100vw - 64px))!important;
+  max-width:630px!important;
+  max-height:78dvh!important;
+  padding:16px!important;
+  border-radius:18px!important;
+}
+body > .flashcard-view-backdrop .flashcard-view-card{
+  min-height:250px!important;
+  padding:24px!important;
+}
+body > .flashcard-view-backdrop .flashcard-view-card h1{
+  font-size:26px!important;
+  line-height:1.35!important;
+}
+
+/* V56 — endless ascending subject-object stream inside the Study Now header bubble. */
+.study-header-floaters span{
+  left:var(--float-x)!important;
+  top:auto!important;
+  bottom:-28px!important;
+  opacity:0!important;
+  font-size:18px!important;
+  filter:saturate(.65)!important;
+  animation:topnotcherAscend var(--float-duration) linear infinite!important;
+  animation-delay:var(--float-delay)!important;
+  transform:translate3d(-50%,0,0) rotate(-8deg)!important;
+  will-change:transform,opacity!important;
+}
+@keyframes topnotcherAscend{
+  0%{transform:translate3d(-50%,28px,0) rotate(-8deg) scale(.82);opacity:0}
+  10%{opacity:.10}
+  35%{opacity:.15}
+  68%{opacity:.11}
+  88%{opacity:.055}
+  100%{transform:translate3d(-50%,-125px,0) rotate(8deg) scale(1.05);opacity:0}
+}
+@media(max-width:820px){
+  .deck-action-row{padding-left:18px!important;padding-right:12px!important;min-height:62px!important}
+  body > .question-view-backdrop .question-view-modal{width:calc(100vw - 36px)!important;max-height:82dvh!important}
+  body > .flashcard-view-backdrop .flashcard-view-modal{width:calc(100vw - 36px)!important;max-height:82dvh!important}
+}
