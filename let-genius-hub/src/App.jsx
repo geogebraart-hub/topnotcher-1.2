@@ -572,7 +572,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,theme="
     <div className="study-shell">
       <header className="study-header">
         <div className="study-header-floaters" aria-hidden="true">
-          {subjectObjects.map((item,i)=><span key={i} style={{"--float-index":i}}>{item}</span>)}
+          {Array.from({length:20},(_,i)=>subjectObjects[i % subjectObjects.length]).map((item,i)=><span key={i} style={{"--float-index":i,"--float-x":`${8+(i*17)%86}%`,"--float-delay":`${-(i*0.72)}s`,"--float-duration":`${5.8+(i%5)*0.7}s`}}>{item}</span>)}
         </div>
         <div className="study-title"><span className="study-subject-kicker">SUBJECT</span><h1>{subjectText}</h1></div>
         <div className="study-timer"><span>TIME ELAPSED</span><strong>{hh}:{mm}:{ss}</strong></div>
