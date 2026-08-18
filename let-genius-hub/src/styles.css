@@ -2256,3 +2256,71 @@ button, input, select, textarea{ max-width:100%; }
 .flashcard-face h3{margin:11px 0 8px!important;}
 .flashcard-face small{color:#8b9ab0;line-height:1.45;}
 .flashcard-item.flipped{background:linear-gradient(145deg,#f8f8ff,#fff);border-color:#cfd4fb;}
+
+/* V52 — restore visible desktop workspace while keeping the sidebar stagnant.
+   The V51 sticky override accidentally put the sidebar back into the flex flow,
+   consuming layout width in addition to the main margin and pushing dashboard
+   content outside the centered canvas.  The desktop canvas uses an absolute
+   sidebar plus an independently scrolling main workspace instead. */
+@media (min-width:821px){
+  html,body,#root{width:100%;height:100%;min-height:100%;overflow:hidden!important;}
+
+  .app-shell{
+    position:relative!important;
+    display:block!important;
+    width:min(1440px,100%)!important;
+    max-width:1440px!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+    margin:0 auto!important;
+    overflow:hidden!important;
+  }
+
+  .app-shell > .unified-sidebar,
+  .app-shell > .sidebar{
+    position:absolute!important;
+    top:14px!important;
+    left:14px!important;
+    right:auto!important;
+    bottom:14px!important;
+    width:255px!important;
+    min-width:255px!important;
+    height:auto!important;
+    max-height:calc(100dvh - 28px)!important;
+    margin:0!important;
+    align-self:auto!important;
+    overflow:hidden!important;
+    z-index:40!important;
+  }
+
+  .app-shell > .main{
+    display:block!important;
+    width:calc(100% - 297px)!important;
+    max-width:none!important;
+    min-width:0!important;
+    height:100dvh!important;
+    max-height:100dvh!important;
+    margin-left:283px!important;
+    margin-right:0!important;
+    padding:28px 34px 55px!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+}
+
+/* Keep the workspace fluid as the viewport approaches tablet width. */
+@media (min-width:821px) and (max-width:1199px){
+  .app-shell > .unified-sidebar,
+  .app-shell > .sidebar{
+    width:220px!important;
+    min-width:220px!important;
+  }
+  .app-shell > .main{
+    width:calc(100% - 252px)!important;
+    margin-left:238px!important;
+    padding-left:24px!important;
+    padding-right:24px!important;
+  }
+}
