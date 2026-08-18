@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { expandedQuestionBank, QUESTION_BANK_COUNTS } from "./questionBank";
 import {
-  BarChart3, BookOpen, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
+  BarChart3, BookOpen, LibraryBig, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
@@ -78,7 +78,7 @@ function TopnotcherMedal({size=28}) {
 function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpen=false, studyMode=false}) {
   const nav = [
     ["progress", LayoutDashboard, "Progress Dashboard"],
-    ["decks", Library, "Study Decks"],
+    ["decks", LibraryBig, "Study Decks"],
     ["dashboard", Flame, "Daily Drill"],
     ["mock", ClipboardCheck, "Mock Board Exam"],
     ["schedule", CalendarDays, "Study Schedule"]
@@ -119,6 +119,7 @@ function App({ authUser, onSignOut }) {
   const [flashcards, setFlashcards] = usePersistedState("lgh-flashcards", []);
   const [selectedDeckId, setSelectedDeckId] = useState(null);
   const [studyPool, setStudyPool] = useState(null);
+  const [flashcardStudyPool, setFlashcardStudyPool] = useState(null);
   const [showDeckModal, setShowDeckModal] = useState(false);
   const [editingDeck, setEditingDeck] = useState(null);
   const [showQuestionModal, setShowQuestionModal] = useState(false);
@@ -289,6 +290,7 @@ function App({ authUser, onSignOut }) {
 
   return <>
     {studyPool && <StudyModal onSignOut={onSignOut} study={studyPool} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile} theme={theme}/>}
+    {flashcardStudyPool && <FlashcardStudyModal cards={flashcardStudyPool} close={()=>setFlashcardStudyPool(null)} />}
     {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats} theme={theme}/>}
     <div className={`app-shell theme-${theme}`}>
     {mobileNav && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)} />}
@@ -300,7 +302,7 @@ function App({ authUser, onSignOut }) {
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme}/>}
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
       {page==="decks" && <Decks decks={decks} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} deleteDeck={deleteDeck}/>} 
-      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)}/>} 
+      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id))} onToggleDone={id=>setSessions(ss=>ss.map(s=>s.id===id?{...s,completed:!s.completed}:s))}/>} 
 
@@ -366,29 +368,38 @@ function Decks({decks,questions,questionStats,flashcards,setPage,openDeck,setSho
 
 function DeckCard({deck,questions,questionStats,flashcardCount,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; return <div className="deck-card"><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"}</span><div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {flashcardCount||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}><Play size={17}/> Open Deck</button></div>; }
 
-function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onEdit,onDelete,onStudy}) {
+function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onEdit,onDelete,onStudy,onStudyFlashcards}) {
   const [selectedQuestion,setSelectedQuestion]=useState(null);
+  const [selectedFlashcard,setSelectedFlashcard]=useState(null);
+  const [activeTab,setActiveTab]=useState("questions");
   if(!deck) return null;
   const reviewed=questions.filter(q=>questionStats[q.id]?.attempts).length;
   const accuracy=questions.reduce((sum,q)=>sum+(questionStats[q.id]?.correct||0),0);
   const attempts=questions.reduce((sum,q)=>sum+(questionStats[q.id]?.attempts||0),0);
   const pct=questions.length?Math.round(reviewed/questions.length*100):0;
-  return <div><PageHeader title={deck.name} subtitle={<><span>{CATEGORIES.find(c=>c.id===deck.category)?.label} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="secondary-btn" onClick={onAI}><WandSparkles size={17}/> AI Generate</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/>
+  return <div>
+    <PageHeader title={deck.name} subtitle={<><span>{CATEGORIES.find(c=>c.id===deck.category)?.label} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="secondary-btn" onClick={onAI}><WandSparkles size={17}/> AI Generate</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/>
     <div className="deck-detail-stats"><div><b>{questions.length}</b><span>Questions</span></div><div><b>{reviewed}</b><span>Reviewed</span></div><div><b>{pct}%</b><span>Deck progress</span></div><div><b>{attempts?Math.round(accuracy/attempts*100):0}%</b><span>Accuracy</span></div></div>
-    <div className="detail-toolbar"><button className="primary-btn" onClick={onStudy} disabled={!questions.length}><Play size={18}/> Study Now</button><button className="secondary-btn" onClick={onGenerateFlashcards} disabled={!questions.length}><Layers3 size={18}/> Make Flashcards</button><span>{questions.length?"Answer questions, review flashcards, and track your progress here.":"This deck is empty — add your first question to begin."}</span></div>
-    <section className="panel question-bank"><div className="section-head"><div><h2>Questions</h2><span className="muted">{questions.length} total · click a question to view it</span></div></div>
+    <div className="detail-toolbar"><div className="detail-primary-actions"><button className="primary-btn study-now-inline" onClick={onStudy} disabled={!questions.length}><Play size={18}/> Study Now</button><button className="secondary-btn" onClick={onGenerateFlashcards} disabled={!questions.length}><Layers3 size={18}/> Make Flashcards</button>{flashcards.length>0&&<button className="secondary-btn" onClick={onStudyFlashcards}><BookOpen size={18}/> Study Flashcards</button>}</div><span>{questions.length?"Answer questions, review flashcards, and track your progress here.":"This deck is empty — add your first question to begin."}</span></div>
+    <div className="deck-content-tabs" role="tablist" aria-label="Deck content">
+      <button role="tab" aria-selected={activeTab==="questions"} className={activeTab==="questions"?"active":""} onClick={()=>setActiveTab("questions")}><FileText size={17}/> Questions <span>{questions.length}</span></button>
+      <button role="tab" aria-selected={activeTab==="flashcards"} className={activeTab==="flashcards"?"active":""} onClick={()=>setActiveTab("flashcards")}><Layers3 size={17}/> Flashcards <span>{flashcards.length}</span></button>
+    </div>
+    {activeTab==="questions"&&<section className="panel question-bank"><div className="section-head"><div><h2>Questions</h2><span className="muted">{questions.length} total · click a question to view it</span></div></div>
       {questions.length?<div className="question-list">{questions.map((q,i)=><div className="question-row" key={q.id}>
         <div className="question-number">{i+1}</div>
         <button className="question-row-main question-row-view" onClick={()=>setSelectedQuestion(q)}><b>{q.q}</b><span>{q.options.length} choices · {questionStats[q.id]?.attempts||0} attempts</span></button>
         <div className="question-row-actions"><button onClick={()=>onEdit(q)} title="Edit"><Pencil size={17}/></button><button onClick={()=>onDelete(q.id)} title="Delete"><Trash2 size={17}/></button></div>
       </div>)}</div>:<div className="empty"><FileText/><b>No questions yet</b><span>Add a multiple-choice question to this deck.</span><button className="primary-btn" onClick={onAdd}><Plus/> Add First Question</button></div>}
-    </section>
-    <section className="panel flashcard-bank"><div className="section-head"><div><h2>Flashcards</h2><span className="muted">{flashcards.length} created · choice-dependent questions are excluded</span></div><button className="secondary-btn compact" onClick={onGenerateFlashcards} disabled={!questions.length}><Layers3 size={16}/> Generate from Questions</button></div>
-      {flashcards.length?<div className="flashcard-grid">{flashcards.map(card=><FlashcardCard key={card.id} card={card} onDelete={onDeleteFlashcard}/>)}</div>:<div className="flashcard-empty"><Layers3/><b>No flashcards yet</b><span>Generate flashcards from the questions in this deck.</span></div>}
-    </section>
-    {selectedQuestion&&<div className="modal-backdrop" onClick={()=>setSelectedQuestion(null)}><div className="small-modal question-view-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION</span><h2>Question {questions.findIndex(x=>x.id===selectedQuestion.id)+1}</h2></div><button onClick={()=>setSelectedQuestion(null)}><X/></button></div><div className="question-view-content"><h3>{selectedQuestion.q}</h3><div className="question-view-options">{selectedQuestion.options.map((o,i)=><div className={i===selectedQuestion.answer?"correct":""} key={i}><b>{String.fromCharCode(65+i)}.</b><span>{o}</span></div>)}</div><div className="question-view-rationale"><CheckCircle2 size={18}/><div><b>Correct answer: {selectedQuestion.options[selectedQuestion.answer]}</b><p>{selectedQuestion.explanation}</p></div></div></div><div className="modal-foot"><button className="secondary-btn" onClick={()=>setSelectedQuestion(null)}>Close</button><button className="primary-btn" onClick={()=>{setSelectedQuestion(null);onEdit(selectedQuestion)}}><Pencil size={16}/> Edit Question</button></div></div></div>}
+    </section>}
+    {activeTab==="flashcards"&&<section className="panel flashcard-bank"><div className="section-head"><div><h2>Flashcards</h2><span className="muted">{flashcards.length} created · choice-dependent questions are excluded</span></div><div className="flashcard-section-actions"><button className="secondary-btn compact" onClick={onGenerateFlashcards} disabled={!questions.length}><Layers3 size={16}/> Generate from Questions</button>{flashcards.length>0&&<button className="primary-btn compact" onClick={onStudyFlashcards}><BookOpen size={16}/> Study All</button>}</div></div>
+      {flashcards.length?<div className="flashcard-grid">{flashcards.map(card=><FlashcardCard key={card.id} card={card} onDelete={onDeleteFlashcard} onOpen={()=>setSelectedFlashcard(card)}/>)}</div>:<div className="flashcard-empty"><Layers3/><b>No flashcards yet</b><span>Generate flashcards from the questions in this deck.</span></div>}
+    </section>}
+    {selectedQuestion&&<div className="modal-backdrop question-view-backdrop" onClick={()=>setSelectedQuestion(null)}><div className="small-modal question-view-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION</span><h2>Question {questions.findIndex(x=>x.id===selectedQuestion.id)+1}</h2></div><button onClick={()=>setSelectedQuestion(null)}><X/></button></div><div className="question-view-content"><h3>{selectedQuestion.q}</h3><div className="question-view-options">{selectedQuestion.options.map((o,i)=><div className={i===selectedQuestion.answer?"correct":""} key={i}><b>{String.fromCharCode(65+i)}.</b><span>{o}</span></div>)}</div><div className="question-view-rationale"><CheckCircle2 size={18}/><div><b>Correct answer: {selectedQuestion.options[selectedQuestion.answer]}</b><p>{selectedQuestion.explanation}</p></div></div></div><div className="modal-foot"><button className="secondary-btn" onClick={()=>setSelectedQuestion(null)}>Close</button><button className="primary-btn" onClick={()=>{setSelectedQuestion(null);onEdit(selectedQuestion)}}><Pencil size={16}/> Edit Question</button></div></div></div>}
+    {selectedFlashcard&&<FlashcardViewer card={selectedFlashcard} close={()=>setSelectedFlashcard(null)} />}
   </div>;
 }
+
 function buildExamPool(category, questions) {
   // The mock board uses the built-in LET-style bank so exam length is not
   // limited by the user-created study decks. User-created questions are
@@ -566,11 +577,39 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,theme="
     </div>
   </div>;
 }
-function FlashcardCard({card,onDelete}) {
+function FlashcardCard({card,onDelete,onOpen}) {
   const [flipped,setFlipped]=useState(false);
-  return <div className={`flashcard-item ${flipped?"flipped":""}`} onClick={()=>setFlipped(v=>!v)} role="button" tabIndex={0} onKeyDown={e=>{if(e.key==="Enter"||e.key===" ")setFlipped(v=>!v)}}>
-    <div className="flashcard-face"><span className="tag">{flipped?"ANSWER":"FLASHCARD"}</span>{!flipped?<><h3>{card.front}</h3><small>Click to reveal the answer.</small></>:<><h3>{card.back}</h3>{card.explanation&&<small>{card.explanation}</small>}</>}</div>
+  return <div className={`flashcard-item ${flipped?"flipped":""}`} onClick={()=>onOpen?.()} role="button" tabIndex={0} onKeyDown={e=>{if((e.key==="Enter"||e.key===" ")&&onOpen)onOpen();}}>
+    <div className="flashcard-face"><span className="tag">FLASHCARD</span><h3>{card.front}</h3><small>Click to study this flashcard.</small></div>
     <button className="icon-delete" title="Delete flashcard" onClick={e=>{e.stopPropagation();onDelete(card.id)}}><Trash2 size={16}/></button>
+  </div>;
+}
+
+function FlashcardViewer({card,close}) {
+  const [flipped,setFlipped]=useState(false);
+  return <div className="modal-backdrop flashcard-view-backdrop" onClick={close}><div className="flashcard-view-modal" onClick={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><span className="question-label">FLASHCARD</span><h2>{flipped?"Answer":"Question"}</h2></div><button onClick={close}><X/></button></div>
+    <button className={`flashcard-view-card ${flipped?"flipped":""}`} onClick={()=>setFlipped(v=>!v)} aria-label="Flip flashcard">
+      <span className="tag">{flipped?"ANSWER":"QUESTION"}</span><h1>{flipped?card.back:card.front}</h1>{flipped&&card.explanation&&<p>{card.explanation}</p>}<small>Click to flip</small>
+    </button>
+    <div className="modal-foot"><button className="secondary-btn" onClick={close}>Close</button></div>
+  </div></div>;
+}
+
+function FlashcardStudyModal({cards,close}) {
+  const [index,setIndex]=useState(0);
+  const [flipped,setFlipped]=useState(false);
+  const [completed,setCompleted]=useState(false);
+  const safeCards=Array.isArray(cards)?cards:[];
+  if(!safeCards.length) return null;
+  const card=safeCards[Math.min(index,safeCards.length-1)];
+  const next=()=>{if(index<safeCards.length-1){setIndex(i=>i+1);setFlipped(false)}else setCompleted(true)};
+  return <div className="flashcard-study-fullscreen">
+    <header className="flashcard-study-header"><div><span className="question-label">FLASHCARD STUDY</span><h1>Study All Flashcards</h1><span>{index+1} of {safeCards.length}</span></div><div className="flashcard-study-progress"><div className="progress-track"><i style={{width:(((index+1)/safeCards.length)*100)+"%"}}/></div></div><button className="icon-close" onClick={close} aria-label="Exit flashcard study"><X/></button></header>
+    <main className="flashcard-study-main">{completed?<div className="flashcard-complete panel"><CheckCircle2 size={44}/><h2>Flashcard study complete</h2><p>You reviewed all {safeCards.length} flashcards.</p><div><button className="secondary-btn" onClick={()=>{setIndex(0);setFlipped(false);setCompleted(false)}}>Study Again</button><button className="primary-btn" onClick={close}>Finish</button></div></div>:<>
+      <div className="flashcard-study-card-wrap"><button className={`flashcard-study-card ${flipped?"flipped":""}`} onClick={()=>setFlipped(v=>!v)}><span className="tag">{flipped?"ANSWER":"QUESTION"}</span><h2>{flipped?card.back:card.front}</h2>{flipped&&card.explanation&&<p>{card.explanation}</p>}<small>Click to flip</small></button></div>
+      <div className="flashcard-study-actions"><button className="secondary-btn" disabled={index===0} onClick={()=>{setIndex(i=>Math.max(0,i-1));setFlipped(false)}}><ChevronLeft/> Previous</button><button className="primary-btn" onClick={next}>{index===safeCards.length-1?"Finish":"Next Flashcard"}<ChevronRight/></button></div>
+    </>}</main>
   </div>;
 }
 
