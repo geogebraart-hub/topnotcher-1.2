@@ -2468,3 +2468,104 @@ body > .flashcard-view-backdrop .flashcard-view-modal{transform:none!important;z
   .study-header{margin:10px 10px 0!important;width:calc(100% - 20px)!important;border-radius:15px!important;padding:0 12px!important}
   .study-title h1{font-size:18px!important}
 }
+
+/* V55 — Study Deck action controls + balanced viewers + subject-themed header motion */
+.deck-action-row{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  width:100%!important;
+  overflow-x:auto!important;
+  padding:4px 0 6px!important;
+}
+.deck-action-row .detail-primary-actions{
+  display:flex!important;
+  align-items:center!important;
+  justify-content:center!important;
+  gap:8px!important;
+  flex-wrap:nowrap!important;
+  min-width:max-content!important;
+  width:max-content!important;
+}
+.deck-action-row .study-now-inline,
+.deck-action-row .deck-content-tabs button{
+  height:40px!important;
+  min-height:40px!important;
+  box-sizing:border-box!important;
+  white-space:nowrap!important;
+  justify-content:center!important;
+  font-size:13px!important;
+  font-weight:750!important;
+}
+.deck-action-row .study-now-inline{
+  width:184px!important;
+  padding:0 14px!important;
+  border-radius:10px!important;
+}
+.deck-action-row .study-now-inline.primary-btn,
+.deck-action-row .study-now-inline.secondary-btn{
+  background:#5147df!important;
+  color:#fff!important;
+  border-color:#5147df!important;
+}
+.deck-action-row .deck-content-tabs{
+  display:flex!important;
+  align-items:center!important;
+  gap:8px!important;
+  margin:0!important;
+  padding:0!important;
+  background:transparent!important;
+  border:0!important;
+  width:auto!important;
+  max-width:none!important;
+}
+.deck-action-row .deck-content-tabs button{
+  width:184px!important;
+  padding:0 14px!important;
+  border:1px solid #dfe4ed!important;
+  border-radius:10px!important;
+  background:#fff!important;
+  color:#73829a!important;
+}
+.deck-action-row .deck-content-tabs button.active{box-shadow:0 2px 8px rgba(35,48,72,.08)!important}
+.deck-action-row .deck-content-tabs button:first-child.active{background:#f1f0ff!important;color:#5147df!important;border-color:#d9d6ff!important}
+.deck-action-row .deck-content-tabs button:last-child.active{background:#ecfdf5!important;color:#0a9b68!important;border-color:#bcebd7!important}
+
+.question-view-modal{width:min(720px,calc(100vw - 56px))!important;max-width:720px!important;max-height:82dvh!important}
+.question-view-content h3{font-size:20px!important;line-height:1.55!important}
+.flashcard-view-modal{width:min(700px,calc(100vw - 56px))!important;max-width:700px!important;max-height:82dvh!important;padding:18px!important}
+.flashcard-view-card{min-height:300px!important;padding:30px!important}
+.flashcard-view-card h1{font-size:30px!important;line-height:1.4!important}
+
+.study-header{position:relative!important;overflow:hidden!important}
+.study-header-floaters{position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.study-header-floaters span{
+  position:absolute;
+  left:calc(55% + (var(--float-index) * 8%));
+  top:50%;
+  font-size:20px;
+  opacity:.13;
+  filter:saturate(.8);
+  animation:topnotcherFloat 6s ease-in-out infinite;
+  animation-delay:calc(var(--float-index) * -1.15s);
+  transform:translate(-50%,-50%);
+}
+.study-header-floaters span:nth-child(1){font-size:24px;left:55%;top:35%}
+.study-header-floaters span:nth-child(2){font-size:18px;left:64%;top:66%}
+.study-header-floaters span:nth-child(3){font-size:22px;left:73%;top:31%}
+.study-header-floaters span:nth-child(4){font-size:19px;left:82%;top:67%}
+.study-header-floaters span:nth-child(5){font-size:21px;left:91%;top:38%}
+@keyframes topnotcherFloat{
+  0%,100%{transform:translate(-50%,-50%) rotate(-4deg)}
+  50%{transform:translate(-50%,calc(-50% - 7px)) rotate(5deg)}
+}
+.study-header>*:not(.study-header-floaters){position:relative;z-index:1}
+.study-subject-kicker{display:block!important;font-size:9px!important;font-weight:800!important;letter-spacing:.12em!important;color:#8c9bb1!important;margin-bottom:2px!important}
+
+@media(max-width:820px){
+  .deck-action-row .detail-primary-actions{width:max-content!important}
+  .deck-action-row .study-now-inline,.deck-action-row .deck-content-tabs button{width:170px!important}
+  .question-view-modal{width:calc(100vw - 28px)!important;max-height:88dvh!important}
+  .flashcard-view-modal{width:calc(100vw - 28px)!important;max-height:88dvh!important}
+  .study-header-floaters{opacity:.7}
+}
