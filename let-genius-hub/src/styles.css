@@ -1543,3 +1543,202 @@ body{background-color:var(--bg);background-image:radial-gradient(#d9dce2 1.5px,t
     min-height:100dvh!important;
   }
 }
+
+/* V46 — standard desktop canvas / viewport-safe geometry
+   The application uses a single predictable desktop canvas:
+   - 1200px is the supported compact desktop baseline.
+   - 1440px is the maximum canvas width.
+   - Above 1440px the canvas stays centered instead of stretching outward.
+   - Below 1200px the layout remains fluid and hands off to the responsive rules.
+   This replaces the old V45 visual zoom approach so browser zoom does not create
+   oversized elements, off-screen content, or nested scaling conflicts.
+*/
+
+html, body, #root{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  overflow-x:hidden!important;
+}
+
+/* Normal application pages */
+@media (min-width:821px){
+  .app-shell{
+    position:relative!important;
+    width:min(1440px, 100%)!important;
+    max-width:1440px!important;
+    min-width:0!important;
+    min-height:100dvh!important;
+    margin:0 auto!important;
+    overflow-x:hidden!important;
+    overflow-y:visible!important;
+    zoom:1!important;
+  }
+
+  /* Keep the floating sidebar inside the same centered canvas. */
+  .app-shell > .sidebar,
+  .app-shell > .unified-sidebar{
+    position:absolute!important;
+    top:14px!important;
+    left:14px!important;
+    right:auto!important;
+    bottom:14px!important;
+    width:255px!important;
+    min-width:255px!important;
+    height:auto!important;
+    max-height:calc(100dvh - 28px)!important;
+    margin:0!important;
+  }
+
+  .app-shell > .main{
+    margin-left:283px!important;
+    margin-right:0!important;
+    width:calc(100% - 297px)!important;
+    max-width:none!important;
+    min-width:0!important;
+    padding:28px 34px 55px!important;
+  }
+
+  .app-shell .main > *{
+    min-width:0!important;
+  }
+
+  /* Keep common grid children from forcing the desktop canvas wider. */
+  .metrics,
+  .three-cards,
+  .quick-grid,
+  .chart-grid,
+  .drill-layout,
+  .mock-layout,
+  .calendar-layout,
+  .deck-grid,
+  .mock-cards,
+  .schedule-stats{
+    width:100%!important;
+    min-width:0!important;
+  }
+  .metrics > *,
+  .three-cards > *,
+  .quick-grid > *,
+  .chart-grid > *,
+  .drill-layout > *,
+  .mock-layout > *,
+  .calendar-layout > *,
+  .deck-grid > *,
+  .mock-cards > *,
+  .schedule-stats > *{
+    min-width:0!important;
+    max-width:100%!important;
+  }
+
+}
+
+/* At the 1200–1280px end of the standard desktop range, use fewer columns
+   where necessary so cards remain readable instead of squeezing/overflowing. */
+@media (min-width:821px) and (max-width:1280px){
+  .metrics{grid-template-columns:repeat(3,minmax(0,1fr))!important;}
+  .three-cards,.quick-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  .deck-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  .mock-cards{grid-template-columns:repeat(2,minmax(0,1fr))!important;}
+  .deck-toolbar{flex-wrap:wrap!important;}
+  .search{width:min(430px,100%)!important;}
+}
+
+/* Full-screen question runners use the same 1200–1440px centered canvas.
+   At 1440px+ there are clean outer margins; at 1200px they fit exactly. */
+.study-fullscreen,
+.exam-fullscreen{
+  left:0!important;
+  right:0!important;
+  top:0!important;
+  bottom:0!important;
+  width:min(1440px,100vw)!important;
+  max-width:1440px!important;
+  min-width:0!important;
+  margin-left:auto!important;
+  margin-right:auto!important;
+  margin-top:0!important;
+  margin-bottom:0!important;
+  transform:none!important;
+  zoom:1!important;
+  overflow:hidden!important;
+}
+
+.study-fullscreen > *,
+.exam-fullscreen > *{
+  min-width:0!important;
+  max-width:100%!important;
+}
+
+.study-fullscreen .study-shell,
+.exam-fullscreen .exam-shell{
+  min-width:0!important;
+  max-width:100%!important;
+  width:100%!important;
+}
+
+.study-fullscreen .study-body,
+.exam-fullscreen .exam-body{
+  min-width:0!important;
+  max-width:100%!important;
+}
+
+/* Never allow question text, answer cards, or navigator columns to create
+   horizontal overflow inside the standard canvas. */
+.study-main,
+.study-question-card,
+.study-navigation,
+.study-question-sidebar,
+.exam-main,
+.exam-question,
+.exam-options,
+.exam-navigation,
+.exam-sidebar{
+  min-width:0!important;
+  max-width:100%!important;
+  overflow-wrap:anywhere;
+}
+
+.study-question-card h2,
+.exam-question h2,
+.study-question-card .options button,
+.exam-options button{
+  min-width:0!important;
+  max-width:100%!important;
+  overflow-wrap:anywhere;
+}
+
+/* V45 used zoom:.9 plus a 111.11% width compensation. Remove that scaling
+   completely; 100% browser zoom is now the canonical layout scale. */
+@media (min-width:821px){
+  .app-shell,
+  .study-fullscreen,
+  .exam-fullscreen{
+    zoom:1!important;
+  }
+}
+
+/* Responsive handoff below the standard 1200px desktop baseline. */
+@media (max-width:820px){
+  .app-shell{
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    zoom:1!important;
+  }
+  .app-shell > .sidebar,
+  .app-shell > .unified-sidebar{
+    position:fixed!important;
+  }
+  .app-shell > .main{
+    width:100%!important;
+    max-width:none!important;
+    margin-left:0!important;
+  }
+  .study-fullscreen,
+  .exam-fullscreen{
+    width:100vw!important;
+    max-width:none!important;
+    zoom:1!important;
+  }
+}
