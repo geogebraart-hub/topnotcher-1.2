@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { expandedQuestionBank, QUESTION_BANK_COUNTS } from "./questionBank";
 import {
   BarChart3, BookOpen, LibraryBig, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
@@ -380,10 +381,15 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
   return <div>
     <PageHeader title={deck.name} subtitle={<><span>{CATEGORIES.find(c=>c.id===deck.category)?.label} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="secondary-btn" onClick={onAI}><WandSparkles size={17}/> AI Generate</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/>
     <div className="deck-detail-stats"><div><b>{questions.length}</b><span>Questions</span></div><div><b>{reviewed}</b><span>Reviewed</span></div><div><b>{pct}%</b><span>Deck progress</span></div><div><b>{attempts?Math.round(accuracy/attempts*100):0}%</b><span>Accuracy</span></div></div>
-    <div className="detail-toolbar"><div className="detail-primary-actions"><button className="primary-btn study-now-inline" onClick={onStudy} disabled={!questions.length}><Play size={18}/> Study Now</button><button className="secondary-btn" onClick={onGenerateFlashcards} disabled={!questions.length}><Layers3 size={18}/> Make Flashcards</button>{flashcards.length>0&&<button className="secondary-btn" onClick={onStudyFlashcards}><BookOpen size={18}/> Study Flashcards</button>}</div><span>{questions.length?"Answer questions, review flashcards, and track your progress here.":"This deck is empty — add your first question to begin."}</span></div>
-    <div className="deck-content-tabs" role="tablist" aria-label="Deck content">
-      <button role="tab" aria-selected={activeTab==="questions"} className={activeTab==="questions"?"active":""} onClick={()=>setActiveTab("questions")}><FileText size={17}/> Questions <span>{questions.length}</span></button>
-      <button role="tab" aria-selected={activeTab==="flashcards"} className={activeTab==="flashcards"?"active":""} onClick={()=>setActiveTab("flashcards")}><Layers3 size={17}/> Flashcards <span>{flashcards.length}</span></button>
+    <div className="detail-toolbar deck-action-row">
+      <div className="detail-primary-actions">
+        <button className="primary-btn study-now-inline" onClick={onStudy} disabled={!questions.length}><Play size={17}/> Study Questions Now</button>
+        <button className="secondary-btn study-now-inline" onClick={onStudyFlashcards} disabled={!flashcards.length}><BookOpen size={17}/> Study Flashcards Now</button>
+        <div className="deck-content-tabs" role="tablist" aria-label="Deck content">
+          <button role="tab" aria-selected={activeTab==="questions"} className={activeTab==="questions"?"active":""} onClick={()=>setActiveTab("questions")}><FileText size={17}/> Questions <span>{questions.length}</span></button>
+          <button role="tab" aria-selected={activeTab==="flashcards"} className={activeTab==="flashcards"?"active":""} onClick={()=>setActiveTab("flashcards")}><Layers3 size={17}/> Flashcards <span>{flashcards.length}</span></button>
+        </div>
+      </div>
     </div>
     {activeTab==="questions"&&<section className="panel question-bank"><div className="section-head"><div><h2>Questions</h2><span className="muted">{questions.length} total · click a question to view it</span></div></div>
       {questions.length?<div className="question-list">{questions.map((q,i)=><div className="question-row" key={q.id}>
@@ -395,8 +401,8 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
     {activeTab==="flashcards"&&<section className="panel flashcard-bank"><div className="section-head"><div><h2>Flashcards</h2><span className="muted">{flashcards.length} created · choice-dependent questions are excluded</span></div><div className="flashcard-section-actions"><button className="secondary-btn compact" onClick={onGenerateFlashcards} disabled={!questions.length}><Layers3 size={16}/> Generate from Questions</button>{flashcards.length>0&&<button className="primary-btn compact" onClick={onStudyFlashcards}><BookOpen size={16}/> Study All</button>}</div></div>
       {flashcards.length?<div className="flashcard-grid">{flashcards.map(card=><FlashcardCard key={card.id} card={card} onDelete={onDeleteFlashcard} onOpen={()=>setSelectedFlashcard(card)}/>)}</div>:<div className="flashcard-empty"><Layers3/><b>No flashcards yet</b><span>Generate flashcards from the questions in this deck.</span></div>}
     </section>}
-    {selectedQuestion&&<div className="modal-backdrop question-view-backdrop" onClick={()=>setSelectedQuestion(null)}><div className="small-modal question-view-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION</span><h2>Question {questions.findIndex(x=>x.id===selectedQuestion.id)+1}</h2></div><button onClick={()=>setSelectedQuestion(null)}><X/></button></div><div className="question-view-content"><h3>{selectedQuestion.q}</h3><div className="question-view-options">{selectedQuestion.options.map((o,i)=><div className={i===selectedQuestion.answer?"correct":""} key={i}><b>{String.fromCharCode(65+i)}.</b><span>{o}</span></div>)}</div><div className="question-view-rationale"><CheckCircle2 size={18}/><div><b>Correct answer: {selectedQuestion.options[selectedQuestion.answer]}</b><p>{selectedQuestion.explanation}</p></div></div></div><div className="modal-foot"><button className="secondary-btn" onClick={()=>setSelectedQuestion(null)}>Close</button><button className="primary-btn" onClick={()=>{setSelectedQuestion(null);onEdit(selectedQuestion)}}><Pencil size={16}/> Edit Question</button></div></div></div>}
-    {selectedFlashcard&&<FlashcardViewer card={selectedFlashcard} close={()=>setSelectedFlashcard(null)} />}
+    {selectedQuestion&&createPortal(<div className="modal-backdrop question-view-backdrop" onClick={()=>setSelectedQuestion(null)}><div className="small-modal question-view-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION</span><h2>Question {questions.findIndex(x=>x.id===selectedQuestion.id)+1}</h2></div><button onClick={()=>setSelectedQuestion(null)}><X/></button></div><div className="question-view-content"><h3>{selectedQuestion.q}</h3><div className="question-view-options">{selectedQuestion.options.map((o,i)=><div className={i===selectedQuestion.answer?"correct":""} key={i}><b>{String.fromCharCode(65+i)}.</b><span>{o}</span></div>)}</div><div className="question-view-rationale"><CheckCircle2 size={18}/><div><b>Correct answer: {selectedQuestion.options[selectedQuestion.answer]}</b><p>{selectedQuestion.explanation}</p></div></div></div><div className="modal-foot"><button className="secondary-btn" onClick={()=>setSelectedQuestion(null)}>Close</button><button className="primary-btn" onClick={()=>{setSelectedQuestion(null);onEdit(selectedQuestion)}}><Pencil size={16}/> Edit Question</button></div></div></div>, document.body)}
+    {selectedFlashcard&&createPortal(<FlashcardViewer card={selectedFlashcard} close={()=>setSelectedFlashcard(null)} />, document.body)}
   </div>;
 }
 
@@ -552,7 +558,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,theme="
     <AppSidebar page="decks" profile={profile} onNavigate={exitTo} onSettings={()=>{if(confirm("Exit this study session?")){close();}}} onSignOut={()=>{if(confirm("Exit this study session and sign out?")){close();onSignOut?.();}}} studyMode />
     <div className="study-shell">
       <header className="study-header">
-        <div className="study-title"><span className="question-label">STUDY SESSION</span><h1>{study.label}</h1><span>{study.pool.length} questions · self-paced review</span></div>
+        <div className="study-title"><h1>{study.label}</h1></div>
         <div className="study-timer"><span>TIME ELAPSED</span><strong>{hh}:{mm}:{ss}</strong></div>
         <button className="icon-close" aria-label="Exit study session" onClick={()=>{if(confirm("Exit this study session? Your completed answers will remain recorded, but this session will not be counted as finished.")) close();}}><X/></button>
       </header>
