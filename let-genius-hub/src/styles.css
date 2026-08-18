@@ -2635,3 +2635,18 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
   body > .question-view-backdrop .question-view-modal{width:calc(100vw - 36px)!important;max-height:82dvh!important}
   body > .flashcard-view-backdrop .flashcard-view-modal{width:calc(100vw - 36px)!important;max-height:82dvh!important}
 }
+
+
+/* V58 study completion + schedule refinements */
+.study-complete-wrap{flex:1;min-height:0;display:grid;place-items:center;padding:32px;overflow:auto}
+.study-complete-card{width:min(900px,100%);padding:34px;border-radius:24px;text-align:center}
+.study-complete-card>svg{margin:0 auto 12px;color:var(--green,#22a06b)}
+.study-complete-card h2{margin:6px 0 22px;font-size:30px}
+.study-result-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:0 0 24px}
+.study-result-grid>div{padding:16px 12px;border:1px solid var(--line);border-radius:14px;background:var(--surface-soft,var(--surface))}
+.study-result-grid b{display:block;font-size:22px}.study-result-grid span{display:block;margin-top:4px;font-size:12px;color:var(--muted,#7b8aa3)}
+.wrong-question-report{text-align:left;border:1px solid #f0d3d3;background:#fff8f8;border-radius:16px;padding:18px;margin:0 0 22px;max-height:320px;overflow:auto}
+.wrong-question-report h3{margin:0 0 12px;font-size:16px}.wrong-question-report>div{padding:12px 0;border-top:1px solid #f0dddd}.wrong-question-report b,.wrong-question-report span{display:block}.wrong-question-report span{font-size:12px;color:#71829c;margin-top:4px}.no-wrong-report{display:flex;align-items:center;justify-content:center;gap:8px;margin:0 0 22px;padding:14px;border-radius:12px;background:#f2fbf5;color:#22845c}
+.study-complete-actions{display:flex;justify-content:center;gap:10px}
+.schedule-event-info strong{font-size:15px!important}.schedule-event-info span{font-size:12px!important}
+@media(max-width:760px){.study-result-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.study-complete-wrap{padding:16px}.study-complete-card{padding:24px}.study-complete-actions{flex-wrap:wrap}}
