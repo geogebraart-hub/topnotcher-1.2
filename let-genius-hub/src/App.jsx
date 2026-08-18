@@ -8,7 +8,7 @@ import {
   ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2
 } from "lucide-react";
 
-function TopnotcherBrand({ compact = false }) {
+export function TopnotcherBrand({ compact = false }) {
   return (
     <div className={`topnotcher-brand ${compact ? "topnotcher-brand-compact" : ""}`} aria-label="TOPNOTCHER! By God's Grace">
       <svg className="topnotcher-medal" viewBox="0 0 48 56" aria-hidden="true">
@@ -75,7 +75,7 @@ function TopnotcherMedal({size=28}) {
   );
 }
 
-function AppSidebar({page, profile, onNavigate, onSettings, mobileOpen=false, studyMode=false}) {
+function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpen=false, studyMode=false}) {
   const nav = [
     ["progress", LayoutDashboard, "Progress Dashboard"],
     ["decks", Library, "Study Decks"],
@@ -98,15 +98,15 @@ function AppSidebar({page, profile, onNavigate, onSettings, mobileOpen=false, st
         <span className="avatar avatar-btn">{(profile?.name||"G").trim().charAt(0).toUpperCase()}</span>
         <span className="profile-nav-copy"><strong>{profile?.name||"Profile"}</strong><small>View profile</small></span><ChevronRight size={16}/>
       </button>
-      <button className="nav-btn signout-btn" title="Sign out"><LogOut size={20}/><span>Sign out</span></button>
+      <button className="nav-btn signout-btn" title="Sign out" onClick={()=>{if(confirm("Sign out of TOPNOTCHER!?")) onSignOut?.();}}><LogOut size={20}/><span>Sign out</span></button>
     </div>
   </aside>;
 }
 
-function App() {
+function App({ authUser, onSignOut }) {
   const [page, setPage] = useState("progress");
   const [theme, setTheme] = usePersistedState("lgh-theme", "light");
-  const [profile, setProfile] = usePersistedState("lgh-profile", {name:"Genius Learner", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60});
+  const [profile, setProfile] = usePersistedState("lgh-profile", {name:authUser?.displayName||"Genius Learner", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60});
   const [category, setCategory] = usePersistedState("lgh-category", "gened");
   const [streak, setStreak] = usePersistedState("lgh-streak", 0);
   const [lastActiveDate, setLastActiveDate] = usePersistedState("lgh-last-active-date", null);
@@ -268,7 +268,7 @@ function App() {
 
   return <div className={`app-shell theme-${theme}`}>
     {mobileNav && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)} />}
-    <AppSidebar page={page} profile={profile} onNavigate={goTo} onSettings={()=>setShowSettings(true)} mobileOpen={mobileNav} />
+    <AppSidebar page={page} profile={profile} onNavigate={goTo} onSettings={()=>setShowSettings(true)} onSignOut={onSignOut} mobileOpen={mobileNav} />
     <main className="main">
       <header className="mobile-header"><div className="mobile-brand-lockup"><div className="brand-mark topnotcher-medal" aria-hidden="true"><TopnotcherMedal size={25}/></div><div className="sidebar-brand-copy"><strong>TOPNOTCHER!</strong><span>By God’s Grace</span></div></div><button className="icon-btn" aria-label="Open navigation" onClick={()=>setMobileNav(v=>!v)}><Menu/></button></header>
       {page==="dashboard" && <Dashboard setPage={setPage} streak={streak} category={category} setCategory={setCategory} startDrill={startDrill} stats={stats} decks={decks} questions={questions}/>} 
@@ -281,7 +281,7 @@ function App() {
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id))} onToggleDone={id=>setSessions(ss=>ss.map(s=>s.id===id?{...s,completed:!s.completed}:s))}/>} 
 
       {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats}/>}
-      {studyPool && <StudyModal study={studyPool} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile}/>} 
+      {studyPool && <StudyModal onSignOut={onSignOut} study={studyPool} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile}/>} 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck}/>} 
       {showAIModal && <AIQuestionModal deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
@@ -486,7 +486,7 @@ function Schedule({sessions,onAdd,onEdit,onDelete,onToggleDone}) {
   </div>;
 }
 
-function StudyModal({study,answer,next,jump,close,goTo,profile}) {
+function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut}) {
   const q=study.pool[study.index];
   const pct=((study.index+1)/study.pool.length)*100;
   const [elapsed,setElapsed]=useState(Math.max(0,Math.floor((Date.now()-study.startedAt)/1000)));
@@ -497,7 +497,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile}) {
   ];
   const exitTo=(page)=>{ if(confirm("Exit this study session? Your completed answers will remain recorded, but this session will not be counted as finished.")){ close(); goTo(page); } };
   return <div className="study-fullscreen">
-    <AppSidebar page="decks" profile={profile} onNavigate={exitTo} onSettings={()=>{if(confirm("Exit this study session?")){close();}}} studyMode />
+    <AppSidebar page="decks" profile={profile} onNavigate={exitTo} onSettings={()=>{if(confirm("Exit this study session?")){close();}}} onSignOut={()=>{if(confirm("Exit this study session and sign out?")){close();onSignOut?.();}}} studyMode />
     <div className="study-shell">
       <header className="study-header">
         <div className="study-title"><span className="question-label">STUDY SESSION</span><h1>{study.label}</h1><span>{study.pool.length} questions · self-paced review</span></div>
@@ -591,20 +591,62 @@ function AIQuestionModal({deck,close,saveQuestions}) {
     if(!material.trim()) { setError("Add or paste study material first."); return; }
     setBusy(true); setError(""); setGenerated([]); setProgress(0);
     try {
+      // V41 essential AI safeguards:
+      // 1) Create a deliberately shuffled A/B/C/D answer-position plan.
+      // 2) Reposition each correct option to its assigned slot after generation.
+      // 3) Deduplicate question stems across all batches.
+      const positions=[];
+      for(let i=0;i<count;i++) positions.push(i%4);
+      for(let i=positions.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [positions[i],positions[j]]=[positions[j],positions[i]]; }
+      const normalizeStem=value=>String(value||"").toLowerCase().replace(/[^a-z0-9\s]/g,"").replace(/\s+/g," ").trim();
+      const stemTokens=value=>new Set(normalizeStem(value).split(" ").filter(w=>w.length>2));
+      const similarityScore=(a,b)=>{
+        const A=stemTokens(a), B=stemTokens(b);
+        if(!A.size||!B.size) return 0;
+        let intersection=0; A.forEach(t=>{if(B.has(t)) intersection++;});
+        return intersection/(A.size+B.size-intersection);
+      };
+      const used=[];
       const all=[];
-      const batches=Math.ceil(count/20);
-      for(let batch=0; batch<batches; batch++){
+      const existingStems=questions.map(q=>q.q).filter(Boolean);
+      const isDuplicateOrSimilar=stem=>{
+        const candidates=[...existingStems,...used];
+        return candidates.some(prev=>normalizeStem(prev)===normalizeStem(stem) || similarityScore(prev,stem)>=0.72);
+      };
+      let attempts=0;
+      while(all.length<count && attempts<Math.max(8,Math.ceil(count/10)+4)){
+        attempts++;
         const batchCount=Math.min(20,count-all.length);
-        const res=await fetch("/api/generate-questions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({material,category:deck?.category||"gened",topic,count:batchCount,difficulty,sourceName})});
+        const requestedPositions=positions.slice(all.length,all.length+batchCount);
+        const res=await fetch("/api/generate-questions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
+          material,category:deck?.category||"gened",topic,count:batchCount,difficulty,sourceName,
+          targetPositions:requestedPositions,
+          excludeQuestions:all.map(q=>q.question)
+        })});
         const data=await res.json();
-        if(!res.ok) throw new Error(data.error||`Generation failed on batch ${batch+1}.`);
-        const qs=data.questions||[];
-        if(!qs.length) throw new Error(`The AI returned no usable questions on batch ${batch+1}. Try adding more source material.`);
-        all.push(...qs);
-        setGenerated([...all]);
-        setProgress(Math.round(all.length/count*100));
+        if(!res.ok) throw new Error(data.error||`Generation failed on batch ${attempts}.`);
+        const qs=(data.questions||[]).filter(q=>q?.question && Array.isArray(q.options) && q.options.length===4);
+        if(!qs.length) throw new Error(`The AI returned no usable questions on batch ${attempts}. Try adding more source material.`);
+
+        for(const q of qs){
+          if(all.length>=count) break;
+          const key=normalizeStem(q.question);
+          if(!key || isDuplicateOrSimilar(q.question)) continue;
+          let correct=Number(q.correctAnswer);
+          if(!Number.isInteger(correct)||correct<0||correct>3) continue;
+          const target=positions[all.length];
+          const options=[...q.options];
+          [options[correct],options[target]]=[options[target],options[correct]];
+          all.push({...q,options,correctAnswer:target});
+          used.push(q.question);
+          setGenerated([...all]);
+          setProgress(Math.round(all.length/count*100));
+        }
       }
-    } catch(e) { setError(e.message||"Could not generate questions. Any completed batches remain available below."); }
+      if(all.length<count){
+        throw new Error(`Only ${all.length} of ${count} unique questions were generated. Add more source material or try again for a fuller set.`);
+      }
+    } catch(e) { setError(e.message||"Could not generate questions. Any completed questions remain available below."); }
     finally { setBusy(false); }
   };
 
