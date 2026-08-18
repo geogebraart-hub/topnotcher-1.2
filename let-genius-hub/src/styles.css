@@ -1503,3 +1503,43 @@ body{background-color:var(--bg);background-image:radial-gradient(#d9dce2 1.5px,t
   .exam-fullscreen .exam-options{gap:9px!important}
   .exam-fullscreen .exam-navigation{padding:10px 12px!important}
 }
+
+/* V45 — final viewport-fit density calibration
+   Goal: browser zoom 100% should visually resemble roughly a 90% browser view.
+   The layout boxes are expanded proportionally so the scaled UI still fills the
+   available viewport. This final rule intentionally overrides the older V24–V36
+   density experiments, preventing irregular nested zoom combinations.
+*/
+@media (min-width:821px){
+  .app-shell{
+    zoom:.9!important;
+    width:111.1111111111%!important;
+    min-height:111.1111111111vh!important;
+    max-width:none!important;
+  }
+
+  .study-fullscreen,
+  .exam-fullscreen{
+    zoom:.9!important;
+    width:111.1111111111%!important;
+    height:111.1111111111dvh!important;
+    min-height:111.1111111111dvh!important;
+    max-width:none!important;
+  }
+}
+
+/* Keep phone layouts at natural scale so text and touch targets remain usable. */
+@media (max-width:820px){
+  .app-shell{
+    zoom:1!important;
+    width:100%!important;
+    min-height:100vh!important;
+  }
+  .study-fullscreen,
+  .exam-fullscreen{
+    zoom:1!important;
+    width:100vw!important;
+    height:100dvh!important;
+    min-height:100dvh!important;
+  }
+}
