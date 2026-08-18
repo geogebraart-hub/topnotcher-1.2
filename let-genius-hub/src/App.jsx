@@ -545,6 +545,19 @@ function Schedule({sessions,onAdd,onEdit,onDelete,onToggleDone}) {
 }
 
 function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,theme="light"}) {
+  const subjectText = String(study.label || "Study Session").replace(/^Study\s*[·:-]?\s*/i, "");
+  const subjectLower = subjectText.toLowerCase();
+  const subjectObjects = subjectLower.includes("math") || subjectLower.includes("mathemat")
+    ? ["🧩","📐","➗","🔢","📊"]
+    : subjectLower.includes("science") || subjectLower.includes("biology") || subjectLower.includes("chem") || subjectLower.includes("physics")
+      ? ["🔬","🧪","⚛️","🧬","🌡️"]
+      : subjectLower.includes("self") || subjectLower.includes("psych") || subjectLower.includes("person")
+        ? ["🪞","💭","🧠","🧩","✨"]
+        : subjectLower.includes("history") || subjectLower.includes("social") || subjectLower.includes("philipp")
+          ? ["📜","🗺️","🏛️","📖","🧭"]
+          : subjectLower.includes("english") || subjectLower.includes("language") || subjectLower.includes("filipino")
+            ? ["📚","✏️","🔤","📝","💬"]
+            : ["📚","✏️","💡","🧠","⭐"];
   const q=study.pool[study.index];
   const pct=((study.index+1)/study.pool.length)*100;
   const [elapsed,setElapsed]=useState(Math.max(0,Math.floor((Date.now()-study.startedAt)/1000)));
@@ -558,7 +571,10 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,theme="
     <AppSidebar page="decks" profile={profile} onNavigate={exitTo} onSettings={()=>{if(confirm("Exit this study session?")){close();}}} onSignOut={()=>{if(confirm("Exit this study session and sign out?")){close();onSignOut?.();}}} studyMode />
     <div className="study-shell">
       <header className="study-header">
-        <div className="study-title"><h1>{study.label}</h1></div>
+        <div className="study-header-floaters" aria-hidden="true">
+          {subjectObjects.map((item,i)=><span key={i} style={{"--float-index":i}}>{item}</span>)}
+        </div>
+        <div className="study-title"><span className="study-subject-kicker">SUBJECT</span><h1>{subjectText}</h1></div>
         <div className="study-timer"><span>TIME ELAPSED</span><strong>{hh}:{mm}:{ss}</strong></div>
         <button className="icon-close" aria-label="Exit study session" onClick={()=>{if(confirm("Exit this study session? Your completed answers will remain recorded, but this session will not be counted as finished.")) close();}}><X/></button>
       </header>
