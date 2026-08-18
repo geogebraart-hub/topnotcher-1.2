@@ -284,7 +284,7 @@ function App({ authUser, onSignOut }) {
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id))} onToggleDone={id=>setSessions(ss=>ss.map(s=>s.id===id?{...s,completed:!s.completed}:s))}/>} 
 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck}/>} 
-      {showAIModal && <AIQuestionModal deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
+      {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
       {showSessionModal && <SessionModal close={()=>{setShowSessionModal(false);setEditingSession(null)}} save={data=>{if(editingSession?.id){setSessions(ss=>ss.map(s=>s.id===editingSession.id?{...s,...data,id:editingSession.id}:s));}else{setSessions(ss=>[...ss,{id:Date.now(),...data}]);}setShowSessionModal(false);setEditingSession(null)}} initial={editingSession}/>} 
       {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
@@ -530,7 +530,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,theme="
 function DeckModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}>{CATEGORIES.slice(0,3).map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
 
 
-function AIQuestionModal({deck,close,saveQuestions}) {
+function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
   const [material,setMaterial]=useState("");
   const [sourceName,setSourceName]=useState("");
   const [count,setCount]=useState(50);
@@ -568,7 +568,7 @@ function AIQuestionModal({deck,close,saveQuestions}) {
           pages.push(content.items.map(item=>item.str||"").join(" "));
         }
         const text=pages.join("\n\n").replace(/\s{3,}/g,"  ").trim();
-        if (!text) throw new Error("empty-pdf");
+        if (!text) throw new Error("PDF_TEXT_EMPTY");
         setMaterial(text);
         setError("");
         return;
@@ -581,7 +581,9 @@ function AIQuestionModal({deck,close,saveQuestions}) {
     } catch (err) {
       console.error("Material upload error:", err);
       setMaterial("");
-      if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
+      if (err?.message === "PDF_TEXT_EMPTY") {
+        setError("This PDF opened successfully, but it contains no selectable text. It may be scanned/image-only. Please use a text-based PDF or paste the extracted text here.");
+      } else if (/\.pdf$/i.test(file.name) || file.type === "application/pdf") {
         setError("This PDF could not be read. Make sure it is not password-protected and contains selectable text. Scanned/image-only PDFs need OCR or pasted text.");
       } else {
         setError("I couldn't read that material. Please try another PDF, TXT, MD, or CSV file, or paste the material instead.");
@@ -625,7 +627,9 @@ function AIQuestionModal({deck,close,saveQuestions}) {
           targetPositions:requestedPositions,
           excludeQuestions:all.map(q=>q.question)
         })});
-        const data=await res.json();
+        const contentType=res.headers.get("content-type")||"";
+        const data=contentType.includes("application/json") ? await res.json() : {error:await res.text()};
+        if(res.status===404) throw new Error("AI generation endpoint was not found (404). Redeploy this project on Vercel with the included /api/generate-questions.js function.");
         if(!res.ok) throw new Error(data.error||`Generation failed on batch ${attempts}.`);
         const qs=(data.questions||[]).filter(q=>q?.question && Array.isArray(q.options) && q.options.length===4);
         if(!qs.length) throw new Error(`The AI returned no usable questions on batch ${attempts}. Try adding more source material.`);
