@@ -2043,3 +2043,149 @@ html, body, #root{
     font-size:13px!important;
   }
 }
+
+
+/* V49 — Responsive Web Design + compact question-screen sidebar branding.
+   The layout uses fluid sizing between viewport breakpoints instead of fixed
+   desktop geometry, while preserving a comfortable 1200–1440px reading canvas. */
+html, body, #root{
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  overflow-x:hidden;
+}
+*, *::before, *::after{ box-sizing:border-box; }
+img, svg, video, canvas{ max-width:100%; }
+button, input, select, textarea{ max-width:100%; }
+
+/* Fluid application canvas: centered on larger screens, never wider than the viewport. */
+.app-shell{
+  width:100%;
+  max-width:1440px;
+  margin:0 auto;
+  min-width:0;
+}
+.main{
+  width:auto!important;
+  max-width:calc(100% - clamp(248px, 20vw, 283px))!important;
+  min-width:0!important;
+  overflow-x:clip!important;
+}
+
+/* Question runners: fluid columns with a readable center card. */
+.study-fullscreen{
+  width:100vw!important;
+  max-width:100vw!important;
+  min-width:0!important;
+  grid-template-columns:clamp(220px, 19.65vw, 283px) minmax(0,1fr)!important;
+}
+.study-fullscreen > .study-app-sidebar{
+  width:clamp(208px, 17.7vw, 255px)!important;
+  min-width:0!important;
+  max-width:255px!important;
+}
+.study-shell,
+.study-body,
+.study-main,
+.study-question-sidebar,
+.exam-fullscreen,
+.exam-shell,
+.exam-body,
+.exam-main,
+.exam-question{
+  min-width:0!important;
+  max-width:100%!important;
+}
+.study-main,
+.exam-main{
+  width:100%!important;
+  overflow-x:clip!important;
+}
+.study-question-card,
+.exam-question h2,
+.exam-options{
+  width:min(100%, 840px)!important;
+  max-width:840px!important;
+}
+
+/* Compact TOPNOTCHER lockup on question-screen sidebars. */
+.study-fullscreen > .study-app-sidebar .topnotcher-brand{
+  width:100%!important;
+  max-width:100%!important;
+  min-width:0!important;
+  padding:0 10px!important;
+  gap:8px!important;
+  overflow:hidden!important;
+}
+.study-fullscreen > .study-app-sidebar .topnotcher-brand .topnotcher-medal{
+  flex:0 0 30px!important;
+  width:30px!important;
+  height:38px!important;
+}
+.study-fullscreen > .study-app-sidebar .topnotcher-name{
+  font-size:16px!important;
+  letter-spacing:-.045em!important;
+  max-width:100%!important;
+  overflow:hidden!important;
+  text-overflow:ellipsis!important;
+}
+.study-fullscreen > .study-app-sidebar .topnotcher-tagline{
+  font-size:8.5px!important;
+}
+.study-fullscreen > .study-app-sidebar .topnotcher-wordmark{
+  min-width:0!important;
+  max-width:calc(100% - 38px)!important;
+  overflow:hidden!important;
+}
+
+/* Fluid dashboard grids. */
+.metrics,
+.three-cards,
+.quick-grid,
+.deck-grid,
+.mock-cards{
+  width:100%;
+  min-width:0;
+}
+
+@media (max-width:1200px){
+  .app-shell{max-width:100%;}
+  .main{max-width:calc(100% - 248px)!important;}
+  .study-fullscreen{grid-template-columns:248px minmax(0,1fr)!important;}
+  .study-fullscreen > .study-app-sidebar{width:235px!important;}
+}
+
+@media (max-width:1024px){
+  .main{max-width:calc(100% - 232px)!important;padding-left:22px!important;padding-right:22px!important;}
+  .study-fullscreen{grid-template-columns:232px minmax(0,1fr)!important;}
+  .study-fullscreen > .study-app-sidebar{width:220px!important;}
+  .study-main{padding-left:22px!important;padding-right:22px!important;}
+}
+
+@media (max-width:820px){
+  .app-shell{display:block!important;width:100%!important;max-width:none!important;}
+  .main{width:100%!important;max-width:none!important;margin-left:0!important;}
+  .study-fullscreen{grid-template-columns:1fr!important;width:100vw!important;}
+  .study-fullscreen > .study-app-sidebar{display:none!important;}
+  .study-main{width:100%!important;max-width:none!important;padding:18px!important;}
+  .study-question-card,
+  .exam-question h2,
+  .exam-options{width:100%!important;max-width:none!important;}
+  .study-header{min-width:0!important;flex-wrap:wrap!important;}
+  .study-title{flex:1 1 240px!important;min-width:0!important;}
+  .study-timer{flex:0 0 auto!important;}
+}
+
+@media (max-width:560px){
+  .main{padding-left:14px!important;padding-right:14px!important;}
+  .study-main{padding:12px!important;}
+  .study-question-card{padding:18px 16px!important;}
+  .study-question-card h2,
+  .exam-question h2{font-size:20px!important;line-height:1.6!important;}
+  .study-nav-actions,
+  .exam-navigation{flex-wrap:wrap!important;gap:8px!important;}
+  .study-nav-actions .secondary-btn,
+  .study-nav-actions .primary-btn,
+  .exam-navigation .secondary-btn,
+  .exam-navigation .primary-btn{padding:9px 14px!important;}
+}
