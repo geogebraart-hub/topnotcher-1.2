@@ -1,7 +1,7 @@
 {
   "name": "let-genius-hub",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.2.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,7 @@
     "pdfjs-dist": "^4.10.38",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "firebase": "^11.10.0"
+    "firebase": "^12.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
