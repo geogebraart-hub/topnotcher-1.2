@@ -2650,3 +2650,44 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
 .study-complete-actions{display:flex;justify-content:center;gap:10px}
 .schedule-event-info strong{font-size:15px!important}.schedule-event-info span{font-size:12px!important}
 @media(max-width:760px){.study-result-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.study-complete-wrap{padding:16px}.study-complete-card{padding:24px}.study-complete-actions{flex-wrap:wrap}}
+
+/* V60 — account-aware profile, schedule readability, and balanced study result/view cards */
+.schedule-list-panel .schedule-event-info strong{font-size:16px!important;line-height:1.35!important}
+.schedule-list-panel .schedule-event-info span{font-size:13px!important;line-height:1.45!important}
+
+/* Keep the completed study result compact and visually ordered. */
+.study-complete-wrap{padding:28px 24px!important;align-items:flex-start!important}
+.study-complete-card{width:min(720px,calc(100vw - 48px))!important;max-width:720px!important;margin:0 auto!important;padding:24px!important;border-radius:18px!important}
+.study-complete-card>svg{width:38px!important;height:38px!important}
+.study-complete-card h2{font-size:24px!important;line-height:1.25!important;margin:7px 0 14px!important}
+.study-complete-card .question-label{font-size:10px!important}
+.study-result-grid{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:9px!important;margin:12px 0 16px!important}
+.study-result-grid>div{padding:11px 10px!important;border-radius:11px!important}
+.study-result-grid b{font-size:18px!important;line-height:1.2!important}
+.study-result-grid span{font-size:11px!important;margin-top:3px!important}
+.wrong-question-report{margin-top:14px!important;padding-top:14px!important;border-top:1px solid var(--line)!important}
+.wrong-question-report h3{font-size:15px!important;margin:0 0 9px!important}
+.wrong-question-report>div{padding:9px 10px!important;margin:6px 0!important;border-radius:10px!important}
+.wrong-question-report>div b{font-size:12px!important;line-height:1.45!important}
+.wrong-question-report>div span{font-size:11px!important;line-height:1.4!important}
+.no-wrong-report{padding:10px 12px!important;font-size:12px!important;border-radius:10px!important}
+.study-complete-actions{margin-top:15px!important;gap:8px!important;justify-content:flex-end!important}
+.study-complete-actions .primary-btn,.study-complete-actions .secondary-btn{padding:9px 15px!important;font-size:13px!important}
+
+/* Balanced question detail viewer */
+.question-view-modal{width:min(680px,calc(100vw - 48px))!important;max-width:680px!important;max-height:82vh!important;border-radius:18px!important}
+.question-view-content h3{font-size:17px!important;line-height:1.55!important;margin:8px 0 15px!important}
+.question-view-options{gap:7px!important}
+.question-view-options>div{grid-template-columns:24px minmax(0,1fr)!important;gap:9px!important;padding:10px 12px!important;border-radius:10px!important;font-size:13px!important;line-height:1.45!important}
+.question-view-rationale{gap:9px!important;margin-top:14px!important;padding:11px 12px!important;font-size:12px!important;line-height:1.45!important;border-radius:11px!important}
+.question-view-rationale p{margin:4px 0 0!important}
+
+.profile-form label input[readonly]{background:var(--surface-soft,#f7f8fc);color:var(--muted,#7183a0);cursor:default}
+.profile-summary .profile-tip{line-height:1.5}
+@media(max-width:760px){
+  .study-result-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .study-complete-card{width:min(94vw,560px)!important;padding:18px!important}
+  .study-complete-actions{justify-content:stretch!important}
+  .study-complete-actions button{flex:1}
+  .question-view-modal{width:calc(100vw - 28px)!important;max-height:86vh!important}
+}
