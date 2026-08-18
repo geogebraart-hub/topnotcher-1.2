@@ -84,7 +84,7 @@ function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpe
     ["schedule", CalendarDays, "Study Schedule"]
   ];
   return <aside className={"sidebar unified-sidebar "+(mobileOpen?"mobile-open ":"")+(studyMode?"study-app-sidebar":"")}>
-    <TopnotcherBrand />
+    <TopnotcherBrand compact={studyMode} />
     <div className="sidebar-section-label">MAIN MENU</div>
     <nav className="sidebar-nav">
       {nav.map(([id,Icon,label])=><button key={id} className={"nav-btn "+((page===id || (page==="deck-detail"&&id==="decks"))?"active":"")} title={label} onClick={()=>onNavigate(id)}>
