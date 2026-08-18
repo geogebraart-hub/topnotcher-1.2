@@ -26,6 +26,27 @@ export const firebaseConfig = Object.fromEntries(
 
 export const firebaseConfigured = required.every((key) => Boolean(firebaseConfig[key]));
 
+// Comma-separated exact Google email addresses authorized to enter the app.
+// Example: VITE_AUTHORIZED_GOOGLE_EMAILS=admin@example.com,student@example.com
+const authorizedEmails = new Set(
+  String(import.meta.env.VITE_AUTHORIZED_GOOGLE_EMAILS || "")
+    .split(",")
+    .map((email) => email.trim().toLowerCase())
+    .filter(Boolean)
+);
+
+export const authorizationConfigured = authorizedEmails.size > 0;
+
+export function isAuthorizedGoogleUser(user) {
+  const email = String(user?.email || "").trim().toLowerCase();
+  // Fail closed: if no allowlist is configured, nobody is granted app access.
+  return authorizationConfigured && Boolean(email) && authorizedEmails.has(email);
+}
+
+export function authorizedAccountDescription() {
+  return authorizationConfigured ? `${authorizedEmails.size} authorized account${authorizedEmails.size === 1 ? "" : "s"}` : "No authorized accounts configured";
+}
+
 let auth = null;
 let provider = null;
 
