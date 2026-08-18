@@ -1,18 +1,37 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Chrome, Loader2, ShieldCheck } from "lucide-react";
-import { firebaseConfigured, finishGoogleRedirect, signInWithGoogle, signOutGoogle, watchAuth } from "./firebase";
+import { firebaseConfigured, finishGoogleRedirect, signInWithGoogle, signOutGoogle, watchAuth, isAuthorizedGoogleUser, authorizedAccountDescription } from "./firebase";
 import App, { TopnotcherBrand } from "./App";
 
 export default function AuthGate() {
   const [user, setUser] = useState(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [accessDenied, setAccessDenied] = useState(null);
+  const deniedRef = useRef(false);
 
   useEffect(() => {
     if (!firebaseConfigured) { setUser(null); return; }
     let active = true;
     finishGoogleRedirect().catch((err) => active && setError(authError(err)));
-    const unsubscribe = watchAuth((nextUser) => { if (active) setUser(nextUser || null); });
+    const unsubscribe = watchAuth((nextUser) => {
+      if (!active) return;
+      const signedInUser = nextUser || null;
+      if (signedInUser && !isAuthorizedGoogleUser(signedInUser)) {
+        deniedRef.current = true;
+        setAccessDenied(signedInUser);
+        setUser(null);
+        signOutGoogle().catch(() => {});
+        return;
+      }
+      if (!signedInUser && deniedRef.current) {
+        setUser(null);
+        return;
+      }
+      deniedRef.current = false;
+      setAccessDenied(null);
+      setUser(signedInUser);
+    });
     return () => { active = false; unsubscribe(); };
   }, []);
 
@@ -25,6 +44,7 @@ export default function AuthGate() {
 
   if (user === undefined) return <AuthLoading />;
   if (!firebaseConfigured) return <AuthConfigMissing />;
+  if (accessDenied) return <AccessDeniedScreen user={accessDenied} onSignOut={() => { deniedRef.current = false; setAccessDenied(null); signOutGoogle().catch(() => {}); }} />;
   if (!user) return <SignInScreen busy={busy} error={error} onLogin={login} />;
   return <AuthenticatedApp user={user} onSignOut={signOutGoogle} />;
 }
@@ -40,6 +60,10 @@ function AuthLoading() {
 
 function AuthConfigMissing() {
   return <div className="auth-screen"><div className="auth-card"><TopnotcherBrand/><div className="auth-icon"><ShieldCheck size={28}/></div><h1>Google Sign-In Setup Required</h1><p>Add the Firebase <b>VITE_FIREBASE_*</b> environment variables to your Vercel project and local <code>.env.local</code>, then redeploy.</p><p className="auth-small">Required: API key, Auth Domain, Project ID, Storage Bucket, Messaging Sender ID, and App ID.</p></div></div>;
+}
+
+function AccessDeniedScreen({ user, onSignOut }) {
+  return <div className="auth-screen"><div className="auth-card auth-denied"><TopnotcherBrand/><div className="auth-icon"><ShieldCheck size={28}/></div><h1>Account Not Authorized</h1><p>The Google account <b>{user?.email || "this account"}</b> is not on the TOPNOTCHER! authorized-account list.</p><p className="auth-small">Only accounts explicitly authorized by the administrator can access the application.</p><p className="auth-small">Authorized accounts: {authorizedAccountDescription()}</p><button className="google-signin-btn" onClick={onSignOut}>Sign out</button></div></div>;
 }
 
 function SignInScreen({ busy, error, onLogin }) {
