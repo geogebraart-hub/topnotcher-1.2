@@ -230,10 +230,12 @@ function App({ authUser, onSignOut }) {
         if (!d.finishedRecorded) {
           const minutes = Math.max(1, Math.round((Date.now()-d.startedAt)/60000));
           const current = d.pool[d.index];
-          setSessions(s => [...s, {id:Date.now(),type:d.label.includes("Drill")?"drill":"study",cat:current.cat,deckId:current.deckId,answered:d.answered,correct:d.correct,minutes}]);
+          const wrongQuestions = d.pool.filter(item => d.results?.[item.id] === "wrong").map(item => ({id:item.id,q:item.q,correct:item.options?.[item.answer] || "",selected:item.options?.[d.answers?.[item.id]] || ""}));
+          setSessions(s => [...s, {id:Date.now(),type:d.label.includes("Drill")?"drill":"study",cat:current.cat,deckId:current.deckId,answered:d.answered,correct:d.correct,minutes,percentage:d.pool.length?Math.round(d.correct/d.pool.length*100):0,wrongQuestions,finishedAt:new Date().toISOString()}]);
           if (d.label.includes("Drill") && d.correct > 0) setLastActiveDate(new Date().toLocaleDateString("en-CA"));
+          return {...d,finishedRecorded:true,finishedAt:Date.now(),minutes,percentage:d.pool.length?Math.round(d.correct/d.pool.length*100):0,wrongQuestions};
         }
-        return {...d,finishedRecorded:true};
+        return d;
       }
       const nextIndex=d.index+1;
       const nextQuestion=d.pool[nextIndex];
@@ -291,7 +293,7 @@ function App({ authUser, onSignOut }) {
 
   return <>
     {studyPool && <StudyModal onSignOut={onSignOut} study={studyPool} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile} theme={theme}/>}
-    {flashcardStudyPool && <FlashcardStudyModal cards={flashcardStudyPool} close={()=>setFlashcardStudyPool(null)} />}
+    {flashcardStudyPool && <FlashcardStudyModal cards={flashcardStudyPool} close={()=>setFlashcardStudyPool(null)} onFinish={({minutes,answered,correct,percentage})=>setSessions(ss=>[...ss,{id:Date.now(),type:"flashcard",answered,correct,minutes,percentage,wrongQuestions:[],finishedAt:new Date().toISOString()}])} />}
     {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats} theme={theme}/>}
     <div className={`app-shell theme-${theme}`}>
     {mobileNav && <button className="mobile-nav-backdrop" aria-label="Close navigation" onClick={()=>setMobileNav(false)} />}
@@ -340,7 +342,7 @@ function Progress({stats,streak,decks,mockScores,questions,questionStats,setPage
   const updated=new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}).format(new Date());
   const subjectStats=CATEGORIES.slice(0,3).map(c=>{const qs=questions.filter(q=>q.cat===c.id);const attempts=qs.reduce((n,q)=>n+(questionStats[q.id]?.attempts||0),0);const correct=qs.reduce((n,q)=>n+(questionStats[q.id]?.correct||0),0);return {...c,attempts,correct,accuracy:attempts?Math.round(correct/attempts*100):0};});
   const weakAreas=[...subjectStats].sort((a,b)=>a.accuracy-b.accuracy);
-  const recent=[...mockScores.map((score,i)=>({id:`mock-${i}`,type:"mock",title:"Mock Board Exam",detail:`Scored ${Math.round(score)}%`,date:"Recent",action:"mock"})),...decks.flatMap(d=>questions.filter(q=>q.deckId===d.id&&questionStats[q.id]?.lastAnswered).map(q=>({id:`q-${q.id}`,type:"study",title:d.name,detail:`Reviewed a question · ${questionStats[q.id].correct||0}/${questionStats[q.id].attempts||0} correct`,date:new Date(questionStats[q.id].lastAnswered).toLocaleDateString(),action:"decks"})))].slice(-6).reverse();
+  const recent=[...sessions.map(s=>({id:`session-${s.id}`,type:"study",title:s.type==="flashcard"?"Flashcard Study":(s.type==="drill"?"Daily Drill":"Study Questions"),detail:s.type==="flashcard"?`${s.answered||0} cards reviewed · ${s.percentage??100}% complete`:`Scored ${s.correct||0}/${s.answered||0} · ${s.percentage??0}% · ${(s.wrongQuestions||[]).length} wrong`,date:s.finishedAt?new Date(s.finishedAt).toLocaleDateString():"Recent",action:s.type==="drill"?"dashboard":"decks"})),...mockScores.map((score,i)=>({id:`mock-${i}`,type:"mock",title:"Mock Board Exam",detail:`Scored ${Math.round(score)}%`,date:"Recent",action:"mock"})),...decks.flatMap(d=>questions.filter(q=>q.deckId===d.id&&questionStats[q.id]?.lastAnswered).map(q=>({id:`q-${q.id}`,type:"study",title:d.name,detail:`Reviewed a question · ${questionStats[q.id].correct||0}/${questionStats[q.id].attempts||0} correct`,date:new Date(questionStats[q.id].lastAnswered).toLocaleDateString(),action:"decks"})))].slice(-8).reverse();
   const go=(target,cat)=>{if(cat)setCategory(cat);setPage(target);};
   const metricCards=[
     {label:"Overall Readiness Score",value:`${Math.round(Math.min(100,accuracy))}%`,small:"Target: 75% to pass all sub-tests",foot:"View readiness details",target:"progress",primary:true},
@@ -512,6 +514,7 @@ function Schedule({sessions,onAdd,onEdit,onDelete,onToggleDone}) {
   const today=now.getDate(), currentMonth=now.getMonth(), currentYear=now.getFullYear();
   const monthSessions=sessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getMonth()===mon&&dt.getFullYear()===year}).sort((a,b)=>a.date.localeCompare(b.date));
   const typeLabel=t=>t==="mock"?"Mock Exam":t==="drill"?"Daily Drill":"Study Session";
+  const categoryLabel=t=>t==="profed"?"ProfEd":t==="majorship"?"Major":"GenEd";
   return <div>
     <PageHeader title="Study Schedule" subtitle="Plot, edit, complete, and track your review sessions." action={<button className="primary-btn" onClick={onAdd}><Plus/> Add Schedule</button>}/>
     <div className="schedule-stats">
@@ -524,14 +527,14 @@ function Schedule({sessions,onAdd,onEdit,onDelete,onToggleDone}) {
       <section className="panel calendar">
         <div className="calendar-head"><h2>{month.toLocaleString("en-US",{month:"long"})} {year}</h2><div className="calendar-nav"><button aria-label="Previous month" onClick={()=>setMonth(new Date(year,mon-1,1))}><ChevronLeft/></button><button aria-label="Next month" onClick={()=>setMonth(new Date(year,mon+1,1))}><ChevronRight/></button></div></div>
         <div className="weekday">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map(x=><b key={x}>{x}</b>)}</div>
-        <div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{monthSessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getDate()===d}).map(s=><button type="button" className={`calendar-event ${s.type} ${s.completed?"done":""}`} key={s.id} title={`${s.title} — ${typeLabel(s.type)}`} onClick={()=>onEdit(s)}><span>{s.title}</span>{s.completed&&<CheckCircle2 size={11}/>}</button>)}</>}</div>)}</div>
+        <div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{monthSessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getDate()===d}).map(s=><button type="button" className={`calendar-event ${s.type} ${s.completed?"done":""}`} key={s.id} title={`${s.title} — ${typeLabel(s.type)} · ${categoryLabel(s.studyCategory)}`} onClick={()=>onEdit(s)}><span>{s.title}</span>{s.completed&&<CheckCircle2 size={11}/>}</button>)}</>}</div>)}</div>
       </section>
       <aside className="panel event-side schedule-list-panel">
         <div className="schedule-side-head"><div><h3>Schedules</h3><span>{monthSessions.length} this month</span></div><button className="secondary-btn compact" onClick={onAdd}><Plus size={16}/> Add</button></div>
         <div className="schedule-event-list">
           {monthSessions.length ? monthSessions.map(s=><div className={`schedule-event-card ${s.completed?"is-done":""}`} key={s.id}>
             <div className={`schedule-event-dot ${s.type}`}></div>
-            <div className="schedule-event-info"><strong className={s.completed?"completed-title":""}>{s.title}</strong><span>{new Date(s.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})} · {typeLabel(s.type)}</span></div>
+            <div className="schedule-event-info"><strong className={s.completed?"completed-title":""}>{s.title}</strong><span>{new Date(s.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})} · {typeLabel(s.type)} · {categoryLabel(s.studyCategory)}</span></div>
             <div className="schedule-event-actions">
               <button title={s.completed?"Mark as pending":"Mark as done"} className={s.completed?"done-action":""} onClick={()=>onToggleDone(s.id)}><CheckCircle2 size={17}/></button>
               <button title="Edit schedule" onClick={()=>onEdit(s)}><Pencil size={16}/></button>
@@ -558,8 +561,13 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,theme="
           : subjectLower.includes("english") || subjectLower.includes("language") || subjectLower.includes("filipino")
             ? ["📚","✏️","🔤","📝","💬"]
             : ["📚","✏️","💡","🧠","⭐"];
-  const q=study.pool[study.index];
+  const q=study.pool[Math.min(study.index,study.pool.length-1)];
   const pct=((study.index+1)/study.pool.length)*100;
+  if (study.finishedRecorded) {
+    const minutes=study.minutes||Math.max(1,Math.round((Date.now()-study.startedAt)/60000));
+    const percentage=study.percentage ?? (study.pool.length?Math.round(study.correct/study.pool.length*100):0);
+    return <div className={`study-fullscreen study-theme-${theme}`}><AppSidebar page="decks" profile={profile} onNavigate={()=>close()} onSettings={()=>close()} onSignOut={()=>{close();onSignOut?.();}} studyMode/><div className="study-shell"><header className="study-header"><div className="study-title"><span className="study-subject-kicker">STUDY COMPLETE</span><h1>{subjectText}</h1></div><button className="icon-close" onClick={close}><X/></button></header><main className="study-complete-wrap"><section className="study-complete-card panel"><CheckCircle2 size={48}/><span className="question-label">SESSION COMPLETE</span><h2>Great work!</h2><div className="study-result-grid"><div><b>{minutes} min</b><span>Time Taken</span></div><div><b>{study.correct}/{study.pool.length}</b><span>Score</span></div><div><b>{percentage}%</b><span>Percentage</span></div><div><b>{study.wrongQuestions?.length||0}</b><span>Wrong</span></div></div>{study.wrongQuestions?.length?<div className="wrong-question-report"><h3>Wrong Answered Questions</h3>{study.wrongQuestions.map((w,i)=><div key={w.id||i}><b>{i+1}. {w.q}</b><span>Your answer: {w.selected||"Unanswered"}</span><span>Correct answer: {w.correct}</span></div>)}</div>:<div className="no-wrong-report"><CheckCircle2 size={20}/> Perfect score — no wrong answers.</div>}<div className="study-complete-actions"><button className="secondary-btn" onClick={close}>Finish</button><button className="primary-btn" onClick={()=>{close();goTo("progress")}}>View Progress</button></div></section></main></div></div>;
+  }
   const [elapsed,setElapsed]=useState(Math.max(0,Math.floor((Date.now()-study.startedAt)/1000)));
   useEffect(()=>{ const id=setInterval(()=>setElapsed(Math.max(0,Math.floor((Date.now()-study.startedAt)/1000))),1000); return ()=>clearInterval(id); },[study.startedAt]);
   const hh=String(Math.floor(elapsed/3600)).padStart(2,"0"), mm=String(Math.floor((elapsed%3600)/60)).padStart(2,"0"), ss=String(elapsed%60).padStart(2,"0");
@@ -618,17 +626,24 @@ function FlashcardViewer({card,close}) {
   </div></div>;
 }
 
-function FlashcardStudyModal({cards,close}) {
+function FlashcardStudyModal({cards,close,onFinish}) {
   const [index,setIndex]=useState(0);
   const [flipped,setFlipped]=useState(false);
   const [completed,setCompleted]=useState(false);
+  const [startedAt]=useState(Date.now());
+  const [saved,setSaved]=useState(false);
   const safeCards=Array.isArray(cards)?cards:[];
   if(!safeCards.length) return null;
   const card=safeCards[Math.min(index,safeCards.length-1)];
-  const next=()=>{if(index<safeCards.length-1){setIndex(i=>i+1);setFlipped(false)}else setCompleted(true)};
+  const finish=()=>{
+    const minutes=Math.max(1,Math.round((Date.now()-startedAt)/60000));
+    if(!saved){onFinish?.({minutes,answered:safeCards.length,correct:safeCards.length,percentage:100});setSaved(true);}
+    setCompleted(true);
+  };
+  const next=()=>{if(index<safeCards.length-1){setIndex(i=>i+1);setFlipped(false)}else finish()};
   return <div className="flashcard-study-fullscreen">
-    <header className="flashcard-study-header"><div><span className="question-label">FLASHCARD STUDY</span><h1>Study All Flashcards</h1><span>{index+1} of {safeCards.length}</span></div><div className="flashcard-study-progress"><div className="progress-track"><i style={{width:(((index+1)/safeCards.length)*100)+"%"}}/></div></div><button className="icon-close" onClick={close} aria-label="Exit flashcard study"><X/></button></header>
-    <main className="flashcard-study-main">{completed?<div className="flashcard-complete panel"><CheckCircle2 size={44}/><h2>Flashcard study complete</h2><p>You reviewed all {safeCards.length} flashcards.</p><div><button className="secondary-btn" onClick={()=>{setIndex(0);setFlipped(false);setCompleted(false)}}>Study Again</button><button className="primary-btn" onClick={close}>Finish</button></div></div>:<>
+    <header className="flashcard-study-header"><div><span className="question-label">FLASHCARD STUDY</span><h1>Study All Flashcards</h1><span>{completed?safeCards.length:index+1} of {safeCards.length}</span></div><div className="flashcard-study-progress"><div className="progress-track"><i style={{width:(((completed?safeCards.length:index+1)/safeCards.length)*100)+"%"}}/></div></div><button className="icon-close" onClick={close} aria-label="Exit flashcard study"><X/></button></header>
+    <main className="flashcard-study-main">{completed?<div className="flashcard-complete panel"><CheckCircle2 size={44}/><span className="question-label">SESSION COMPLETE</span><h2>Flashcard study complete</h2><div className="study-result-grid"><div><b>{Math.max(1,Math.round((Date.now()-startedAt)/60000))} min</b><span>Time Taken</span></div><div><b>{safeCards.length}/{safeCards.length}</b><span>Cards Reviewed</span></div><div><b>100%</b><span>Completion</span></div><div><b>0</b><span>Wrong</span></div></div><p>All flashcards in this study session were reviewed. Flashcards do not have a right/wrong score.</p><div><button className="secondary-btn" onClick={()=>{setIndex(0);setFlipped(false);setCompleted(false);setSaved(false)}}>Study Again</button><button className="primary-btn" onClick={close}>Finish</button></div></div>:<>
       <div className="flashcard-study-card-wrap"><button className={`flashcard-study-card ${flipped?"flipped":""}`} onClick={()=>setFlipped(v=>!v)}><span className="tag">{flipped?"ANSWER":"QUESTION"}</span><h2>{flipped?card.back:card.front}</h2>{flipped&&card.explanation&&<p>{card.explanation}</p>}<small>Click to flip</small></button></div>
       <div className="flashcard-study-actions"><button className="secondary-btn" disabled={index===0} onClick={()=>{setIndex(i=>Math.max(0,i-1));setFlipped(false)}}><ChevronLeft/> Previous</button><button className="primary-btn" onClick={next}>{index===safeCards.length-1?"Finish":"Next Flashcard"}<ChevronRight/></button></div>
     </>}</main>
@@ -836,13 +851,15 @@ function SessionModal({close,save,initial}) {
   const [title,setTitle]=useState(initial?.title||"Study Session");
   const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
   const [type,setType]=useState(initial?.type||"study");
+  const [studyCategory,setStudyCategory]=useState(initial?.studyCategory||"gened");
   const [completed,setCompleted]=useState(Boolean(initial?.completed));
-  const submit=()=>{if(!title.trim()||!date)return;save({title:title.trim(),date,type,completed});};
+  const submit=()=>{if(!title.trim()||!date)return;save({title:title.trim(),date,type,studyCategory,completed});};
   return <div className="modal-backdrop"><div className="small-modal schedule-modal">
     <div className="modal-head"><div><h2>{initial?"Edit Schedule":"Add Schedule"}</h2><span className="muted">Plan a study session, mock exam, or daily drill.</span></div><button onClick={close}><X/></button></div>
     <label>Schedule title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Review Assessment of Learning"/></label>
     <label>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label>
     <label>Schedule type<select value={type} onChange={e=>setType(e.target.value)}><option value="study">Study Session</option><option value="mock">Mock Exam</option><option value="drill">Daily Drill</option></select></label>
+    <label>Study area<select value={studyCategory} onChange={e=>setStudyCategory(e.target.value)}><option value="gened">GenEd</option><option value="profed">ProfEd</option><option value="majorship">Major</option></select></label>
     {initial&&<label className="schedule-check"><input type="checkbox" checked={completed} onChange={e=>setCompleted(e.target.checked)}/><span>Mark this schedule as done</span></label>}
     <button className="primary-btn wide" disabled={!title.trim()||!date} onClick={submit}><Save size={17}/>{initial?"Save Changes":"Add Schedule"}</button>
   </div></div>;
