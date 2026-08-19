@@ -380,6 +380,35 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
   const [selectedQuestion,setSelectedQuestion]=useState(null);
   const [selectedFlashcard,setSelectedFlashcard]=useState(null);
   const [activeTab,setActiveTab]=useState("questions");
+  const [scannerOpen,setScannerOpen]=useState(false);
+  const [scanPairs,setScanPairs]=useState([]);
+  const [scanRunning,setScanRunning]=useState(false);
+  const normalizeScan=v=>String(v||"").toLowerCase().replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+  const scanTokens=v=>normalizeScan(v).split(" ").filter(w=>w.length>2);
+  const scanSimilarity=(a,b)=>{
+    const A=new Set(scanTokens(a)), B=new Set(scanTokens(b));
+    if(!A.size||!B.size) return 0;
+    let inter=0; A.forEach(t=>{if(B.has(t)) inter++;});
+    const jaccard=inter/(A.size+B.size-inter);
+    const containment=inter/Math.min(A.size,B.size);
+    const bigrams=t=>{const x=scanTokens(t);const out=new Set();for(let i=0;i<x.length-1;i++)out.add(x[i]+" "+x[i+1]);return out};
+    const BA=bigrams(a), BB=bigrams(b); let bi=0; BA.forEach(x=>{if(BB.has(x))bi++;});
+    const biScore=(BA.size&&BB.size)?bi/(BA.size+BB.size-bi):0;
+    return Math.max(jaccard, containment*0.9, biScore*1.15);
+  };
+  const runQuestionScanner=()=>{
+    setScanRunning(true);
+    setTimeout(()=>{
+      const pairs=[];
+      for(let i=0;i<questions.length;i++) for(let j=i+1;j<questions.length;j++){
+        const score=scanSimilarity(questions[i].q,questions[j].q);
+        if(score>=0.48) pairs.push({a:questions[i],b:questions[j],score});
+      }
+      pairs.sort((a,b)=>b.score-a.score);
+      setScanPairs(pairs); setScanRunning(false); setScannerOpen(true);
+    },50);
+  };
+  const deleteScannedQuestion=id=>{ onDelete(id); setScanPairs(ps=>ps.filter(p=>p.a.id!==id&&p.b.id!==id)); };
   if(!deck) return null;
   const reviewed=questions.filter(q=>questionStats[q.id]?.attempts).length;
   const accuracy=questions.reduce((sum,q)=>sum+(questionStats[q.id]?.correct||0),0);
@@ -398,7 +427,7 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
         </div>
       </div>
     </div>
-    {activeTab==="questions"&&<section className="panel question-bank"><div className="section-head"><div><h2>Questions</h2><span className="muted">{questions.length} total · click a question to view it</span></div></div>
+    {activeTab==="questions"&&<section className="panel question-bank"><div className="section-head"><div><h2>Questions</h2><span className="muted">{questions.length} total · click a question to view it</span></div><button className="secondary-btn compact question-scanner-btn" onClick={runQuestionScanner} disabled={questions.length<2}><Search size={16}/> Scan for Similar Questions</button></div>
       {questions.length?<div className="question-list">{questions.map((q,i)=><div className="question-row" key={q.id}>
         <div className="question-number">{i+1}</div>
         <button className="question-row-main question-row-view" onClick={()=>setSelectedQuestion(q)}><b>{q.q}</b><span>{q.options.length} choices · {questionStats[q.id]?.attempts||0} attempts</span></button>
@@ -408,6 +437,7 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
     {activeTab==="flashcards"&&<section className="panel flashcard-bank"><div className="section-head"><div><h2>Flashcards</h2><span className="muted">{flashcards.length} created · choice-dependent questions are excluded</span></div><div className="flashcard-section-actions"><button className="secondary-btn compact" onClick={onGenerateFlashcards} disabled={!questions.length}><Layers3 size={16}/> Generate from Questions</button>{flashcards.length>0&&<button className="primary-btn compact" onClick={onStudyFlashcards}><BookOpen size={16}/> Study All</button>}</div></div>
       {flashcards.length?<div className="flashcard-grid">{flashcards.map(card=><FlashcardCard key={card.id} card={card} onDelete={onDeleteFlashcard} onOpen={()=>setSelectedFlashcard(card)}/>)}</div>:<div className="flashcard-empty"><Layers3/><b>No flashcards yet</b><span>Generate flashcards from the questions in this deck.</span></div>}
     </section>}
+    {scannerOpen&&createPortal(<div className="modal-backdrop scanner-backdrop" onClick={()=>setScannerOpen(false)}><div className="small-modal question-scanner-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION SCANNER</span><h2>{scanPairs.length ? `${scanPairs.length} similar pair${scanPairs.length===1?"":"s"} found` : "No redundant questions found"}</h2><span className="muted">Potentially duplicate or substantially similar questions are listed below. Review before deleting.</span></div><button onClick={()=>setScannerOpen(false)}><X/></button></div>{scanPairs.length?<div className="scanner-list">{scanPairs.map((pair,i)=><div className="scanner-pair" key={`${pair.a.id}-${pair.b.id}`}><div className="scanner-score">{Math.round(pair.score*100)}% similar</div><div className="scanner-q"><b>Question {questions.findIndex(q=>q.id===pair.a.id)+1}</b><p>{pair.a.q}</p><button className="danger-outline" onClick={()=>deleteScannedQuestion(pair.a.id)}><Trash2 size={14}/> Delete this question</button></div><div className="scanner-vs">VS</div><div className="scanner-q"><b>Question {questions.findIndex(q=>q.id===pair.b.id)+1}</b><p>{pair.b.q}</p><button className="danger-outline" onClick={()=>deleteScannedQuestion(pair.b.id)}><Trash2 size={14}/> Delete this question</button></div></div>)}</div>:<div className="scanner-empty"><CheckCircle2 size={30}/><b>Deck looks clean</b><span>No questions crossed the redundancy threshold.</span></div>}<div className="modal-foot"><button className="secondary-btn" onClick={()=>setScannerOpen(false)}>Close</button></div></div></div>, document.body)}
     {selectedQuestion&&createPortal(<div className="modal-backdrop question-view-backdrop" onClick={()=>setSelectedQuestion(null)}><div className="small-modal question-view-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION</span><h2>Question {questions.findIndex(x=>x.id===selectedQuestion.id)+1}</h2></div><button onClick={()=>setSelectedQuestion(null)}><X/></button></div><div className="question-view-content"><h3>{selectedQuestion.q}</h3><div className="question-view-options">{selectedQuestion.options.map((o,i)=><div className={i===selectedQuestion.answer?"correct":""} key={i}><b>{String.fromCharCode(65+i)}.</b><span>{o}</span></div>)}</div><div className="question-view-rationale"><CheckCircle2 size={18}/><div><b>Correct answer: {selectedQuestion.options[selectedQuestion.answer]}</b><p>{selectedQuestion.explanation}</p></div></div></div><div className="modal-foot"><button className="secondary-btn" onClick={()=>setSelectedQuestion(null)}>Close</button><button className="primary-btn" onClick={()=>{setSelectedQuestion(null);onEdit(selectedQuestion)}}><Pencil size={16}/> Edit Question</button></div></div></div>, document.body)}
     {selectedFlashcard&&createPortal(<FlashcardViewer card={selectedFlashcard} close={()=>setSelectedFlashcard(null)} />, document.body)}
   </div>;
@@ -743,7 +773,7 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
       const existingStems=questions.map(q=>q.q).filter(Boolean);
       const isDuplicateOrSimilar=stem=>{
         const candidates=[...existingStems,...used];
-        return candidates.some(prev=>normalizeStem(prev)===normalizeStem(stem) || similarityScore(prev,stem)>=0.72);
+        return candidates.some(prev=>normalizeStem(prev)===normalizeStem(stem) || similarityScore(prev,stem)>=0.52);
       };
       const optionsAreBalanced=opts=>{
         const lengths=opts.map(o=>String(o||"").trim().length).sort((a,b)=>a-b);
@@ -759,7 +789,7 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
         const res=await fetch("/api/generate-questions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
           material,category:deck?.category||"gened",topic,count:batchCount,difficulty,sourceName,
           targetPositions:requestedPositions,
-          excludeQuestions:existingStems
+          excludeQuestions:[...existingStems,...used]
         })});
         const contentType=res.headers.get("content-type")||"";
         const data=contentType.includes("application/json") ? await res.json() : {error:await res.text()};
