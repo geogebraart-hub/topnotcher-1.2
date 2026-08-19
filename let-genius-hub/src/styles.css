@@ -2707,3 +2707,29 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
 .app-shell.theme-dark .calendar-event.category-gened{background:#1d2b50!important;color:#9eb6ff!important}
 .app-shell.theme-dark .calendar-event.category-profed{background:#183c2c!important;color:#8de0b4!important}
 .app-shell.theme-dark .calendar-event.category-majorship{background:#4a321b!important;color:#ffc878!important}
+
+/* V62 — compact question viewer actions + navy circle/yellow star brand */
+.topnotcher-logo-circle{
+  width:44px!important;height:44px!important;flex:0 0 44px!important;
+  border-radius:50%!important;background:#102a56!important;color:#ffd447!important;
+  display:inline-grid!important;place-items:center!important;border:0!important;
+  box-shadow:0 5px 14px rgba(16,42,86,.16)!important;line-height:1!important;
+}
+.topnotcher-logo-circle span{font-size:22px!important;line-height:1!important;color:#ffd447!important;transform:translateY(-1px)}
+.topnotcher-logo-circle-small{display:inline-grid!important;border-radius:50%!important;background:#102a56!important;color:#ffd447!important;border:0!important;box-shadow:none!important}
+.topnotcher-logo-circle-small span{font-size:60%!important;color:#ffd447!important}
+.topnotcher-brand .topnotcher-logo-circle{margin:0!important}
+.question-view-modal .modal-foot{gap:8px!important;margin-top:16px!important}
+.question-view-modal .modal-foot .secondary-btn,
+.question-view-modal .modal-foot .primary-btn{
+  min-height:34px!important;height:34px!important;padding:7px 12px!important;
+  font-size:12px!important;line-height:1!important;border-radius:9px!important;
+  white-space:nowrap!important;display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;
+}
+.question-view-modal .modal-foot .primary-btn svg{width:14px!important;height:14px!important}
+/* Schedule completion contributes target hours exactly once to tracked study time. */
+.schedule-event-card.is-done .schedule-event-info span{font-weight:600!important}
+/* Keep the new mark visually consistent in compact/mobile brand lockups. */
+.mobile-brand-lockup .topnotcher-logo-circle{width:40px!important;height:40px!important;flex-basis:40px!important}
+.mobile-brand-lockup .topnotcher-logo-circle span{font-size:19px!important}
+@media(max-width:420px){.mobile-brand-lockup .topnotcher-logo-circle{width:36px!important;height:36px!important;flex-basis:36px!important}.mobile-brand-lockup .topnotcher-logo-circle span{font-size:17px!important}}
