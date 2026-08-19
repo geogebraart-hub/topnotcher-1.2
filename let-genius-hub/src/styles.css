@@ -2733,3 +2733,28 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
 .mobile-brand-lockup .topnotcher-logo-circle{width:40px!important;height:40px!important;flex-basis:40px!important}
 .mobile-brand-lockup .topnotcher-logo-circle span{font-size:19px!important}
 @media(max-width:420px){.mobile-brand-lockup .topnotcher-logo-circle{width:36px!important;height:36px!important;flex-basis:36px!important}.mobile-brand-lockup .topnotcher-logo-circle span{font-size:17px!important}}
+
+/* V63 — strict question scanner */
+.question-scanner-btn{white-space:nowrap}
+.question-scanner-modal{width:min(980px,calc(100vw - 32px))!important;max-width:980px!important;max-height:88dvh!important;overflow:auto!important}
+.scanner-list{display:grid;gap:12px;margin:8px 0 4px}
+.scanner-pair{position:relative;display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:12px;align-items:stretch;padding:16px;border:1px solid #e5e7eb;border-radius:14px;background:#fafbff}
+.scanner-score{position:absolute;top:8px;right:10px;font-size:11px;font-weight:800;color:#b42318;background:#fff0ee;border-radius:999px;padding:4px 8px}
+.scanner-q{min-width:0;padding-top:12px}
+.scanner-q b{font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:#5b6475}
+.scanner-q p{font-size:14px;line-height:1.5;margin:7px 0 10px;overflow-wrap:anywhere}
+.scanner-vs{align-self:center;font-size:11px;font-weight:900;color:#8b93a3}
+.danger-outline{display:inline-flex;align-items:center;gap:6px;border:1px solid #ef4444;color:#b42318;background:#fff;border-radius:8px;padding:7px 10px;font-size:12px;font-weight:700;white-space:nowrap;cursor:pointer}
+.danger-outline:hover{background:#fff1f0}
+.scanner-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:7px;padding:42px 20px;color:#596273}
+.scanner-empty svg{color:#16835b}
+.scanner-empty b{font-size:18px;color:#1f2937}
+.scanner-empty span{font-size:13px}
+@media (max-width:760px){
+ .question-scanner-modal{width:calc(100vw - 20px)!important;max-height:92dvh!important}
+ .scanner-pair{grid-template-columns:1fr;gap:8px;padding:13px}
+ .scanner-vs{display:none}
+ .scanner-score{position:static;display:inline-flex;width:max-content;margin-left:auto}
+ .scanner-q{padding-top:0}
+ .danger-outline{width:100%;justify-content:center}
+}
