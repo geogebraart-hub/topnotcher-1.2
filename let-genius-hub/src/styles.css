@@ -2691,3 +2691,19 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
   .study-complete-actions button{flex:1}
   .question-view-modal{width:calc(100vw - 28px)!important;max-height:86vh!important}
 }
+
+
+/* V61 — schedule target hours + category-based colors */
+.field-hint{display:block!important;margin-top:5px!important;color:#8a9ab2!important;font-size:11px!important;line-height:1.35!important}
+.calendar-event.category-gened{background:#e8efff!important;color:#315bd6!important}
+.calendar-event.category-profed{background:#e8f7ef!important;color:#21845b!important}
+.calendar-event.category-majorship{background:#fff0dc!important;color:#c36b10!important}
+.schedule-event-dot.category-gened{background:#4f6fe8!important}
+.schedule-event-dot.category-profed{background:#35a66f!important}
+.schedule-event-dot.category-majorship{background:#e4932f!important}
+.schedule-event-info span{white-space:normal!important}
+.schedule-event-info strong{white-space:nowrap!important}
+@media(max-width:760px){.schedule-event-info span{font-size:12px!important}}
+.app-shell.theme-dark .calendar-event.category-gened{background:#1d2b50!important;color:#9eb6ff!important}
+.app-shell.theme-dark .calendar-event.category-profed{background:#183c2c!important;color:#8de0b4!important}
+.app-shell.theme-dark .calendar-event.category-majorship{background:#4a321b!important;color:#ffc878!important}
