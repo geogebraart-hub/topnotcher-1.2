@@ -23,7 +23,7 @@ export default async function handler(req, res) {
     let intersection=0; for (const t of A) if (B.has(t)) intersection++;
     return intersection/(A.size+B.size-intersection);
   };
-  const excluded = Array.isArray(excludeQuestions) ? excludeQuestions.filter(Boolean).slice(-100) : [];
+  const excluded = Array.isArray(excludeQuestions) ? excludeQuestions.filter(Boolean).map(String) : [];
 
   const prompt = `You are an expert LET (Licensure Examination for Teachers) reviewer and assessment writer. Generate ${safeCount} high-quality multiple-choice questions for ${categoryName}. Difficulty: ${difficulty}. Topic: ${topic || 'Use the most important concepts in the material'}.
 
@@ -43,12 +43,13 @@ Rules:
 - Exactly one best answer.
 - Distractors must be plausible, relevant, and meaningfully different from one another.
 - Include a concise but substantive rationale explaining WHY the correct answer is correct and, when useful, the key distinction from the strongest distractor.
-- Never output an exact duplicate of an excluded question.
+- NEVER output a question whose normalized stem exactly matches ANY excluded question. Treat the excluded list as a hard block, not a suggestion.
 - Never produce a substantially similar question, a simple rewording/paraphrase, or another item that tests essentially the same fact or concept as an excluded question.
 - Deliberately vary the tested material: concepts, relationships, applications, examples, dates, names, terminology, principles, comparisons, consequences, and details where the source supports them.
 - Across a large set, avoid repeatedly testing the same fact, definition, name, date, or relationship.
 - Correct-answer positions must be distributed across A/B/C/D as evenly as practical. B and C must NOT dominate. Do not follow an obvious A-B-C-D or repeating sequence. If requested positions are supplied, place the correct answer in those positions while keeping the question itself natural.
-- Do not make the correct option noticeably longer, more qualified, or more specific merely to signal the answer.
+- Keep all four choices closely comparable in length and grammatical form. Do not make any choice conspicuously longer or shorter than the others. Aim for roughly the same character length (within about 40%) whenever the content allows.
+- Do not use extra qualifiers, explanations, or unusually specific wording in the correct choice that are absent from distractors.
 - Return ONLY the requested structured JSON output; no markdown or commentary.`;
 
   const schema = {
@@ -103,12 +104,23 @@ Rules:
       catch { return res.status(502).json({ error: 'Gemini returned invalid structured output.' }); }
     }
 
+    const optionLengthsBalanced = options => {
+      const lengths = options.map(o => String(o || '').trim().length).sort((a,b)=>a-b);
+      if (lengths.some(n => n < 1)) return false;
+      const median = (lengths[1] + lengths[2]) / 2 || 1;
+      return Math.max(...lengths) <= median * 1.55 && Math.min(...lengths) >= median * 0.55;
+    };
     const accepted=[];
     for (const q of (parsed.questions || [])) {
       if (!q?.question || !Array.isArray(q.options) || q.options.length !== 4 || !Number.isInteger(Number(q.correctAnswer)) || Number(q.correctAnswer)<0 || Number(q.correctAnswer)>3 || !q?.rationale) continue;
-      if (excluded.some(prev => normalize(prev) === normalize(q.question) || similarity(prev,q.question) >= 0.72)) continue;
-      if (accepted.some(prev => normalize(prev.question) === normalize(q.question) || similarity(prev.question,q.question) >= 0.72)) continue;
-      accepted.push({...q, correctAnswer:Number(q.correctAnswer), options:q.options.map(String).slice(0,4)});
+      const normalizedQuestion = normalize(q.question);
+      // HARD duplicate barrier: exact matches are rejected regardless of similarity score.
+      if (excluded.some(prev => normalize(prev) === normalizedQuestion)) continue;
+      if (excluded.some(prev => similarity(prev,q.question) >= 0.72)) continue;
+      if (accepted.some(prev => normalize(prev.question) === normalizedQuestion || similarity(prev.question,q.question) >= 0.72)) continue;
+      const cleanOptions=q.options.map(String).map(x=>x.trim());
+      if (!optionLengthsBalanced(cleanOptions)) continue;
+      accepted.push({...q, correctAnswer:Number(q.correctAnswer), options:cleanOptions.slice(0,4)});
       if (accepted.length >= safeCount) break;
     }
 
