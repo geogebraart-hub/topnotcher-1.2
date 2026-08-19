@@ -533,14 +533,14 @@ function Schedule({sessions,onAdd,onEdit,onDelete,onToggleDone}) {
       <section className="panel calendar">
         <div className="calendar-head"><h2>{month.toLocaleString("en-US",{month:"long"})} {year}</h2><div className="calendar-nav"><button aria-label="Previous month" onClick={()=>setMonth(new Date(year,mon-1,1))}><ChevronLeft/></button><button aria-label="Next month" onClick={()=>setMonth(new Date(year,mon+1,1))}><ChevronRight/></button></div></div>
         <div className="weekday">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map(x=><b key={x}>{x}</b>)}</div>
-        <div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{monthSessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getDate()===d}).map(s=><button type="button" className={`calendar-event ${s.type} ${s.completed?"done":""}`} key={s.id} title={`${s.title} — ${typeLabel(s.type)} · ${categoryLabel(s.studyCategory)}`} onClick={()=>onEdit(s)}><span>{s.title}</span>{s.completed&&<CheckCircle2 size={11}/>}</button>)}</>}</div>)}</div>
+        <div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{monthSessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getDate()===d}).map(s=><button type="button" className={`calendar-event category-${s.studyCategory||"gened"} ${s.completed?"done":""}`} key={s.id} title={`${s.title} — ${categoryLabel(s.studyCategory)} · ${typeLabel(s.type)} · ${s.hours||1} hr${Number(s.hours||1)===1?"":"s"}`} onClick={()=>onEdit(s)}><span>{s.title}</span>{s.completed&&<CheckCircle2 size={11}/>}</button>)}</>}</div>)}</div>
       </section>
       <aside className="panel event-side schedule-list-panel">
         <div className="schedule-side-head"><div><h3>Schedules</h3><span>{monthSessions.length} this month</span></div><button className="secondary-btn compact" onClick={onAdd}><Plus size={16}/> Add</button></div>
         <div className="schedule-event-list">
           {monthSessions.length ? monthSessions.map(s=><div className={`schedule-event-card ${s.completed?"is-done":""}`} key={s.id}>
-            <div className={`schedule-event-dot ${s.type}`}></div>
-            <div className="schedule-event-info"><strong className={s.completed?"completed-title":""}>{s.title}</strong><span>{new Date(s.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})} · {typeLabel(s.type)} · {categoryLabel(s.studyCategory)}</span></div>
+            <div className={`schedule-event-dot category-${s.studyCategory||"gened"}`}></div>
+            <div className="schedule-event-info"><strong className={s.completed?"completed-title":""}>{s.title}</strong><span>{new Date(s.date+"T00:00:00").toLocaleDateString("en-US",{weekday:"short",month:"short",day:"numeric",year:"numeric"})} · {categoryLabel(s.studyCategory)} · {typeLabel(s.type)} · {s.hours||1} hr{Number(s.hours||1)===1?"":"s"}</span></div>
             <div className="schedule-event-actions">
               <button title={s.completed?"Mark as pending":"Mark as done"} className={s.completed?"done-action":""} onClick={()=>onToggleDone(s.id)}><CheckCircle2 size={17}/></button>
               <button title="Edit schedule" onClick={()=>onEdit(s)}><Pencil size={16}/></button>
@@ -746,6 +746,12 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
         const candidates=[...existingStems,...used];
         return candidates.some(prev=>normalizeStem(prev)===normalizeStem(stem) || similarityScore(prev,stem)>=0.72);
       };
+      const optionsAreBalanced=opts=>{
+        const lengths=opts.map(o=>String(o||"").trim().length).sort((a,b)=>a-b);
+        if(lengths.length!==4||lengths.some(n=>n<1)) return false;
+        const median=(lengths[1]+lengths[2])/2||1;
+        return Math.max(...lengths)<=median*1.55 && Math.min(...lengths)>=median*0.55;
+      };
       let attempts=0;
       while(all.length<count && attempts<Math.max(8,Math.ceil(count/10)+4)){
         attempts++;
@@ -754,7 +760,7 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
         const res=await fetch("/api/generate-questions",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({
           material,category:deck?.category||"gened",topic,count:batchCount,difficulty,sourceName,
           targetPositions:requestedPositions,
-          excludeQuestions:all.map(q=>q.question)
+          excludeQuestions:existingStems
         })});
         const contentType=res.headers.get("content-type")||"";
         const data=contentType.includes("application/json") ? await res.json() : {error:await res.text()};
@@ -767,6 +773,7 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
           if(all.length>=count) break;
           const key=normalizeStem(q.question);
           if(!key || isDuplicateOrSimilar(q.question)) continue;
+          if(!optionsAreBalanced(q.options)) continue;
           let correct=Number(q.correctAnswer);
           if(!Number.isInteger(correct)||correct<0||correct>3) continue;
           const target=positions[all.length];
@@ -858,14 +865,16 @@ function SessionModal({close,save,initial}) {
   const [date,setDate]=useState(initial?.date||new Date().toISOString().slice(0,10));
   const [type,setType]=useState(initial?.type||"study");
   const [studyCategory,setStudyCategory]=useState(initial?.studyCategory||"gened");
+  const [hours,setHours]=useState(initial?.hours ?? 1);
   const [completed,setCompleted]=useState(Boolean(initial?.completed));
-  const submit=()=>{if(!title.trim()||!date)return;save({title:title.trim(),date,type,studyCategory,completed});};
+  const submit=()=>{if(!title.trim()||!date||!(Number(hours)>0))return;save({title:title.trim(),date,type,studyCategory,hours:Number(hours),completed});};
   return <div className="modal-backdrop"><div className="small-modal schedule-modal">
     <div className="modal-head"><div><h2>{initial?"Edit Schedule":"Add Schedule"}</h2><span className="muted">Plan a study session, mock exam, or daily drill.</span></div><button onClick={close}><X/></button></div>
     <label>Schedule title<input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Review Assessment of Learning"/></label>
     <label>Date<input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label>
     <label>Schedule type<select value={type} onChange={e=>setType(e.target.value)}><option value="study">Study Session</option><option value="mock">Mock Exam</option><option value="drill">Daily Drill</option></select></label>
     <label>Study area<select value={studyCategory} onChange={e=>setStudyCategory(e.target.value)}><option value="gened">GenEd</option><option value="profed">ProfEd</option><option value="majorship">Major</option></select></label>
+    <label>Target study hours<input type="number" min="0.5" max="12" step="0.5" value={hours} onChange={e=>setHours(e.target.value)} placeholder="e.g. 2"/><span className="field-hint">How many hours do you want to achieve in this schedule?</span></label>
     {initial&&<label className="schedule-check"><input type="checkbox" checked={completed} onChange={e=>setCompleted(e.target.checked)}/><span>Mark this schedule as done</span></label>}
     <button className="primary-btn wide" disabled={!title.trim()||!date} onClick={submit}><Save size={17}/>{initial?"Save Changes":"Add Schedule"}</button>
   </div></div>;
