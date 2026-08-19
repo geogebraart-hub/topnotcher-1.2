@@ -12,11 +12,7 @@ import {
 export function TopnotcherBrand({ compact = false }) {
   return (
     <div className={`topnotcher-brand ${compact ? "topnotcher-brand-compact" : ""}`} aria-label="TOPNOTCHER! By God's Grace">
-      <svg className="topnotcher-medal" viewBox="0 0 48 56" aria-hidden="true">
-        <path d="M13 4h8l3 10 3-10h8l-5 18H18L13 4Z" />
-        <circle cx="24" cy="34" r="13" />
-        <path d="M24 26l2.2 4.6 5.1.7-3.7 3.6.9 5.1-4.5-2.4-4.5 2.4.9-5.1-3.7-3.6 5.1-.7L24 26Z" />
-      </svg>
+      <span className="topnotcher-logo-circle" aria-hidden="true"><span>★</span></span>
       <div className="topnotcher-wordmark">
         <div className="topnotcher-name">TOPNOTCHER!</div>
         <div className="topnotcher-tagline">By God's Grace</div>
@@ -69,16 +65,7 @@ function usePersistedState(key, initial) {
 
 
 function TopnotcherMedal({size=28}) {
-  return (
-    <svg className="topnotcher-medal-svg" width={size} height={size} viewBox="0 0 48 48" fill="none" aria-hidden="true">
-      <path d="M16 5h6l2 12h-6L16 5Z" />
-      <path d="M26 5h6l-2 12h-6l2-12Z" />
-      <circle cx="24" cy="28" r="11.5" />
-      <circle cx="24" cy="28" r="7.2" />
-      <path d="M24 22.8l1.55 3.25 3.58.52-2.59 2.52.61 3.56L24 30.97l-3.15 1.66.6-3.56-2.58-2.52 3.57-.52L24 22.8Z" />
-      <path d="M17.2 37.2 13.5 44l10.5-4.3L34.5 44l-3.7-6.8" />
-    </svg>
-  );
+  return <span className="topnotcher-logo-circle topnotcher-logo-circle-small" style={{width:size,height:size}} aria-hidden="true"><span>★</span></span>;
 }
 
 function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpen=false, studyMode=false}) {
@@ -313,7 +300,19 @@ function App({ authUser, onSignOut }) {
       {page==="decks" && <Decks decks={decks} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} deleteDeck={deleteDeck}/>} 
       {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
-      {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id))} onToggleDone={id=>setSessions(ss=>ss.map(s=>s.id===id?{...s,completed:!s.completed}:s))}/>} 
+      {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>{setSessions(ss=>ss.filter(s=>s.id!==id));setSessions(ss=>ss.filter(s=>!(s.scheduleLogId===id)));}} onToggleDone={id=>setSessions(ss=>{
+        const target=ss.find(s=>s.id===id);
+        if(!target) return ss;
+        const nextDone=!target.completed;
+        const updated=ss.map(s=>s.id===id?{...s,completed:nextDone,completedAt:nextDone?new Date().toISOString():null}:s);
+        const existingLog=ss.find(s=>s.scheduleLogId===id);
+        if(nextDone && !existingLog){
+          updated.push({id:`schedule-log-${id}`,scheduleLogId:id,type:"schedule",title:target.title,studyCategory:target.studyCategory,minutes:Number(target.hours||0)*60,answered:0,correct:0,percentage:100,wrongQuestions:[],finishedAt:new Date().toISOString()});
+        } else if(!nextDone && existingLog){
+          return updated.filter(s=>s.scheduleLogId!==id);
+        }
+        return updated;
+      })}/>} 
 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck}/>} 
       {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
