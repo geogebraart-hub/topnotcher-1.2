@@ -2758,3 +2758,22 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
  .scanner-q{padding-top:0}
  .danger-outline{width:100%;justify-content:center}
 }
+
+/* V64 — Mock Board Exam Paper Mode / printable LET-style practice answer sheet */
+.paper-static-options button:disabled{opacity:1!important;cursor:default!important;color:#43546f!important;background:#fff!important}
+.paper-answer-hint{display:flex;align-items:flex-start;gap:9px;margin-top:16px;padding:12px 14px;border:1px solid #cbd8ee;background:#f5f8ff;color:#4f6480;border-radius:12px;font-size:13px;line-height:1.45}
+.paper-mode-actions{display:flex;justify-content:center;gap:12px;flex-wrap:wrap;margin:24px 0}
+.paper-mode-note{display:flex;gap:12px;align-items:flex-start;padding:16px;border:1px solid #d9e2ef;background:#f7f9fc;border-radius:14px;color:#53657e;line-height:1.5}
+.paper-mode-note svg{color:var(--primary);flex:none;margin-top:2px}.paper-mode-note p{margin:5px 0 0}
+.paper-submit-card{max-width:900px!important}.paper-verified{margin-top:20px}.paper-verified .result-score{margin-top:0}
+.paper-scan-modal{width:min(620px,calc(100vw - 28px))!important;max-height:90dvh;overflow:auto}
+.paper-scan-modal .modal-head h2{display:flex;align-items:center;gap:8px}
+.upload-drop{position:relative;display:flex!important;align-items:center;justify-content:center;text-align:center;gap:7px;padding:25px!important;border:2px dashed #cbd6e6!important;background:#f8faff!important;border-radius:14px!important;cursor:pointer}
+.upload-drop input{position:absolute!important;inset:0!important;width:100%!important;height:100%!important;opacity:0!important;cursor:pointer}
+.upload-drop b{color:#314761}.upload-drop span{font-size:12px;color:#8b9ab0}
+.paper-scan-actions,.camera-actions{display:flex;justify-content:center;gap:9px;flex-wrap:wrap;margin:13px 0}
+.scan-file-list{display:grid;gap:6px;margin:12px 0}.scan-file-list div{display:flex;justify-content:space-between;gap:10px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;background:var(--surface-soft,#f7f8fc);font-size:12px}.scan-file-list b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.scan-note{display:flex;gap:8px;align-items:flex-start;margin:12px 0;padding:10px 11px;border-radius:10px;background:#fff9e8;color:#79613a;font-size:11px;line-height:1.45}.scan-result{margin-top:12px;padding:13px;border-radius:12px;background:#ecfdf5;color:#176a49;display:flex;flex-direction:column;gap:3px}.scan-result b{font-size:18px}.scan-result span{font-size:12px}
+.camera-box{position:relative;background:#111;border-radius:14px;overflow:hidden}.camera-box video{display:block;width:100%;max-height:62vh;object-fit:contain;background:#111}.camera-guide{position:absolute;left:12px;right:12px;top:12px;padding:8px 10px;border-radius:8px;background:#111b;color:#fff;text-align:center;font-size:12px}.camera-actions{position:absolute;bottom:12px;left:0;right:0;margin:0}
+.spin{animation:paperSpin .9s linear infinite}@keyframes paperSpin{to{transform:rotate(360deg)}}
+@media(max-width:760px){.paper-mode-actions{flex-direction:column}.paper-mode-actions button{width:100%}.paper-mode-note{font-size:12px}.paper-scan-actions button{flex:1}.camera-actions{padding:0 12px}.camera-actions button{flex:1}}
