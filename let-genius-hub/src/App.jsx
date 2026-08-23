@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
-  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown
+  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, Clock3, Copy, ExternalLink
 } from "lucide-react";
 
 export function TopnotcherBrand({ compact = false }) {
@@ -96,6 +96,63 @@ function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpe
   </aside>;
 }
 
+
+const SHARE_EXPIRY_MS = 5 * 60 * 60 * 1000;
+
+function bytesToBase64Url(bytes) {
+  let binary = "";
+  const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  const chunk = 0x8000;
+  for (let i = 0; i < arr.length; i += chunk) binary += String.fromCharCode(...arr.subarray(i, i + chunk));
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+function base64UrlToBytes(value) {
+  const base64 = String(value).replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (String(value).length % 4)) % 4);
+  const binary = atob(base64);
+  return Uint8Array.from(binary, c => c.charCodeAt(0));
+}
+async function deriveShareKey(password, salt) {
+  const material = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:120000, hash:"SHA-256"}, material, {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+}
+async function createStudyShareToken(deck, questions, password) {
+  if (!crypto?.subtle) throw new Error("Secure browser encryption is unavailable on this device.");
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const key = await deriveShareKey(password, salt);
+  const payload = {
+    v: 1,
+    exp: Date.now() + SHARE_EXPIRY_MS,
+    deckName: deck?.name || "Shared Study Questions",
+    category: deck?.category || "gened",
+    questions: questions.map(q => ({id:q.id, q:q.q, options:q.options, answer:q.answer, explanation:q.explanation}))
+  };
+  const encrypted = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(JSON.stringify(payload)));
+  return `${bytesToBase64Url(salt)}.${bytesToBase64Url(iv)}.${bytesToBase64Url(new Uint8Array(encrypted))}`;
+}
+async function openStudyShareToken(token, password) {
+  if (!crypto?.subtle) throw new Error("Secure browser decryption is unavailable on this device.");
+  const parts = String(token || "").split(".");
+  if (parts.length !== 3) throw new Error("Invalid or incomplete share link.");
+  const salt = base64UrlToBytes(parts[0]);
+  const iv = base64UrlToBytes(parts[1]);
+  const ciphertext = base64UrlToBytes(parts[2]);
+  const key = await deriveShareKey(password, salt);
+  let plain;
+  try {
+    plain = await crypto.subtle.decrypt({name:"AES-GCM", iv}, key, ciphertext);
+  } catch {
+    throw new Error("Incorrect password or invalid share link.");
+  }
+  const payload = JSON.parse(new TextDecoder().decode(plain));
+  if (!payload?.exp || Date.now() >= payload.exp) throw new Error("This study link has expired. Share links are valid for 5 hours.");
+  if (!Array.isArray(payload.questions) || !payload.questions.length) throw new Error("This share link contains no study questions.");
+  return payload;
+}
+function clearShareHash() {
+  if (window.location.hash.startsWith("#share=")) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+}
+
 function App({ authUser, onSignOut }) {
   const [page, setPage] = useState("progress");
   const [theme, setTheme] = usePersistedState(accountStorageKey(authUser, "lgh-theme"), "light");
@@ -126,11 +183,22 @@ function App({ authUser, onSignOut }) {
   const [showSettings, setShowSettings] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [examSession, setExamSession] = usePersistedState(accountStorageKey(authUser, "lgh-active-exam"), null);
+  const [shareDeck, setShareDeck] = useState(null);
+  const [shareToken, setShareToken] = useState(null);
+  const [shareOpen, setShareOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.body.dataset.theme = theme;
   }, [theme]);
+
+  useEffect(() => {
+    const hash = window.location.hash || "";
+    if (hash.startsWith("#share=")) {
+      setShareToken(decodeURIComponent(hash.slice(7)));
+      setShareOpen(true);
+    }
+  }, []);
 
   useEffect(() => {
     // Daily login/activity streak: opening the app counts as activity for today.
@@ -182,7 +250,11 @@ function App({ authUser, onSignOut }) {
   }
 
   function startDrill(cat = category) {
-    const pool = questions.filter(q => q.cat === cat);
+    const pool = questions.filter(q => q.cat === cat).sort(()=>Math.random()-0.5).slice(0, 20);
+    if (pool.length < 20) {
+      alert(`Daily Drill requires at least 20 questions in this category. Only ${pool.length} are currently available.`);
+      return;
+    }
     startStudy(pool, `${CATEGORIES.find(c=>c.id===cat)?.label || "Daily"} Drill`);
   }
 
@@ -284,7 +356,15 @@ function App({ authUser, onSignOut }) {
 
   function jumpStudy(index) { setStudyPool(d => { if (!d) return d; const item=d.pool[index]; const saved=d.answers?.[item.id]; return {...d,index,selected:saved===undefined?null:saved,checked:saved!==undefined}; }); }
 
+  function startSharedStudy(payload) {
+    const pool = Array.isArray(payload?.questions) ? payload.questions : [];
+    setStudyPool({ label:`Shared · ${payload?.deckName || "Study Questions"}`, pool:[...pool].sort(()=>Math.random()-0.5), index:0, correct:0, answered:0, selected:null, checked:false, answers:{}, results:{}, startedAt:Date.now(), finishedRecorded:false, shared:true });
+    setShareOpen(false); setShareToken(null); clearShareHash();
+  }
+
   return <>
+    {shareOpen && shareToken && <SharedStudyAccessModal token={shareToken} onClose={()=>{setShareOpen(false);setShareToken(null);clearShareHash();}} onOpen={startSharedStudy} />}
+    {shareDeck && <ShareStudyQuestionsModal deck={shareDeck} questions={questions.filter(q=>q.deckId===shareDeck.id)} onClose={()=>setShareDeck(null)} />}
     {studyPool && <StudyModal onSignOut={onSignOut} study={studyPool} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile} theme={theme}/>}
     {flashcardStudyPool && <FlashcardStudyModal cards={flashcardStudyPool} close={()=>setFlashcardStudyPool(null)} onFinish={({minutes,answered,correct,percentage})=>setSessions(ss=>[...ss,{id:Date.now(),type:"flashcard",answered,correct,minutes,percentage,wrongQuestions:[],finishedAt:new Date().toISOString()}])} />}
     {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats} theme={theme}/>}
@@ -298,7 +378,7 @@ function App({ authUser, onSignOut }) {
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme} authUser={authUser}/>}
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} sessions={sessions} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
       {page==="decks" && <Decks decks={decks} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} deleteDeck={deleteDeck}/>} 
-      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))}/>} 
+      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>{setSessions(ss=>ss.filter(s=>s.id!==id));setSessions(ss=>ss.filter(s=>!(s.scheduleLogId===id)));}} onToggleDone={id=>setSessions(ss=>{
         const target=ss.find(s=>s.id===id);
@@ -328,16 +408,16 @@ function PageHeader({title,subtitle,action}) { return <div className="page-heade
 
 function Dashboard({setPage,streak,category,setCategory,startDrill,stats,decks,questions}) {
   const cat=CATEGORIES.find(c=>c.id===category)||CATEGORIES[0];
-  return <div><PageHeader title="Daily Drill" subtitle="One question at a time — build your review habit daily." action={<div className="streak-pill"><Flame size={20}/> {streak} day streak</div>}/>
+  return <div><PageHeader title="Daily Drill" subtitle="20 questions per daily drill — build your review habit daily." action={<div className="streak-pill"><Flame size={20}/> {streak} day streak</div>}/>
     <div className="category-tabs">{CATEGORIES.slice(0,3).map(c=><button className={category===c.id?"selected":""} key={c.id} onClick={()=>setCategory(c.id)}><c.icon size={20}/>{c.label}</button>)}</div>
-    <section className="hero-card"><div className="hero-icon"><Target size={42}/></div><h2>{cat.title.replace("General Education","GenEd")} Drill</h2><div className="hero-count">{questions.filter(q=>q.cat===cat.id).length} questions available</div><p>Answer one question at a time. Each correct answer on your first<br className="desktop"/> daily drill keeps your streak alive!</p><button className="primary-btn big" onClick={()=>startDrill(category)}><Play size={20} fill="currentColor"/> Start Drill</button></section>
+    <section className="hero-card"><div className="hero-icon"><Target size={42}/></div><h2>{cat.title.replace("General Education","GenEd")} Drill</h2><div className="hero-count">20 questions per drill · {questions.filter(q=>q.cat===cat.id).length} available</div><p>Answer one question at a time. Each correct answer on your first<br className="desktop"/> daily drill keeps your streak alive!</p><button className="primary-btn big" onClick={()=>startDrill(category)}><Play size={20} fill="currentColor"/> Start Drill</button></section>
     <div className="three-cards">{CATEGORIES.slice(0,3).map(c=><button className="info-card" key={c.id} onClick={()=>{setCategory(c.id);startDrill(c.id)}}><div className={"mini-icon "+c.color}><c.icon size={24}/></div><h3>{c.label}</h3><p>{questions.filter(q=>q.cat===c.id).length} questions</p></button>)}</div>
     <div className="streak-banner"><Flame/><div><b>Start your streak today!</b> Answer at least one question correctly to keep your streak alive.</div><strong>{streak} days</strong></div>
     <div className="quick-grid"><button onClick={()=>setPage("progress")}><BarChart3/><span>View progress</span></button><button onClick={()=>setPage("decks")}><Layers3/><span>Open study decks</span></button><button onClick={()=>setPage("mock")}><FileText/><span>Take a mock exam</span></button></div>
   </div>;
 }
 
-function DailyDrill({category,setCategory,startDrill,streak,questions}) { return <div><PageHeader title="Daily Drill" subtitle="Practice one question at a time and keep your streak going." action={<div className="streak-pill"><Flame size={20}/>{streak} day streak</div>}/><div className="drill-layout"><section className="panel"><div className="panel-title"><Target/> Choose a category</div><div className="choice-list">{CATEGORIES.slice(0,3).map(c=><button className={"choice-card "+(category===c.id?"chosen":"")} key={c.id} onClick={()=>setCategory(c.id)}><div className={"mini-icon "+c.color}><c.icon size={23}/></div><div><b>{c.title}</b><span>{questions.filter(q=>q.cat===c.id).length} questions available</span></div>{category===c.id&&<div className="check-dot">✓</div>}</button>)}</div><button className="primary-btn wide" onClick={()=>startDrill(category)}><Play size={19}/> Start {CATEGORIES.find(c=>c.id===category)?.label} Drill</button></section><aside className="panel tips"><h3>How it works</h3><p><Target/> Answer one question at a time.</p><p><Trophy/> A correct first answer helps your daily streak.</p><p><Sparkles/> Review the explanation after submitting.</p></aside></div></div>; }
+function DailyDrill({category,setCategory,startDrill,streak,questions}) { return <div><PageHeader title="Daily Drill" subtitle="Practice 20 questions one at a time and keep your streak going." action={<div className="streak-pill"><Flame size={20}/>{streak} day streak</div>}/><div className="drill-layout"><section className="panel"><div className="panel-title"><Target/> Choose a category</div><div className="choice-list">{CATEGORIES.slice(0,3).map(c=><button className={"choice-card "+(category===c.id?"chosen":"")} key={c.id} onClick={()=>setCategory(c.id)}><div className={"mini-icon "+c.color}><c.icon size={23}/></div><div><b>{c.title}</b><span>{Math.min(20, questions.filter(q=>q.cat===c.id).length)} selected · 20 required</span></div>{category===c.id&&<div className="check-dot">✓</div>}</button>)}</div><button className="primary-btn wide" onClick={()=>startDrill(category)}><Play size={19}/> Start {CATEGORIES.find(c=>c.id===category)?.label} Drill</button></section><aside className="panel tips"><h3>How it works</h3><p><Target/> Answer one question at a time.</p><p><Trophy/> A correct first answer helps your daily streak.</p><p><Sparkles/> Review the explanation after submitting.</p></aside></div></div>; }
 
 function Progress({stats,streak,decks,mockScores,questions,questionStats,sessions=[],setPage,setCategory,profile}) {
   const accuracy=stats.answered?stats.correct/stats.answered*100:0;
@@ -376,7 +456,7 @@ function Decks({decks,questions,questionStats,flashcards,setPage,openDeck,setSho
 
 function DeckCard({deck,questions,questionStats,flashcardCount,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; return <div className="deck-card"><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"}</span><div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {flashcardCount||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}><Play size={17}/> Open Deck</button></div>; }
 
-function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onEdit,onDelete,onStudy,onStudyFlashcards}) {
+function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onEdit,onDelete,onStudy,onStudyFlashcards,onShare}) {
   const [selectedQuestion,setSelectedQuestion]=useState(null);
   const [selectedFlashcard,setSelectedFlashcard]=useState(null);
   const [activeTab,setActiveTab]=useState("questions");
@@ -421,6 +501,7 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
       <div className="detail-primary-actions">
         <button className="primary-btn study-now-inline" onClick={onStudy} disabled={!questions.length}><Play size={17}/> Study Questions Now</button>
         <button className="secondary-btn study-now-inline" onClick={onStudyFlashcards} disabled={!flashcards.length}><BookOpen size={17}/> Study Flashcards Now</button>
+        <button className="secondary-btn study-now-inline share-study-btn" onClick={onShare} disabled={!questions.length}><Link2 size={17}/> Share Study Questions</button>
         <div className="deck-content-tabs" role="tablist" aria-label="Deck content">
           <button role="tab" aria-selected={activeTab==="questions"} className={activeTab==="questions"?"active":""} onClick={()=>setActiveTab("questions")}><FileText size={17}/> Questions <span>{questions.length}</span></button>
           <button role="tab" aria-selected={activeTab==="flashcards"} className={activeTab==="flashcards"?"active":""} onClick={()=>setActiveTab("flashcards")}><Layers3 size={17}/> Flashcards <span>{flashcards.length}</span></button>
@@ -590,7 +671,7 @@ function MockBoard({category,setCategory,mockScores,mockHistory,setExamSession,q
     const ordered=shuffle?[...pool].sort(()=>Math.random()-0.5):[...pool];
     setExamSession({id:Date.now(), category, requestedCount:count, pool:ordered.slice(0,actualCount), timeLimit, showExplanations:explain, startedAt:Date.now(), paperMode});
   };
-  return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><div><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.id==="full"?QUESTION_BANK_COUNTS.full:QUESTION_BANK_COUNTS[c.id]}+ items</span><span>◷ {c.hours}</span></div></button>)}</div><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150,200,250,300,350,400,420].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/><Toggle label="Paper Mode" hint="Answer on a printed pencil-shading sheet; questions still appear on screen." value={paperMode} setValue={setPaperMode}/></div><aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Category</dt><dd>{selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Available</dt><dd>{available}</dd><dt>Time limit</dt><dd>{timeLimit} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div>{available>0&&available<count&&<div className="form-hint"><CircleHelp/> Only {available} questions are currently available, so this attempt will use {available} items.</div>}<div className="bank-ready"><CheckCircle2/> <span><b>Question bank ready.</b> Built-in LET-style items are available for long-form practice.</span></div><h4>RECENT SCORES</h4>{mockHistory?.length?<div className="recent-scores">{mockHistory.slice(-5).reverse().map((s,i)=><span key={i}>{s.score}%</span>)}</div>:<p className="muted">No attempts yet</p>}{paperMode&&<PreviewPaperSheetButton category={category} count={Math.min(count,available)} questions={questions}/>}<button className="primary-btn wide" onClick={start}>Start Exam <ChevronRight/></button></aside></div></div>;
+  return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><div><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.id==="full"?QUESTION_BANK_COUNTS.full:QUESTION_BANK_COUNTS[c.id]}+ items</span><span>◷ {c.hours}</span></div></button>)}</div><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150,200,250,300,350,400,420].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/><Toggle label="Paper Mode" hint="Answer on a printed pencil-shading sheet; questions still appear on screen." value={paperMode} setValue={setPaperMode}/></div><aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Category</dt><dd>{selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Available</dt><dd>{available}</dd><dt>Time limit</dt><dd>{timeLimit} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div>{available>0&&available<count&&<div className="form-hint"><CircleHelp/> Only {available} questions are currently available, so this attempt will use {available} items.</div>}<div className="bank-ready"><CheckCircle2/> <span><b>Question bank ready.</b> Built-in LET-style items are available for long-form practice.</span></div><h4>RECENT SCORES</h4>{mockHistory?.length?<div className="recent-scores">{mockHistory.slice(-5).reverse().map((s,i)=><span key={i}>{s.score}%</span>)}</div>:<p className="muted">No attempts yet</p>}<PreviewPaperSheetButton category={category} count={Math.min(count,available)} questions={questions}/><button className="primary-btn wide" onClick={start}>Start Exam <ChevronRight/></button></aside></div></div>;
 }
 
 function ExamRunner({session,close,setMockScores,setMockHistory,setSessions,setQuestionStats,theme="light"}) {
@@ -797,6 +878,38 @@ function FlashcardStudyModal({cards,close,onFinish}) {
       <div className="flashcard-study-actions"><button className="secondary-btn" disabled={index===0} onClick={()=>{setIndex(i=>Math.max(0,i-1));setFlipped(false)}}><ChevronLeft/> Previous</button><button className="primary-btn" onClick={next}>{index===safeCards.length-1?"Finish":"Next Flashcard"}<ChevronRight/></button></div>
     </>}</main>
   </div>;
+}
+
+
+function ShareStudyQuestionsModal({deck,questions,onClose}) {
+  const [password,setPassword]=useState("");
+  const [confirmPassword,setConfirmPassword]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const [link,setLink]=useState("");
+  const [copied,setCopied]=useState(false);
+  const generate=async()=>{
+    setError("");
+    if(password.length<6){setError("Use a password with at least 6 characters.");return;}
+    if(password!==confirmPassword){setError("The passwords do not match.");return;}
+    if(!questions.length){setError("This deck has no questions to share.");return;}
+    setBusy(true);
+    try{
+      const token=await createStudyShareToken(deck,questions,password);
+      setLink(`${window.location.origin}${window.location.pathname}#share=${encodeURIComponent(token)}`);
+    }catch(err){setError(err?.message||"Could not create the share link.");}
+    finally{setBusy(false);}
+  };
+  const copy=async()=>{try{await navigator.clipboard.writeText(link);setCopied(true);setTimeout(()=>setCopied(false),1800);}catch{setError("Copy failed. Select and copy the link manually.");}};
+  return <div className="modal-backdrop"><div className="small-modal share-study-modal"><div className="modal-head"><div><span className="question-label">SHARE STUDY QUESTIONS</span><h2>Share this deck's questions</h2><span className="muted">Recipients can open the Study Questions Now experience only. The link expires automatically after 5 hours.</span></div><button onClick={onClose}><X/></button></div><div className="share-info-grid"><div><Link2 size={18}/><span><b>{questions.length} questions</b><small>Shared study set</small></span></div><div><Clock3 size={18}/><span><b>5 hours</b><small>Automatic expiry</small></span></div><div><LockKeyhole size={18}/><span><b>Password protected</b><small>Never stored in the link</small></span></div></div><label>Share password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete="new-password"/></label><label>Confirm password<input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Re-enter password" autoComplete="new-password"/></label>{error&&<div className="ai-error">{error}</div>}{link&&<div className="share-link-box"><div><b>Share link</b><span>The encrypted link expires 5 hours after it was generated.</span></div><input readOnly value={link} onFocus={e=>e.currentTarget.select()}/><div className="share-link-actions"><button className="secondary-btn" onClick={copy}><Copy size={16}/>{copied?"Copied":"Copy Link"}</button><button className="secondary-btn" onClick={()=>window.open(link,"_blank","noopener,noreferrer")}><ExternalLink size={16}/> Open Link</button></div></div>}<div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button><button className="primary-btn" onClick={generate} disabled={busy}>{busy?<><Loader2 className="spin" size={17}/> Creating…</>:<><Link2 size={17}/> {link?"Regenerate 5-Hour Link":"Create 5-Hour Link"}</>}</button></div></div></div>;
+}
+
+function SharedStudyAccessModal({token,onClose,onOpen}) {
+  const [password,setPassword]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const unlock=async()=>{setError("");setBusy(true);try{const payload=await openStudyShareToken(token,password);onOpen(payload);}catch(err){setError(err?.message||"Unable to open this shared study set.");}finally{setBusy(false);}};
+  return <div className="modal-backdrop"><div className="small-modal share-access-modal"><div className="modal-head"><div><span className="question-label">SHARED STUDY QUESTIONS</span><h2>Password required</h2><span className="muted">Enter the password provided by the person who shared this Study Questions Now link.</span></div><button onClick={onClose}><X/></button></div><div className="share-access-icon"><LockKeyhole size={30}/></div><label>Share password<input type="password" autoFocus value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password" autoComplete="off"/></label>{error&&<div className="ai-error">{error}</div>}<div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Opening…</>:<><Play size={17}/> Study Questions Now</>}</button></div></div></div>;
 }
 
 function DeckModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}>{CATEGORIES.slice(0,3).map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
