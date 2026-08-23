@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { expandedQuestionBank, QUESTION_BANK_COUNTS } from "./questionBank";
 import {
-  BarChart3, BookOpen, LibraryBig, CalendarDays, ChevronLeft, ChevronRight, CircleHelp,
+  BarChart3, BookOpen, LibraryBig, CalendarDays, ChevronLeft, ChevronRight, CircleHelp, Folder, FolderPlus,
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
@@ -163,6 +163,7 @@ function App({ authUser, onSignOut }) {
   const [lastActiveDate, setLastActiveDate] = usePersistedState(accountStorageKey(authUser, "lgh-last-active-date"), null);
   const [questions, setQuestions] = usePersistedState(accountStorageKey(authUser, "lgh-questions"), seedQuestions);
   const [decks, setDecks] = usePersistedState(accountStorageKey(authUser, "lgh-decks"), seedDecks);
+  const [folders, setFolders] = usePersistedState(accountStorageKey(authUser, "lgh-deck-folders"), []);
   const [sessions, setSessions] = usePersistedState(accountStorageKey(authUser, "lgh-sessions"), []);
   const [mockScores, setMockScores] = usePersistedState(accountStorageKey(authUser, "lgh-mock-scores"), []);
   const [mockHistory, setMockHistory] = usePersistedState(accountStorageKey(authUser, "lgh-mock-history"), []);
@@ -173,6 +174,8 @@ function App({ authUser, onSignOut }) {
   const [flashcardStudyPool, setFlashcardStudyPool] = useState(null);
   const [showDeckModal, setShowDeckModal] = useState(false);
   const [editingDeck, setEditingDeck] = useState(null);
+  const [showFolderModal, setShowFolderModal] = useState(false);
+  const [editingFolder, setEditingFolder] = useState(null);
   const [showQuestionModal, setShowQuestionModal] = useState(false);
   const [showAIModal, setShowAIModal] = useState(false);
   const [aiDeckId, setAiDeckId] = useState(null);
@@ -310,9 +313,22 @@ function App({ authUser, onSignOut }) {
   }
 
   function saveDeck(data) {
-    if (data.id) setDecks(ds => ds.map(d => d.id===data.id ? {...d,...data} : d));
-    else setDecks(ds => [...ds, {id:Date.now(), name:data.name, category:data.category, description:data.description, flashcards:0}]);
+    if (data.id) setDecks(ds => ds.map(d => d.id===data.id ? {...d,...data, folderId:data.folderId||null} : d));
+    else setDecks(ds => [...ds, {id:Date.now(), name:data.name, category:data.category, description:data.description, folderId:data.folderId||null, flashcards:0}]);
     setShowDeckModal(false); setEditingDeck(null);
+  }
+
+  function saveFolder(data) {
+    if (data.id) setFolders(fs => fs.map(f => f.id===data.id ? {...f, name:data.name, description:data.description} : f));
+    else setFolders(fs => [...fs, {id:Date.now(), name:data.name, description:data.description||""}]);
+    setShowFolderModal(false); setEditingFolder(null);
+  }
+
+  function deleteFolder(id) {
+    const folder = folders.find(f => f.id === id);
+    if (!folder || !confirm(`Delete folder “${folder.name}”? Decks inside it will be kept and moved to Uncategorized.`)) return;
+    setFolders(fs => fs.filter(f => f.id !== id));
+    setDecks(ds => ds.map(d => d.folderId === id ? {...d, folderId:null} : d));
   }
 
   function deleteDeck(id) {
@@ -377,7 +393,7 @@ function App({ authUser, onSignOut }) {
       
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme} authUser={authUser}/>}
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} sessions={sessions} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
-      {page==="decks" && <Decks decks={decks} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} deleteDeck={deleteDeck}/>} 
+      {page==="decks" && <Decks decks={decks} folders={folders} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} setShowFolderModal={setShowFolderModal} setEditingFolder={setEditingFolder} deleteFolder={deleteFolder} deleteDeck={deleteDeck}/>} 
       {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>{setSessions(ss=>ss.filter(s=>s.id!==id));setSessions(ss=>ss.filter(s=>!(s.scheduleLogId===id)));}} onToggleDone={id=>setSessions(ss=>{
@@ -394,7 +410,8 @@ function App({ authUser, onSignOut }) {
         return updated;
       })}/>} 
 
-      {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck}/>} 
+      {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck} folders={folders}/>}
+      {showFolderModal && <FolderModal close={()=>{setShowFolderModal(false);setEditingFolder(null)}} save={saveFolder} initial={editingFolder}/>} 
       {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
       {showSessionModal && <SessionModal close={()=>{setShowSessionModal(false);setEditingSession(null)}} save={data=>{if(editingSession?.id){setSessions(ss=>ss.map(s=>s.id===editingSession.id?{...s,...data,id:editingSession.id}:s));}else{setSessions(ss=>[...ss,{id:Date.now(),...data}]);}setShowSessionModal(false);setEditingSession(null)}} initial={editingSession}/>} 
@@ -449,12 +466,25 @@ function Progress({stats,streak,decks,mockScores,questions,questionStats,session
 }
 function Chart({title,type,values}) { return <section className="panel chart-card"><h2>{title}</h2><ChartInner type={type} values={values}/></section>; }
 function ChartInner({type,values}) { return <div className="chart"><div className="ylabels"><span>100</span><span>75</span><span>50</span><span>25</span><span>0</span></div><div className="plot">{[0,25,50,75,100].map(v=><div className="gridline" style={{bottom:`${v}%`}} key={v}/>)}{type==="line"?<svg viewBox="0 0 700 260" preserveAspectRatio="none" className="line-svg"><polyline fill="none" stroke="currentColor" strokeWidth="4" points={values.map((v,i)=>`${values.length===1?350:i*(700/(values.length-1))},${260-(v/100*230)-10}`).join(" ")}/>{values.map((v,i)=><circle key={i} cx={values.length===1?350:i*(700/(values.length-1))} cy={260-(v/100*230)-10} r="5" fill="currentColor"/>)}</svg>:<div className="bars">{values.map((v,i)=><div key={i} className="bar" style={{height:`${Math.max(2,v)}%`}}><span>{v}%</span></div>)}</div>}</div></div>; }
-function Decks({decks,questions,questionStats,flashcards,setPage,openDeck,setShowDeckModal,setEditingDeck,deleteDeck}) {
-  const [search,setSearch]=useState(""); const [filter,setFilter]=useState("All"); const shown=decks.filter(d=>(filter==="All"||d.category===filter.toLowerCase())&&d.name.toLowerCase().includes(search.toLowerCase()));
-  return <div><PageHeader title="Study Decks" subtitle={`${decks.length} decks · ${questions.length} questions total`} action={<button className="primary-btn" onClick={()=>{setEditingDeck(null);setShowDeckModal(true)}}><Plus/> Create Deck</button>}/><div className="deck-toolbar"><div className="search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search decks..."/></div><div className="filters">{["All","GenEd","ProfEd","Majorship","Mixed"].map(x=><button key={x} className={filter===x?"selected":""} onClick={()=>setFilter(x)}>{x}</button>)}</div></div><div className="deck-grid">{shown.map(d=><DeckCard key={d.id} deck={d} questions={questions} questionStats={questionStats} flashcardCount={flashcards.filter(f=>f.deckId===d.id).length} openDeck={openDeck} edit={()=>{setEditingDeck(d);setShowDeckModal(true)}} deleteDeck={deleteDeck}/>)}</div>{!shown.length&&<div className="empty panel"><Layers3/><b>No decks found</b><span>Create a deck or change your search/filter.</span></div>}</div>;
+function Decks({decks,folders,questions,questionStats,flashcards,setPage,openDeck,setShowDeckModal,setEditingDeck,setShowFolderModal,setEditingFolder,deleteFolder,deleteDeck}) {
+  const [search,setSearch]=useState("");
+  const [filter,setFilter]=useState("All");
+  const [folderFilter,setFolderFilter]=useState("All");
+  const shown=decks.filter(d=>{
+    const categoryOk=filter==="All"||d.category===filter.toLowerCase();
+    const folderOk=folderFilter==="All"||(folderFilter==="uncategorized"?!d.folderId:d.folderId===Number(folderFilter));
+    return categoryOk&&folderOk&&d.name.toLowerCase().includes(search.toLowerCase());
+  });
+  return <div>
+    <PageHeader title="Study Decks" subtitle={`${decks.length} decks · ${questions.length} questions total`} action={<div className="deck-page-actions"><button className="secondary-btn compact" onClick={()=>{setEditingFolder(null);setShowFolderModal(true)}}><FolderPlus size={17}/> Create Folder</button><button className="primary-btn" onClick={()=>{setEditingDeck(null);setShowDeckModal(true)}}><Plus/> Create Deck</button></div>}/>
+    {folders.length>0&&<section className="panel deck-folders-panel"><div className="section-head"><div><h2><Folder size={19}/> Deck Folders</h2><span className="muted">Organize your study decks into folders.</span></div><button className="secondary-btn compact" onClick={()=>{setEditingFolder(null);setShowFolderModal(true)}}><FolderPlus size={15}/> New Folder</button></div><div className="folder-chip-row"><button className={`folder-chip ${folderFilter==="All"?"selected":""}`} onClick={()=>setFolderFilter("All")}><Folder size={16}/> All Decks <span>{decks.length}</span></button>{folders.map(f=><div className="folder-chip-wrap" key={f.id}><button className={`folder-chip ${folderFilter===String(f.id)?"selected":""}`} onClick={()=>setFolderFilter(String(f.id))}><Folder size={16}/> {f.name} <span>{decks.filter(d=>d.folderId===f.id).length}</span></button><button className="folder-delete" title={`Delete ${f.name}`} onClick={()=>deleteFolder(f.id)}><Trash2 size={13}/></button></div>)}<button className={`folder-chip ${folderFilter==="uncategorized"?"selected":""}`} onClick={()=>setFolderFilter("uncategorized")}><Folder size={16}/> Uncategorized <span>{decks.filter(d=>!d.folderId).length}</span></button></div></section>}
+    <div className="deck-toolbar"><div className="search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search decks..."/></div><div className="filters">{["All","GenEd","ProfEd","Majorship","Mixed"].map(x=><button key={x} className={filter===x?"selected":""} onClick={()=>setFilter(x)}>{x}</button>)}</div></div>
+    <div className="deck-grid">{shown.map(d=><DeckCard key={d.id} deck={d} folder={folders.find(f=>f.id===d.folderId)} questions={questions} questionStats={questionStats} flashcardCount={flashcards.filter(f=>f.deckId===d.id).length} openDeck={openDeck} edit={()=>{setEditingDeck(d);setShowDeckModal(true)}} deleteDeck={deleteDeck}/>)}</div>
+    {!shown.length&&<div className="empty panel"><Layers3/><b>No decks found</b><span>Create a deck or change your search/filter.</span></div>}
+  </div>;
 }
 
-function DeckCard({deck,questions,questionStats,flashcardCount,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; return <div className="deck-card"><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"}</span><div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {flashcardCount||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}><Play size={17}/> Open Deck</button></div>; }
+function DeckCard({deck,folder,questions,questionStats,flashcardCount,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; const categoryLabel=deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"); return <div className="deck-card"><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{categoryLabel}</span>{folder&&<span className="tag folder-tag"><Folder size={12}/> {folder.name}</span>}<div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {flashcardCount||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}><Play size={17}/> Open Deck</button></div>; }
 
 function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onEdit,onDelete,onStudy,onStudyFlashcards,onShare}) {
   const [selectedQuestion,setSelectedQuestion]=useState(null);
@@ -495,7 +525,7 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
   const attempts=questions.reduce((sum,q)=>sum+(questionStats[q.id]?.attempts||0),0);
   const pct=questions.length?Math.round(reviewed/questions.length*100):0;
   return <div>
-    <PageHeader title={deck.name} subtitle={<><span>{CATEGORIES.find(c=>c.id===deck.category)?.label} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="secondary-btn" onClick={onAI}><WandSparkles size={17}/> AI Generate</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/>
+    <PageHeader title={deck.name} subtitle={<><span>{deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed")} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="secondary-btn" onClick={onAI}><WandSparkles size={17}/> AI Generate</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/>
     <div className="deck-detail-stats"><div><b>{questions.length}</b><span>Questions</span></div><div><b>{reviewed}</b><span>Reviewed</span></div><div><b>{pct}%</b><span>Deck progress</span></div><div><b>{attempts?Math.round(accuracy/attempts*100):0}%</b><span>Accuracy</span></div></div>
     <div className="detail-toolbar deck-action-row">
       <div className="detail-primary-actions">
@@ -912,7 +942,9 @@ function SharedStudyAccessModal({token,onClose,onOpen}) {
   return <div className="modal-backdrop"><div className="small-modal share-access-modal"><div className="modal-head"><div><span className="question-label">SHARED STUDY QUESTIONS</span><h2>Password required</h2><span className="muted">Enter the password provided by the person who shared this Study Questions Now link.</span></div><button onClick={onClose}><X/></button></div><div className="share-access-icon"><LockKeyhole size={30}/></div><label>Share password<input type="password" autoFocus value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password" autoComplete="off"/></label>{error&&<div className="ai-error">{error}</div>}<div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Opening…</>:<><Play size={17}/> Study Questions Now</>}</button></div></div></div>;
 }
 
-function DeckModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}>{CATEGORIES.slice(0,3).map(c=><option key={c.id} value={c.id}>{c.label}</option>)}</select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
+function DeckModal({close,save,initial,folders=[]}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); const [folderId,setFolderId]=useState(initial?.folderId?String(initial.folderId):""); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><div><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><span className="muted">Choose a category and optionally organize the deck into a folder.</span></div><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}><option value="gened">GenEd</option><option value="profed">ProfEd</option><option value="majorship">Majorship</option><option value="mixed">Mixed — GenEd + ProfEd + Majorship</option></select></label><label>Folder<select value={folderId} onChange={e=>setFolderId(e.target.value)}><option value="">No Folder</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category,folderId:folderId?Number(folderId):null})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
+
+function FolderModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); return <div className="modal-backdrop"><div className="small-modal folder-modal"><div className="modal-head"><div><h2>{initial?"Edit Folder":"Create Study Folder"}</h2><span className="muted">Group related study decks together for easier access.</span></div><button onClick={close}><X/></button></div><label>Folder name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. LET 2026 Review"/></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Optional folder description..."/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description:description.trim()})}><Save size={17}/>{initial?"Save Changes":"Create Folder"}</button></div></div>; }
 
 
 function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
