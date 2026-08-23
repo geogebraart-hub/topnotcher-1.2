@@ -2802,3 +2802,23 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
   .share-link-actions{justify-content:stretch}
   .share-link-actions button{flex:1}
 }
+
+/* V68 — Study Deck folders and mixed-category decks */
+.deck-page-actions{display:flex;align-items:center;gap:10px;flex-wrap:nowrap}
+.deck-page-actions .secondary-btn,.deck-page-actions .primary-btn{width:auto;white-space:nowrap}
+.deck-folders-panel{padding:18px 20px;margin-bottom:20px}
+.deck-folders-panel .section-head{margin-bottom:14px}
+.deck-folders-panel .section-head h2{display:flex;align-items:center;gap:8px;margin:0;font-size:18px}
+.folder-chip-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.folder-chip-wrap{display:flex;align-items:center;gap:2px}
+.folder-chip{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--line);background:#fff;color:#596b85;border-radius:11px;padding:9px 12px;font:700 13px/1 inherit;cursor:pointer;white-space:nowrap}
+.folder-chip span{min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#f0f2f7;display:grid;place-items:center;font-size:11px}
+.folder-chip.selected{background:#eef0ff;border-color:#d8d6ff;color:var(--primary)}
+.folder-chip.selected span{background:#dedcff;color:var(--primary)}
+.folder-delete{width:25px;height:25px;border:0;background:transparent;color:#9aa8bb;border-radius:7px;display:grid;place-items:center;cursor:pointer}
+.folder-delete:hover{background:#fff0f0;color:#dc2626}
+.folder-tag{display:inline-flex!important;align-items:center;gap:4px;max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.folder-modal{max-width:500px}
+.app-shell.theme-dark .deck-folders-panel,.app-shell.theme-dark .folder-chip{background:#171c25;color:var(--ink);border-color:var(--line)}
+.app-shell.theme-dark .folder-chip span{background:#30384a;color:#aab6c7}
+@media(max-width:760px){.deck-page-actions{width:100%;overflow:auto;padding-bottom:2px}.deck-page-actions .secondary-btn,.deck-page-actions .primary-btn{flex:0 0 auto}.deck-folders-panel .section-head{align-items:flex-start}.folder-chip-row{overflow:auto;flex-wrap:nowrap;padding-bottom:3px}.folder-chip-wrap{flex:0 0 auto}.folder-chip{flex:0 0 auto}}
