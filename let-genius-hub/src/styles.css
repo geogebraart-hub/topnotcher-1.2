@@ -2777,3 +2777,28 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
 .camera-box{position:relative;background:#111;border-radius:14px;overflow:hidden}.camera-box video{display:block;width:100%;max-height:62vh;object-fit:contain;background:#111}.camera-guide{position:absolute;left:12px;right:12px;top:12px;padding:8px 10px;border-radius:8px;background:#111b;color:#fff;text-align:center;font-size:12px}.camera-actions{position:absolute;bottom:12px;left:0;right:0;margin:0}
 .spin{animation:paperSpin .9s linear infinite}@keyframes paperSpin{to{transform:rotate(360deg)}}
 @media(max-width:760px){.paper-mode-actions{flex-direction:column}.paper-mode-actions button{width:100%}.paper-mode-note{font-size:12px}.paper-scan-actions button{flex:1}.camera-actions{padding:0 12px}.camera-actions button{flex:1}}
+
+/* V67 — shared Study Questions + paper sheet access polish */
+.share-study-btn{border-color:#cfd8e8!important;color:#3f4f68!important;background:#fff!important}
+.share-study-modal{width:min(620px,94vw)!important;max-width:620px!important}
+.share-access-modal{width:min(520px,94vw)!important;max-width:520px!important}
+.share-info-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:4px 0 18px}
+.share-info-grid>div{display:flex;align-items:center;gap:9px;padding:11px;border:1px solid var(--line);background:#f8faff;border-radius:12px;color:#526783;min-width:0}
+.share-info-grid svg{flex:0 0 auto;color:#4f46e5}
+.share-info-grid span{min-width:0;display:flex;flex-direction:column;gap:2px}
+.share-info-grid b{font-size:12px;color:#253653;white-space:nowrap}
+.share-info-grid small{font-size:10px;color:#8ca0bd;line-height:1.25}
+.share-link-box{margin-top:14px;padding:13px;border:1px solid #cfd8e8;border-radius:13px;background:#f8faff;display:flex;flex-direction:column;gap:9px}
+.share-link-box>div:first-child{display:flex;flex-direction:column;gap:2px}
+.share-link-box>div:first-child b{font-size:13px;color:#253653}
+.share-link-box>div:first-child span{font-size:11px;color:#8ca0bd}
+.share-link-box input{width:100%;box-sizing:border-box;font-size:11px;color:#536681;background:#fff;border:1px solid var(--line);border-radius:9px;padding:9px 10px}
+.share-link-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.share-link-actions button{height:34px!important;padding:0 11px!important;font-size:12px!important}
+.share-access-icon{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;margin:4px auto 18px;background:#eef2ff;color:#5147df}
+@media (max-width:760px){
+  .share-info-grid{grid-template-columns:1fr}
+  .share-study-modal,.share-access-modal{width:calc(100vw - 24px)!important}
+  .share-link-actions{justify-content:stretch}
+  .share-link-actions button{flex:1}
+}
