@@ -3352,3 +3352,45 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
 .study-fullscreen .options button:hover *{
   transform:none!important;
 }
+
+
+/* V78.5 — only the two requested visual corrections.
+   1) Study Now choices: slightly smaller, completely static on hover.
+   2) Mock Board Exam Summary: fixed companion position aligned with the
+      Select Exam Category panel, with the existing 24px grid gap preserved. */
+.study-question-card .options button,
+.study-question-card .options button:hover,
+.study-question-card .options button:focus-visible,
+.study-question-card .options button:active,
+.study-question-card .options button:disabled{
+  font-size:15px!important;
+  font-weight:500!important;
+  line-height:1.5!important;
+  transition:none!important;
+  transform:none!important;
+  translate:none!important;
+}
+.study-question-card .options button:hover{
+  border-color:var(--line)!important;
+  background:#fff!important;
+  box-shadow:0 5px 18px rgba(38,52,73,.035)!important;
+}
+.study-question-card .options button>span.math-text{
+  font-size:15px!important;
+  font-weight:500!important;
+}
+
+/* Keep the Exam Summary in the same top row as Select Exam Category.
+   It remains fixed while the mock-board configuration scrolls, while the
+   24px mock-layout gap supplies the visual breathing room horizontally. */
+@media(min-width:1251px){
+  .mock-layout>.exam-summary{
+    position:fixed!important;
+    top:150px!important;
+    right:max(42px,calc((100vw - 1510px)/2 + 42px))!important;
+    width:350px!important;
+    max-width:350px!important;
+    margin:0!important;
+    align-self:start!important;
+  }
+}
