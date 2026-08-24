@@ -3793,3 +3793,197 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
   margin-top: 0 !important;
   margin-bottom: 0 !important;
 }
+
+/* =========================================================
+   FINAL STUDY NOW OPTION HOVER RESET
+   Do not add transforms/transitions to these options elsewhere.
+   ========================================================= */
+
+.study-fullscreen .study-main .study-question-card .options button,
+.study-fullscreen .study-main .study-question-card .options button:hover,
+.study-fullscreen .study-main .study-question-card .options button:focus,
+.study-fullscreen .study-main .study-question-card .options button:focus-visible,
+.study-fullscreen .study-main .study-question-card .options button:active,
+.study-fullscreen .study-main .study-question-card .options button:disabled {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+
+  animation: none !important;
+  transition: none !important;
+
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+
+  filter: none !important;
+  will-change: auto !important;
+
+  /* Keep the exact same shadow in every state */
+  box-shadow: 0 5px 18px rgba(38,52,73,.035) !important;
+}
+
+/* Hover must look EXACTLY like the normal option */
+.study-fullscreen .study-main .study-question-card .options button:hover {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+
+  border-color: var(--line) !important;
+  background: #fff !important;
+  color: #43546f !important;
+
+  box-shadow: 0 5px 18px rgba(38,52,73,.035) !important;
+}
+
+/* Do not allow any child element to animate or zoom */
+.study-fullscreen .study-main .study-question-card .options button *,
+.study-fullscreen .study-main .study-question-card .options button:hover * {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+
+  animation: none !important;
+  transition: none !important;
+
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+}
+
+/* Keep the answer letter and text stationary */
+.study-fullscreen .study-main .study-question-card .options button > span:first-child,
+.study-fullscreen .study-main .study-question-card .options button > .math-text {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+}
+
+/* =========================================================
+   STUDY DECK — EDIT QUESTION MATCHES VIEW QUESTION
+   Visual styling only.
+   ========================================================= */
+
+.question-editor-modal {
+  width: min(680px, calc(100vw - 40px)) !important;
+  max-width: 680px !important;
+  max-height: calc(100dvh - 40px) !important;
+
+  padding: 22px !important;
+  border-radius: 18px !important;
+  box-sizing: border-box !important;
+}
+
+/* Match the View Question header proportions */
+.question-editor-modal .modal-head {
+  margin-bottom: 16px !important;
+  padding-bottom: 0 !important;
+}
+
+.question-editor-modal .modal-head h2 {
+  font-size: 20px !important;
+  line-height: 1.25 !important;
+  margin: 0 !important;
+}
+
+.question-editor-modal .modal-head .muted {
+  display: block !important;
+  margin-top: 4px !important;
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+
+/* Editor section labels */
+.question-editor-modal label,
+.question-editor-modal .option-editor > b {
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+  font-weight: 750 !important;
+}
+
+/* Question and rationale fields */
+.question-editor-modal .question-input,
+.question-editor-modal textarea {
+  font-size: 15px !important;
+  line-height: 1.5 !important;
+  border-radius: 12px !important;
+  padding: 12px 14px !important;
+}
+
+/* Answer choice rows resemble the View Question options */
+.question-editor-modal .option-editor {
+  gap: 8px !important;
+  margin: 10px 0 18px !important;
+}
+
+.question-editor-modal .option-editor-row {
+  grid-template-columns: 32px minmax(0, 1fr) !important;
+  gap: 9px !important;
+}
+
+.question-editor-modal .option-editor-row input {
+  min-height: 42px !important;
+  height: 42px !important;
+  box-sizing: border-box !important;
+
+  padding: 9px 12px !important;
+  border-radius: 11px !important;
+
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+}
+
+/* Smaller A/B/C/D selector */
+.question-editor-modal .option-editor-row .answer-dot {
+  width: 32px !important;
+  height: 32px !important;
+  font-size: 13px !important;
+}
+
+/* Keep the bottom controls compact like View Question */
+.question-editor-modal .question-editor-actions {
+  gap: 8px !important;
+  margin-top: 16px !important;
+}
+
+.question-editor-modal .question-editor-actions .secondary-btn,
+.question-editor-modal .question-editor-actions .primary-btn {
+  min-height: 36px !important;
+  height: 36px !important;
+
+  padding: 8px 14px !important;
+
+  border-radius: 9px !important;
+
+  font-size: 12px !important;
+  line-height: 1 !important;
+
+  white-space: nowrap !important;
+}
+
+/* Keep the editor comfortable on phones */
+@media (max-width: 620px) {
+  .question-editor-modal {
+    width: calc(100vw - 24px) !important;
+    max-width: none !important;
+    max-height: calc(100dvh - 24px) !important;
+    padding: 17px !important;
+    border-radius: 16px !important;
+  }
+
+  .question-editor-modal .modal-head h2 {
+    font-size: 18px !important;
+  }
+
+  .question-editor-modal .option-editor-row input {
+    min-height: 40px !important;
+    height: 40px !important;
+  }
+}
