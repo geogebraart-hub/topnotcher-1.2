@@ -50,6 +50,9 @@ Rules:
 - Correct-answer positions must be distributed across A/B/C/D as evenly as practical. B and C must NOT dominate. Do not follow an obvious A-B-C-D or repeating sequence. If requested positions are supplied, place the correct answer in those positions while keeping the question itself natural.
 - Keep all four choices closely comparable in length and grammatical form. Do not make any choice conspicuously longer or shorter than the others. Aim for roughly the same character length (within about 40%) whenever the content allows.
 - Do not use extra qualifiers, explanations, or unusually specific wording in the correct choice that are absent from distractors.
+- When the source contains mathematics, preserve mathematical meaning exactly. You may use standard Unicode symbols or LaTeX notation such as \(x^2\), \[\frac{a}{b}\], \sqrt{x}, \sum, \int, \leq, \geq, and Greek letters.
+- Mathematical answer choices must be mathematically equivalent only when intended; do not alter operators, exponents, signs, units, or variables accidentally.
+- Keep mathematical expressions readable and syntactically valid. Do not replace equations with vague prose when an equation is required.
 - Return ONLY the requested structured JSON output; no markdown or commentary.`;
 
   const schema = {
