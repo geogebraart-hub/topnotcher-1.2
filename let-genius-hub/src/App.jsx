@@ -1295,10 +1295,42 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
 }
 
 function QuestionModal({close,save,initial,deckId,duringStudy=false}) {
-  const [question,setQuestion]=useState(initial?.q||""); const [options,setOptions]=useState(initial?.options||["","","",""]); const [answer,setAnswer]=useState(initial?.answer??0); const [explanation,setExplanation]=useState(initial?.explanation||"");
+  const [question,setQuestion]=useState(initial?.q||"");
+  const [options,setOptions]=useState(initial?.options||["","","",""]);
+  const [answer,setAnswer]=useState(initial?.answer??0);
+  const [explanation,setExplanation]=useState(initial?.explanation||"");
   const updateOption=(i,v)=>setOptions(os=>os.map((o,idx)=>idx===i?v:o));
-  const submit=()=>{if(!question.trim()||options.some(o=>!o.trim())||!explanation.trim()) return; save({id:initial?.id,deckId, q:question.trim(),options,answer,explanation:explanation.trim()});};
-  return <div className="modal-backdrop"><div className="small-modal question-modal"><div className="modal-head"><div><h2>{initial?"Edit Question":"Add Question"}</h2><span className="muted">{duringStudy ? "Edit this question, then continue answering." : "Multiple-choice question"}</span></div><button onClick={close}><X/></button></div><label>Question / mathematical expression<textarea className="question-input" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Enter the question. You may use symbols or LaTeX, e.g. \frac{a}{b}, x^2, √, ≤, ∑..."/></label><div className="option-editor"><b>Answer choices</b>{options.map((o,i)=><label key={i}><span className={answer===i?"answer-dot selected":"answer-dot"} onClick={()=>setAnswer(i)}>{String.fromCharCode(65+i)}</span><input value={o} onChange={e=>updateOption(i,e.target.value)} placeholder={`Choice ${String.fromCharCode(65+i)}`}/></label>)}</div><label>Explanation / solution<textarea value={explanation} onChange={e=>setExplanation(e.target.value)} placeholder="Explain the answer. Mathematical equations and symbols are supported."/></label><div className="form-hint"><CheckCircle2 size={17}/> Select the letter beside the correct answer.</div><div className="math-support-hint">Math support: type Unicode symbols directly (√, ≤, ≥, π, ∑, ∫, ±, ×, ÷) or use LaTeX delimiters such as <code>\(x^2\)</code> or <code>\[\frac{a}{b}\]</code>.</div><button className="primary-btn wide" disabled={!question.trim()||options.some(o=>!o.trim())||!explanation.trim()} onClick={submit}><Save size={17}/>{duringStudy?"Save & Continue":(initial?"Save Question":"Add Question")}</button></div></div>;
+  const submit=()=>{
+    const cleanQuestion=question.trim();
+    const cleanOptions=options.map(o=>o.trim());
+    const cleanExplanation=explanation.trim();
+    if(!cleanQuestion||cleanOptions.some(o=>!o)||!cleanExplanation) return;
+    save({id:initial?.id,deckId,q:cleanQuestion,options:cleanOptions,answer:Number(answer),explanation:cleanExplanation});
+  };
+  const modal=(
+    <div className="modal-backdrop question-editor-backdrop" role="dialog" aria-modal="true" aria-labelledby="question-editor-title" onMouseDown={e=>{if(e.target===e.currentTarget) close();}}>
+      <div className="small-modal question-modal question-editor-modal" onMouseDown={e=>e.stopPropagation()}>
+        <div className="modal-head">
+          <div><h2 id="question-editor-title">{initial?"Edit Question":"Add Question"}</h2><span className="muted">{duringStudy ? "Edit this question, then continue answering." : "Create a board-exam-style multiple-choice question."}</span></div>
+          <button type="button" aria-label="Close question editor" onClick={close}><X/></button>
+        </div>
+        <label>Question / mathematical expression
+          <textarea className="question-input" value={question} onChange={e=>setQuestion(e.target.value)} placeholder={'Enter the question. Math: x^2, √(x), π, ≤, or LaTeX such as \\(x^2\\) and \\[\\frac{a}{b}\\].'}/>
+        </label>
+        <div className="option-editor"><b>Answer choices</b>{options.map((o,i)=><label key={i} className="option-editor-row"><button type="button" className={answer===i?"answer-dot selected":"answer-dot"} onClick={()=>setAnswer(i)} aria-label={`Set choice ${String.fromCharCode(65+i)} as correct`}>{String.fromCharCode(65+i)}</button><input value={o} onChange={e=>updateOption(i,e.target.value)} placeholder={`Choice ${String.fromCharCode(65+i)}`}/></label>)}</div>
+        <label>Explanation / solution
+          <textarea value={explanation} onChange={e=>setExplanation(e.target.value)} placeholder="Explain the answer. Mathematical equations and symbols are supported."/>
+        </label>
+        <div className="form-hint"><CheckCircle2 size={17}/> Select the letter beside the correct answer.</div>
+        <div className="math-support-hint"><b>Math:</b> Unicode (√, ≤, ≥, π, ∑, ∫, ±, ×, ÷) and LaTeX delimiters \\(…\\) / \\[…\\] are supported.</div>
+        <div className="modal-foot question-editor-actions">
+          <button type="button" className="secondary-btn" onClick={close}>Cancel</button>
+          <button type="button" className="primary-btn" disabled={!question.trim()||options.some(o=>!o.trim())||!explanation.trim()} onClick={submit}><Save size={17}/>{duringStudy?"Save & Continue":(initial?"Save Question":"Add Question")}</button>
+        </div>
+      </div>
+    </div>
+  );
+  return typeof document !== "undefined" ? createPortal(modal, document.body) : null;
 }
 
 function SettingsModal({close,theme,setTheme,profile,openProfile}) { return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your TOPNOTCHER! experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, theme, and study data are stored separately for your signed-in Google account in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
