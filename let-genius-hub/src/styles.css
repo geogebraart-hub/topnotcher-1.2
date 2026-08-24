@@ -3271,3 +3271,84 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
 @media(max-width:1250px){
   .mock-layout>.exam-summary{position:static!important;max-height:none!important;overflow:visible!important;width:auto!important;max-width:none!important;}
 }
+
+/* V78 — Study Now options: slightly smaller, calm V68-style presentation.
+   No hover zoom, lift, scale, or transition on answer choices. */
+.study-question-card .options button,
+.study-question-card .options button:hover,
+.study-question-card .options button:focus,
+.study-question-card .options button:active,
+.study-question-card .options button:disabled{
+  font-size:15px!important;
+  line-height:1.48!important;
+  transition:none!important;
+  transform:none!important;
+}
+.study-question-card .options button:hover{
+  border-color:var(--line)!important;
+  background:#fff!important;
+  box-shadow:0 5px 18px rgba(38,52,73,.035)!important;
+}
+.study-question-card .options button.correct:hover{border-color:#10b981!important;background:#ecfdf5!important;}
+.study-question-card .options button.wrong:hover{border-color:#ef4444!important;background:#fef2f2!important;}
+.study-question-card .options button .math-text,
+.study-question-card .options button .math-text:hover{
+  transition:none!important;
+  transform:none!important;
+}
+
+/* V78 — Mock Board Exam Summary: fixed companion panel aligned with the
+   Select Exam Category bubble (below the page header), never moving with the
+   configuration scroll. The desktop grid reserves the same 350px track. */
+@media(min-width:1251px){
+  .mock-layout{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) 350px!important;
+    gap:24px!important;
+    align-items:start!important;
+    position:relative!important;
+  }
+  .mock-config-panel{grid-column:1!important;min-width:0!important;}
+  .mock-layout>.exam-summary{
+    position:fixed!important;
+    top:150px!important;
+    right:max(24px,calc((100vw - 1440px)/2))!important;
+    width:350px!important;
+    max-width:350px!important;
+    height:max-content!important;
+    min-height:0!important;
+    max-height:none!important;
+    overflow:visible!important;
+    align-self:start!important;
+    box-sizing:border-box!important;
+    z-index:100!important;
+  }
+  .mock-layout>.exam-summary h2{margin-top:0!important;margin-bottom:20px!important;}
+  .mock-layout>.exam-summary dl{margin:0 0 18px!important;}
+  .mock-layout>.exam-summary .warning,
+  .mock-layout>.exam-summary .form-hint,
+  .mock-layout>.exam-summary .bank-ready{margin-top:14px!important;margin-bottom:14px!important;}
+  .mock-layout>.exam-summary h4{margin:20px 0 10px!important;}
+  .mock-layout>.exam-summary .recent-scores{margin-bottom:16px!important;}
+  .mock-layout>.exam-summary .primary-btn{margin-top:10px!important;}
+}
+@media(max-width:1250px){
+  .mock-layout>.exam-summary{
+    position:static!important;
+    width:auto!important;
+    max-width:none!important;
+    height:auto!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+}
+
+/* V78 — eliminate any inherited hover movement from Study Now option
+   descendants while preserving click/selection feedback. */
+.study-fullscreen .options button,
+.study-fullscreen .options button *{
+  transition:none!important;
+}
+.study-fullscreen .options button:hover *{
+  transform:none!important;
+}
