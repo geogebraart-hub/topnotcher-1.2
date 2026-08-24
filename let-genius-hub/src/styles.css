@@ -3959,3 +3959,49 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
     height: 40px !important;
   }
 }
+
+
+/* FINAL: REMOVE ALL POINTER HOVER MOVEMENT FROM STUDY NOW OPTIONS */
+
+.study-fullscreen .study-question-card .options button,
+.study-fullscreen .study-question-card .options button:hover,
+.study-fullscreen .study-question-card .options button:focus,
+.study-fullscreen .study-question-card .options button:focus-visible,
+.study-fullscreen .study-question-card .options button:active {
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+  scale: 1 !important;
+  translate: 0 0 !important;
+  rotate: 0deg !important;
+
+  top: auto !important;
+  left: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+
+  filter: none !important;
+  will-change: auto !important;
+}
+
+/* Keep the contents of the option from moving/zooming */
+.study-fullscreen .study-question-card .options button *,
+.study-fullscreen .study-question-card .options button:hover * {
+  transform: none !important;
+  transition: none !important;
+  animation: none !important;
+  scale: 1 !important;
+  translate: 0 0 !important;
+  rotate: 0deg !important;
+}
+
+/* Make hover visually identical to the normal option */
+.study-fullscreen .study-question-card .options button:hover {
+  transform: none !important;
+  scale: 1 !important;
+  translate: 0 0 !important;
+  box-shadow: inherit !important;
+}
