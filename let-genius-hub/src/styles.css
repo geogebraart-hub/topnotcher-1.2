@@ -3062,3 +3062,73 @@ body[data-theme="dark"] .question-editor-modal select{background:#10151d!importa
 body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
 .math-text mjx-container[display="true"]{display:block!important;margin:.45em 0!important;overflow-x:auto!important;}
 .math-text mjx-container svg{max-width:100%!important;height:auto!important;}
+
+/* V75 — restore the clean V68 choice styling and isolate math styling. */
+.study-question-card .options button,
+.study-question-card .options button:hover,
+.study-question-card .options button:disabled{
+  background:#fff!important;
+  color:#43546f!important;
+  font-weight:500!important;
+  box-shadow:0 5px 18px rgba(38,52,73,.035)!important;
+}
+.study-question-card .options button.correct{background:#ecfdf5!important;color:#176a4b!important;font-weight:500!important;}
+.study-question-card .options button.wrong{background:#fef2f2!important;color:#8b3030!important;font-weight:500!important;}
+.study-question-card .options button > span:first-child{
+  flex:0 0 32px!important;
+  width:32px!important;height:32px!important;
+  margin:0!important;padding:0!important;
+  display:grid!important;place-items:center!important;
+  border-radius:50%!important;
+  background:#eef1f7!important;color:#667b98!important;
+  font-weight:800!important;
+  line-height:1!important;
+}
+.study-question-card .options button.correct > span:first-child{background:#10b981!important;color:#fff!important;}
+.study-question-card .options button.wrong > span:first-child{background:#ef4444!important;color:#fff!important;}
+.study-question-card .options button > span.math-text,
+.study-question-card .options button > span:not(:first-child){
+  flex:1 1 auto!important;
+  width:auto!important;
+  min-width:0!important;
+  margin:0!important;
+  padding:0!important;
+  display:block!important;
+  background:transparent!important;
+  color:inherit!important;
+  font-weight:500!important;
+  line-height:1.5!important;
+}
+/* Plain text should never inherit math-specific typography. */
+.math-text{font-family:inherit!important;font-weight:inherit!important;color:inherit!important;background:transparent!important;}
+.math-text mjx-container{font-family:inherit!important;background:transparent!important;}
+
+/* Restore normal typography in Add/Edit Question. Math is rendered only in
+   question content after an explicit equation is detected. */
+.question-editor-modal,
+.question-editor-modal label,
+.question-editor-modal input,
+.question-editor-modal textarea,
+.question-editor-modal select,
+.question-editor-modal button{font-family:inherit!important;}
+.question-editor-modal input,
+.question-editor-modal textarea,
+.question-editor-modal select{font-size:14px!important;font-weight:400!important;line-height:1.45!important;}
+.question-editor-modal .math-support-hint{font-family:inherit!important;font-weight:400!important;}
+
+/* Live edit button must sit above the question card hit-area. */
+.study-question-card-head{position:relative!important;z-index:10!important;pointer-events:auto!important;}
+.study-edit-question-btn{position:relative!important;z-index:50!important;pointer-events:auto!important;touch-action:manipulation!important;}
+
+/* Mock Board: summary starts at the exact top of the Select Exam panel and
+   remains intact while the configuration column scrolls. */
+@media (min-width:1251px){
+  .mock-layout{display:grid!important;grid-template-columns:minmax(0,1fr) 350px!important;gap:24px!important;align-items:start!important;}
+  .mock-config-panel{width:auto!important;max-width:none!important;grid-column:1!important;}
+  .exam-summary{grid-column:2!important;grid-row:1!important;position:sticky!important;top:28px!important;right:auto!important;width:auto!important;max-width:350px!important;height:max-content!important;max-height:none!important;overflow:visible!important;align-self:start!important;z-index:10!important;}
+  .exam-summary h2{margin-top:0!important;}
+}
+
+/* MathJax itself may create display boxes, but only when hasMathExpression()
+   classified the text as mathematical. */
+.math-text mjx-container[display="true"]{display:block!important;margin:.35em 0!important;}
