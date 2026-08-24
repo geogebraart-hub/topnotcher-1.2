@@ -2876,3 +2876,27 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
   .schedule-stats b{font-size:28px!important}
   .mock-config-panel .mock-section{padding:15px!important}
 }
+
+
+/* V72 enhancements */
+/* Schedule bubble matches the full calendar panel height; only its event list scrolls. */
+@media (min-width: 901px){
+  .calendar-layout{align-items:stretch!important;}
+  .calendar-layout > .calendar,
+  .calendar-layout > .schedule-list-panel{height:100%!important;box-sizing:border-box!important;}
+  .schedule-list-panel{min-height:0!important;max-height:none!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;}
+  .schedule-event-list{flex:1 1 auto!important;min-height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding-right:4px!important;}
+}
+
+/* Mock Exam Summary stays intact instead of becoming an independently scrolling card. */
+.exam-summary{position:sticky!important;top:24px!important;max-height:none!important;height:max-content!important;overflow:visible!important;align-self:start!important;}
+@media (max-width: 1250px){.exam-summary{position:static!important;max-height:none!important;overflow:visible!important;}}
+
+/* Live Study edit control: compact, aligned, and easy to tap. */
+.study-edit-question-btn{display:inline-flex!important;align-items:center!important;justify-content:center!important;gap:6px!important;height:32px!important;min-height:32px!important;padding:0 10px!important;border-radius:9px!important;font-size:12px!important;line-height:1!important;white-space:nowrap!important;}
+.study-edit-question-btn svg{width:13px!important;height:13px!important;}
+.question-modal{max-height:88vh;overflow:auto;}
+
+/* People avatars */
+.avatar-choice-grid button{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif!important;font-size:23px!important;}
+.profile-avatar-large{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif!important;}
