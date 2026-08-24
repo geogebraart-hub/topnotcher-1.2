@@ -3224,3 +3224,50 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
    normal font, weight, color, spacing, and backgrounds. */
 .math-text{font-family:inherit!important;font-weight:inherit!important;color:inherit!important;background:transparent!important;}
 .math-text mjx-container{font-family:inherit!important;background:transparent!important;}
+
+/* V77 — deck search */
+.deck-search-box{
+  display:flex!important;align-items:center!important;gap:8px!important;
+  height:38px!important;padding:0 11px!important;border:1px solid var(--line)!important;
+  border-radius:10px!important;background:#fff!important;color:#7a8aa3!important;
+  min-width:250px!important;box-sizing:border-box!important;
+}
+.deck-search-box input{
+  border:0!important;outline:0!important;background:transparent!important;
+  color:var(--text)!important;font:inherit!important;width:100%!important;min-width:0!important;
+}
+.deck-search-box input::placeholder{color:#9aa7ba!important;}
+@media(max-width:760px){.deck-search-box{min-width:0!important;width:100%!important;}.question-bank-actions,.flashcard-section-actions{flex-wrap:wrap!important;}}
+/* V77 — slightly smaller Study Now option typography */
+.study-question-card .options button{
+  font-size:16px!important;
+  line-height:1.48!important;
+  padding:16px 18px!important;
+}
+.study-question-card .options button>span:first-child{
+  flex:0 0 34px!important;width:34px!important;height:34px!important;font-size:15px!important;
+}
+/* V77 — Exam Summary is a fixed desktop companion panel. The grid retains
+   its right-hand track so configuration content never sits underneath it. */
+@media(min-width:1251px){
+  .mock-layout{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) 350px!important;
+    gap:24px!important;
+    align-items:start!important;
+  }
+  .mock-layout>.exam-summary{
+    position:fixed!important;
+    top:24px!important;
+    right:max(24px, calc((100vw - 1440px)/2))!important;
+    width:350px!important;
+    max-width:350px!important;
+    height:max-content!important;
+    max-height:calc(100vh - 48px)!important;
+    overflow:visible!important;
+    z-index:100!important;
+  }
+}
+@media(max-width:1250px){
+  .mock-layout>.exam-summary{position:static!important;max-height:none!important;overflow:visible!important;width:auto!important;max-width:none!important;}
+}
