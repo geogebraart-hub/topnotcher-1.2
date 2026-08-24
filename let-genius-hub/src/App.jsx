@@ -417,7 +417,7 @@ function App({ authUser, onSignOut }) {
       {page==="decks" && <Decks decks={decks} folders={folders} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} setShowFolderModal={setShowFolderModal} setEditingFolder={setEditingFolder} deleteFolder={deleteFolder} deleteDeck={deleteDeck}/>} 
       {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
-      {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>{setSessions(ss=>ss.filter(s=>s.id!==id));setSessions(ss=>ss.filter(s=>!(s.scheduleLogId===id)));}} onToggleDone={id=>setSessions(ss=>{
+      {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id && s.scheduleLogId!==id))} onToggleDone={id=>setSessions(ss=>{
         const target=ss.find(s=>s.id===id);
         if(!target) return ss;
         const nextDone=!target.completed;
@@ -434,8 +434,19 @@ function App({ authUser, onSignOut }) {
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck} folders={folders}/>}
       {showFolderModal && <FolderModal close={()=>{setShowFolderModal(false);setEditingFolder(null)}} save={saveFolder} initial={editingFolder}/>} 
       {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
-      {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null);setEditingDuringStudy(false)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
-      {showSessionModal && <SessionModal close={()=>{setShowSessionModal(false);setEditingSession(null)}} save={data=>{if(editingSession?.id){setSessions(ss=>ss.map(s=>s.id===editingSession.id?{...s,...data,id:editingSession.id}:s));}else{setSessions(ss=>[...ss,{id:Date.now(),...data}]);}setShowSessionModal(false);setEditingSession(null)}} initial={editingSession}/>} 
+      {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null);setEditingDuringStudy(false)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId} duringStudy={editingDuringStudy}/>} 
+      {showSessionModal && <SessionModal close={()=>{setShowSessionModal(false);setEditingSession(null)}} save={data=>{
+        setSessions(ss=>{
+          if(editingSession?.id){
+            const updated=ss.map(s=>s.id===editingSession.id?{...s,...data,id:editingSession.id}:s);
+            const logIndex=updated.findIndex(s=>s.scheduleLogId===editingSession.id);
+            if(logIndex>=0){ updated[logIndex]={...updated[logIndex],title:data.title,studyCategory:data.studyCategory,minutes:Number(data.hours||0)*60}; }
+            return updated;
+          }
+          return [...ss,{id:Date.now(),...data}];
+        });
+        setShowSessionModal(false);setEditingSession(null);
+      }} initial={editingSession}/>} 
       {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
     </div>
@@ -868,16 +879,23 @@ function Schedule({sessions,onAdd,onEdit,onDelete,onToggleDone}) {
   const days=new Date(year,mon+1,0).getDate(), start=new Date(year,mon,1).getDay();
   const cells=[...Array(start),...Array.from({length:days},(_,i)=>i+1)];
   const today=now.getDate(), currentMonth=now.getMonth(), currentYear=now.getFullYear();
-  const monthSessions=sessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getMonth()===mon&&dt.getFullYear()===year}).sort((a,b)=>a.date.localeCompare(b.date));
+  // Only records with a calendar date are schedules. Study-session logs do not have a date field,
+  // and schedule completion logs are marked with scheduleLogId, so they must not inflate the tracker.
+  const scheduleItems=sessions.filter(s=>Boolean(s.date) && !s.scheduleLogId);
+  const monthSessions=scheduleItems.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getMonth()===mon&&dt.getFullYear()===year}).sort((a,b)=>a.date.localeCompare(b.date));
+  const completedSchedules=scheduleItems.filter(s=>s.completed).length;
+  const pendingSchedules=Math.max(0,scheduleItems.length-completedSchedules);
+  const monthCompletion=monthSessions.length?Math.round(monthSessions.filter(s=>s.completed).length/monthSessions.length*100):0;
   const typeLabel=t=>t==="mock"?"Mock Exam":t==="drill"?"Daily Drill":"Study Session";
   const categoryLabel=t=>t==="profed"?"ProfEd":t==="majorship"?"Major":"GenEd";
   return <div>
     <PageHeader title="Study Schedule" subtitle="Plot, edit, complete, and track your review sessions." action={<button className="primary-btn" onClick={onAdd}><Plus/> Add Schedule</button>}/>
     <div className="schedule-stats">
-      <div><b>{sessions.length}</b><span>Total Schedules</span></div>
-      <div><b>{sessions.filter(s=>s.completed).length}</b><span>Completed</span></div>
-      <div><b>{sessions.filter(s=>!s.completed).length}</b><span>Pending</span></div>
+      <div><b>{scheduleItems.length}</b><span>Total Schedules</span></div>
+      <div><b>{completedSchedules}</b><span>Completed</span></div>
+      <div><b>{pendingSchedules}</b><span>Pending</span></div>
       <div><b>{monthSessions.length}</b><span>This Month</span></div>
+      <div><b>{monthCompletion}%</b><span>Completion</span></div>
     </div>
     <div className="calendar-layout">
       <section className="panel calendar">
@@ -1230,11 +1248,11 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
   </div></div>;
 }
 
-function QuestionModal({close,save,initial,deckId}) {
+function QuestionModal({close,save,initial,deckId,duringStudy=false}) {
   const [question,setQuestion]=useState(initial?.q||""); const [options,setOptions]=useState(initial?.options||["","","",""]); const [answer,setAnswer]=useState(initial?.answer??0); const [explanation,setExplanation]=useState(initial?.explanation||"");
   const updateOption=(i,v)=>setOptions(os=>os.map((o,idx)=>idx===i?v:o));
   const submit=()=>{if(!question.trim()||options.some(o=>!o.trim())||!explanation.trim()) return; save({id:initial?.id,deckId, q:question.trim(),options,answer,explanation:explanation.trim()});};
-  return <div className="modal-backdrop"><div className="small-modal question-modal"><div className="modal-head"><div><h2>{initial?"Edit Question":"Add Question"}</h2><span className="muted">Multiple-choice question</span></div><button onClick={close}><X/></button></div><label>Question<textarea className="question-input" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Enter the question stem..."/></label><div className="option-editor"><b>Answer choices</b>{options.map((o,i)=><label key={i}><span className={answer===i?"answer-dot selected":"answer-dot"} onClick={()=>setAnswer(i)}>{String.fromCharCode(65+i)}</span><input value={o} onChange={e=>updateOption(i,e.target.value)} placeholder={`Choice ${String.fromCharCode(65+i)}`}/></label>)}</div><label>Explanation<textarea value={explanation} onChange={e=>setExplanation(e.target.value)} placeholder="Explain why the correct answer is correct..."/></label><div className="form-hint"><CheckCircle2 size={17}/> Select the letter beside the correct answer.</div><button className="primary-btn wide" disabled={!question.trim()||options.some(o=>!o.trim())||!explanation.trim()} onClick={submit}><Save size={17}/>{initial?"Save Question":"Add Question"}</button></div></div>;
+  return <div className="modal-backdrop"><div className="small-modal question-modal"><div className="modal-head"><div><h2>{initial?"Edit Question":"Add Question"}</h2><span className="muted">{duringStudy ? "Edit this question, then continue answering." : "Multiple-choice question"}</span></div><button onClick={close}><X/></button></div><label>Question<textarea className="question-input" value={question} onChange={e=>setQuestion(e.target.value)} placeholder="Enter the question stem..."/></label><div className="option-editor"><b>Answer choices</b>{options.map((o,i)=><label key={i}><span className={answer===i?"answer-dot selected":"answer-dot"} onClick={()=>setAnswer(i)}>{String.fromCharCode(65+i)}</span><input value={o} onChange={e=>updateOption(i,e.target.value)} placeholder={`Choice ${String.fromCharCode(65+i)}`}/></label>)}</div><label>Explanation<textarea value={explanation} onChange={e=>setExplanation(e.target.value)} placeholder="Explain why the correct answer is correct..."/></label><div className="form-hint"><CheckCircle2 size={17}/> Select the letter beside the correct answer.</div><button className="primary-btn wide" disabled={!question.trim()||options.some(o=>!o.trim())||!explanation.trim()} onClick={submit}><Save size={17}/>{duringStudy?"Save & Continue":(initial?"Save Question":"Add Question")}</button></div></div>;
 }
 
 function SettingsModal({close,theme,setTheme,profile,openProfile}) { return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your TOPNOTCHER! experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, theme, and study data are stored separately for your signed-in Google account in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
