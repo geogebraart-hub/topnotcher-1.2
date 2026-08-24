@@ -1032,7 +1032,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,onEditQ
           <div className="study-main-top"><div><span className="question-label">QUESTION {study.index+1}</span><span>of {study.pool.length}</span></div><span className="study-answered">{study.answered} answered</span></div>
           <div className="study-progress-track"><i style={{width:`${pct}%`}}/></div>
           <section className="study-question-card">
-            <div className="study-question-card-head"><span className="question-label">QUESTION {study.index+1}</span><button type="button" className="study-edit-question-btn" onMouseDown={e=>e.stopPropagation()} onClick={e=>{e.preventDefault();e.stopPropagation();if(typeof onEditQuestion==="function") onEditQuestion(q);}}><Pencil size={14}/> Edit Question</button></div>
+            <div className="study-question-card-head"><span className="question-label">QUESTION {study.index+1}</span></div>
             <h2><MathText text={q.q}/></h2>
             <div className="options">{q.options.map((o,i)=><button key={i} className={(study.checked&&i===q.answer?"correct ":"")+(study.checked&&i===study.selected&&i!==q.answer?"wrong":"")} disabled={study.checked} onClick={()=>answer(i)}><span>{String.fromCharCode(65+i)}</span><MathText text={o}/></button>)}</div>
             {study.checked&&<div className={"explanation "+(study.selected===q.answer?"good":"bad")}><b>{study.selected===q.answer?"Correct!":"Not quite."}</b><p><MathText text={q.explanation}/></p></div>}
