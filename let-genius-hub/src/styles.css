@@ -2973,3 +2973,92 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
 .question-input,.option-editor input{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
 .math-support-hint{display:flex;gap:8px;align-items:flex-start;margin-top:8px;color:#7183a0;font-size:12px;line-height:1.45;background:#f7f8fc;border-radius:10px;padding:9px 11px}
 @media(max-width:760px){.math-text mjx-container{max-width:calc(100vw - 70px)}.study-question-card h2 .math-text{font-size:inherit}}
+
+/* V74 — authoritative functional fixes */
+
+/* Schedule: the calendar establishes the desktop row height. The schedule
+   bubble stretches to that row and ONLY its event list scrolls. */
+@media (min-width:901px){
+  .calendar-layout{align-items:stretch!important;grid-template-rows:auto!important;}
+  .calendar-layout>.calendar{height:auto!important;min-height:0!important;align-self:stretch!important;}
+  .calendar-layout>.schedule-list-panel{
+    height:auto!important;min-height:0!important;max-height:none!important;
+    align-self:stretch!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;
+  }
+  .schedule-list-panel .schedule-side-head{flex:0 0 auto!important;}
+  .schedule-list-panel .schedule-event-list{
+    flex:1 1 auto!important;min-height:0!important;height:auto!important;max-height:none!important;
+    overflow-y:auto!important;overflow-x:hidden!important;padding-right:6px!important;
+  }
+}
+
+/* Mock Board: on large screens the summary is a true fixed companion panel,
+   so scrolling the long exam setup never moves it. */
+@media (min-width:1251px){
+  .mock-layout{display:block!important;position:relative!important;}
+  .mock-config-panel{width:calc(100% - 390px)!important;max-width:none!important;}
+  .exam-summary{
+    position:fixed!important;top:24px!important;right:32px!important;
+    width:min(350px,28vw)!important;box-sizing:border-box!important;
+    height:auto!important;max-height:calc(100vh - 48px)!important;overflow:visible!important;
+    align-self:auto!important;z-index:20!important;
+  }
+}
+@media (max-width:1250px){
+  .exam-summary{position:static!important;width:auto!important;height:auto!important;max-height:none!important;overflow:visible!important;}
+}
+
+/* Question editor: portal to document.body so Study Now/fullscreen stacking
+   can never hide the editor. */
+.question-editor-backdrop{z-index:30000!important;background:rgba(15,24,40,.58)!important;}
+.question-editor-modal{
+  position:relative!important;z-index:30001!important;width:min(680px,calc(100vw - 28px))!important;
+  max-height:min(90vh,860px)!important;overflow:auto!important;box-sizing:border-box!important;
+  background:#fff!important;color:#24344e!important;border:1px solid #e5eaf2!important;
+}
+.question-editor-modal .modal-head{position:sticky!important;top:0!important;background:#fff!important;z-index:2!important;padding-bottom:12px!important;}
+.question-editor-modal label{color:#52637e!important;}
+.question-editor-modal input,.question-editor-modal textarea,.question-editor-modal select{background:#fff!important;color:#24344e!important;}
+.option-editor{display:grid!important;gap:9px!important;margin:14px 0!important;}
+.option-editor-row{display:grid!important;grid-template-columns:34px minmax(0,1fr)!important;align-items:center!important;gap:9px!important;margin:0!important;}
+.option-editor-row .answer-dot{width:34px!important;height:34px!important;padding:0!important;border:1px solid #d9e0ea!important;border-radius:50%!important;background:#f5f7fb!important;color:#61728c!important;display:grid!important;place-items:center!important;cursor:pointer!important;font-weight:800!important;}
+.option-editor-row .answer-dot.selected{background:var(--primary,#635bdb)!important;color:#fff!important;border-color:var(--primary,#635bdb)!important;}
+.question-editor-actions{position:sticky!important;bottom:0!important;background:#fff!important;padding-top:12px!important;padding-bottom:2px!important;z-index:2!important;}
+
+/* Prevent the Study Now edit control from being visually trapped behind the
+   question card or fullscreen overlay. */
+.study-edit-question-btn{position:relative!important;z-index:5!important;pointer-events:auto!important;cursor:pointer!important;}
+
+/* Math rendering: keep equations readable, aligned, and horizontally safe. */
+.math-text{display:inline-block;max-width:100%;white-space:normal!important;overflow-wrap:anywhere!important;vertical-align:middle!important;}
+.math-text mjx-container{max-width:100%!important;overflow-x:auto!important;overflow-y:hidden!important;vertical-align:middle!important;}
+.study-question-card .options button{align-items:flex-start!important;text-align:left!important;min-width:0!important;}
+.study-question-card .options button>span{flex:0 0 30px!important;}
+.study-question-card .options button>.math-text{flex:1 1 auto!important;min-width:0!important;}
+.exam-options button{align-items:flex-start!important;text-align:left!important;min-width:0!important;}
+.exam-options button>b{flex:1 1 auto!important;min-width:0!important;}
+.question-view-options>div{min-width:0!important;}
+
+.app-shell.theme-dark .question-editor-modal,
+.app-shell.theme-dark .question-editor-modal .modal-head,
+.app-shell.theme-dark .question-editor-actions{background:#171c25!important;color:#eef2f8!important;border-color:#2a3342!important;}
+.app-shell.theme-dark .question-editor-modal input,
+.app-shell.theme-dark .question-editor-modal textarea,
+.app-shell.theme-dark .question-editor-modal select{background:#10151d!important;color:#eef2f8!important;border-color:#2a3342!important;}
+.app-shell.theme-dark .question-editor-modal label{color:#b7c3d3!important;}
+
+@media(max-width:760px){
+  .question-editor-modal{width:calc(100vw - 20px)!important;max-height:92vh!important;padding:18px!important;border-radius:17px!important;}
+  .question-editor-actions{position:static!important;}
+}
+
+/* V74 dark-theme portal modal + math readability */
+body[data-theme="dark"] .question-editor-modal,
+body[data-theme="dark"] .question-editor-modal .modal-head,
+body[data-theme="dark"] .question-editor-actions{background:#171c25!important;color:#eef2f8!important;border-color:#2a3342!important;}
+body[data-theme="dark"] .question-editor-modal input,
+body[data-theme="dark"] .question-editor-modal textarea,
+body[data-theme="dark"] .question-editor-modal select{background:#10151d!important;color:#eef2f8!important;border-color:#2a3342!important;}
+body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
+.math-text mjx-container[display="true"]{display:block!important;margin:.45em 0!important;overflow-x:auto!important;}
+.math-text mjx-container svg{max-width:100%!important;height:auto!important;}
