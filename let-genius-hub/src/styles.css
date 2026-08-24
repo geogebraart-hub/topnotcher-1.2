@@ -3699,3 +3699,67 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
     overflow: visible !important;
   }
 }
+
+
+/* =========================================================
+   STUDY QUESTIONS — FINAL OPTION HOVER + SIZE FIX
+   CSS ONLY — DO NOT MODIFY JSX
+   ========================================================= */
+
+/* Remove ALL hover movement / zoom / animation */
+.study-fullscreen .study-main .study-question-card .options button,
+.study-fullscreen .study-main .study-question-card .options button:hover,
+.study-fullscreen .study-main .study-question-card .options button:focus,
+.study-fullscreen .study-main .study-question-card .options button:focus-visible,
+.study-fullscreen .study-main .study-question-card .options button:active {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+  animation: none !important;
+  transition: none !important;
+
+  top: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+  right: auto !important;
+
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
+
+/* Prevent the text or inner elements from moving/zooming */
+.study-fullscreen .study-main .study-question-card .options button:hover *,
+.study-fullscreen .study-main .study-question-card .options button:focus *,
+.study-fullscreen .study-main .study-question-card .options button:active * {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+  animation: none !important;
+  transition: none !important;
+}
+
+/* Make ONLY the option bubble slightly smaller.
+   Text size is intentionally NOT changed here. */
+.study-fullscreen .study-main .study-question-card .options button {
+  min-height: 42px !important;
+  height: auto !important;
+
+  padding: 8px 13px !important;
+
+  gap: 10px !important;
+
+  box-sizing: border-box !important;
+}
+
+/* Keep the option label vertically centered */
+.study-fullscreen .study-main .study-question-card .options button > span:first-child {
+  align-self: center !important;
+}
+
+/* Keep option text exactly where it belongs */
+.study-fullscreen .study-main .study-question-card .options button > span:not(:first-child),
+.study-fullscreen .study-main .study-question-card .options button > .math-text {
+  align-self: center !important;
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+}
