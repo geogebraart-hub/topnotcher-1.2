@@ -2951,3 +2951,25 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
 
 /* Make the live-edit control unmistakably clickable. */
 .study-edit-question-btn{position:relative!important;z-index:2!important;cursor:pointer!important;pointer-events:auto!important;}
+
+/* V73 — authoritative layout fixes + mathematical notation support */
+.calendar-layout{align-items:stretch!important;grid-template-rows:auto!important}
+.calendar-layout>.calendar,.calendar-layout>.schedule-list-panel{height:100%!important;min-height:0!important;box-sizing:border-box}
+.schedule-list-panel{overflow:hidden!important;display:flex!important;flex-direction:column!important}
+.schedule-list-panel .schedule-side-head{flex:0 0 auto!important}
+.schedule-list-panel .schedule-event-list{flex:1 1 auto!important;min-height:0!important;height:0!important;max-height:none!important;overflow-y:auto!important;overflow-x:hidden!important;padding-right:4px}
+.schedule-list-panel .schedule-empty{height:100%!important;min-height:0!important}
+.exam-summary{position:sticky!important;top:24px!important;align-self:start!important;height:auto!important;max-height:none!important;overflow:visible!important;overscroll-behavior:auto!important}
+.exam-summary *{scrollbar-width:auto}
+@media(max-width:1250px){.calendar-layout{grid-template-columns:1fr!important}.calendar-layout>.calendar,.calendar-layout>.schedule-list-panel{height:auto!important}.schedule-list-panel{overflow:visible!important}.schedule-list-panel .schedule-event-list{height:auto!important;max-height:420px!important;overflow-y:auto!important}.exam-summary{position:static!important}}
+@media(max-width:760px){.schedule-list-panel .schedule-event-list{max-height:55vh!important}.exam-summary{position:static!important}}
+
+/* V73 math rendering */
+.math-text{white-space:normal;overflow-wrap:anywhere}
+.math-text mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden;vertical-align:middle}
+.study-question-card h2 .math-text{display:inline;line-height:1.6}
+.study-question-card .options .math-text,.exam-options .math-text{display:block;min-width:0}
+.question-view-content .math-text,.result-list .math-text,.ai-q .math-text,.flashcard-view-card .math-text{line-height:1.55}
+.question-input,.option-editor input{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace}
+.math-support-hint{display:flex;gap:8px;align-items:flex-start;margin-top:8px;color:#7183a0;font-size:12px;line-height:1.45;background:#f7f8fc;border-radius:10px;padding:9px 11px}
+@media(max-width:760px){.math-text mjx-container{max-width:calc(100vw - 70px)}.study-question-card h2 .math-text{font-size:inherit}}
