@@ -552,8 +552,7 @@ function Progress({stats,streak,decks,mockScores,questions,questionStats,session
     {label:"Total Hours Studied",value:`${stats.hours.toFixed(1)}h`,small:"Recorded study time",foot:"Open study schedule",target:"schedule"},
     {label:"Questions Answered",value:stats.answered,small:`${accuracy.toFixed(1)}% accuracy overall`,foot:"Open study decks",target:"decks"}
   ];
-  return (
-    <div>
+  return <div>
     <PageHeader title="Progress Dashboard" subtitle={<><span>LET Exam Date: {examDateText}</span>{daysAway !== null && <span className="date-badge">{daysAway} days away</span>}</>} action={<span className="updated">Updated {updated}</span>}/>
     <div className="metrics">{metricCards.map((m,i)=><button key={m.label} className={`metric metric-button ${m.primary?"primary":""}`} onClick={()=>go(m.target)}><span>{m.label}</span><strong>{m.value}</strong><small>{m.small}</small><b className={i===1&&mockScores.length?"danger":""}>{m.foot}</b><ChevronRight className="metric-arrow" size={18}/></button>)}</div>
     <div className="progress-two-col">
@@ -693,8 +692,7 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
   const accuracy=questions.reduce((sum,q)=>sum+(questionStats[q.id]?.correct||0),0);
   const attempts=questions.reduce((sum,q)=>sum+(questionStats[q.id]?.attempts||0),0);
   const pct=questions.length?Math.round(reviewed/questions.length*100):0;
-  return (
-    <div>
+  return <div>
     <PageHeader title={deck.name} subtitle={<><span>{deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed")} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="secondary-btn" onClick={onAI}><WandSparkles size={17}/> AI Generate</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/>
     <div className="deck-detail-stats"><div><b>{questions.length}</b><span>Questions</span></div><div><b>{reviewed}</b><span>Reviewed</span></div><div><b>{pct}%</b><span>Deck progress</span></div><div><b>{attempts?Math.round(accuracy/attempts*100):0}%</b><span>Accuracy</span></div></div>
     <div className="detail-toolbar deck-action-row">
@@ -720,12 +718,8 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
     </section>}
     {scannerOpen&&createPortal(<div className="modal-backdrop scanner-backdrop" onClick={()=>setScannerOpen(false)}><div className="small-modal question-scanner-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION SCANNER</span><h2>{scanPairs.length ? `${scanPairs.length} similar pair${scanPairs.length===1?"":"s"} found` : "No redundant questions found"}</h2><span className="muted">Strict similarity scan: exact duplicates, close rewordings, shared key concepts, answer/explanation context, and wording patterns are compared. Review flagged pairs before deleting.</span></div><button onClick={()=>setScannerOpen(false)}><X/></button></div>{scanPairs.length?<div className="scanner-list">{scanPairs.map((pair,i)=><div className="scanner-pair" key={`${pair.a.id}-${pair.b.id}`}><div className="scanner-score">{Math.round(pair.score*100)}% similar</div><div className="scanner-q"><b>Question {questions.findIndex(q=>q.id===pair.a.id)+1}</b><p>{pair.a.q}</p><button className="danger-outline" onClick={()=>deleteScannedQuestion(pair.a.id)}><Trash2 size={14}/> Delete this question</button></div><div className="scanner-vs">VS</div><div className="scanner-q"><b>Question {questions.findIndex(q=>q.id===pair.b.id)+1}</b><p>{pair.b.q}</p><button className="danger-outline" onClick={()=>deleteScannedQuestion(pair.b.id)}><Trash2 size={14}/> Delete this question</button></div></div>)}</div>:<div className="scanner-empty"><CheckCircle2 size={30}/><b>Deck looks clean</b><span>No questions crossed the redundancy threshold.</span></div>}<div className="modal-foot"><button className="secondary-btn" onClick={()=>setScannerOpen(false)}>Close</button></div></div></div>, document.body)}
     {selectedQuestion&&createPortal(<div className="modal-backdrop question-view-backdrop" onClick={()=>setSelectedQuestion(null)}><div className="small-modal question-view-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION</span><h2>Question {questions.findIndex(x=>x.id===selectedQuestion.id)+1}</h2></div><button onClick={()=>setSelectedQuestion(null)}><X/></button></div><div className="question-view-content"><h3><MathText text={selectedQuestion.q}/></h3><div className="question-view-options">{selectedQuestion.options.map((o,i)=><div className={i===selectedQuestion.answer?"correct":""} key={i}><b>{String.fromCharCode(65+i)}.</b><span><MathText text={o}/></span></div>)}</div><div className="question-view-rationale"><CheckCircle2 size={18}/><div><b>Correct answer: <MathText text={selectedQuestion.options[selectedQuestion.answer]}/></b><p><MathText text={selectedQuestion.explanation}/></p></div></div></div><div className="modal-foot"><button className="secondary-btn" onClick={()=>setSelectedQuestion(null)}>Close</button><button className="primary-btn" onClick={()=>{setSelectedQuestion(null);onEdit(selectedQuestion)}}><Pencil size={16}/> Edit Question</button></div></div></div>, document.body)}
-    {selectedFlashcard ? createPortal(
-      <FlashcardViewer card={selectedFlashcard} close={()=>setSelectedFlashcard(null)} />,
-      document.body
-    ) : null}
-    </div>
-  );
+    {selectedFlashcard&&createPortal(<FlashcardViewer card={selectedFlashcard} close={()=>setSelectedFlashcard(null)} />, document.body)}
+  </div>;
 }
 
 function buildExamPool(category, questions) {
