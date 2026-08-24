@@ -342,9 +342,19 @@ function App({ authUser, onSignOut }) {
   }
 
   function saveQuestion(data) {
-    const deck = decks.find(d=>d.id===Number(data.deckId));
-    if (!deck) return;
-    const normalized = {...data, id:data.id || Date.now(), deckId:deck.id, cat:deck.category, options:data.options.map(x=>x.trim())};
+    const incomingDeckId = data.deckId ?? (editingDuringStudy ? studyPool?.pool?.find(item=>String(item.id)===String(data.id))?.deckId : null);
+    const deck = decks.find(d=>String(d.id)===String(incomingDeckId));
+    // During a live study session, allow an existing question to be edited even if
+    // the deck reference is temporarily unavailable; preserve its original metadata.
+    const existingQuestion = questions.find(q=>String(q.id)===String(data.id));
+    if (!deck && !existingQuestion) return;
+    const normalized = {
+      ...data,
+      id:data.id || Date.now(),
+      deckId:deck?.id ?? existingQuestion?.deckId ?? incomingDeckId,
+      cat:deck?.category ?? existingQuestion?.cat ?? "mixed",
+      options:data.options.map(x=>x.trim())
+    };
     if (normalized.id && questions.some(q=>q.id===normalized.id)) setQuestions(qs=>qs.map(q=>q.id===normalized.id?normalized:q));
     else setQuestions(qs=>[...qs, normalized]);
     if (editingDuringStudy && studyPool && normalized.id) {
@@ -364,8 +374,10 @@ function App({ authUser, onSignOut }) {
   }
 
   function editQuestionDuringStudy(q) {
-    setQuestionDeckId(q.deckId);
-    setEditingQuestion(q);
+    // Preserve the exact question being studied so Save & Continue updates the
+    // live pool and returns to the same question immediately.
+    setQuestionDeckId(q.deckId ?? studyPool?.pool?.find(item=>item.id===q.id)?.deckId ?? null);
+    setEditingQuestion({...q});
     setEditingDuringStudy(true);
     setShowQuestionModal(true);
   }
@@ -1260,7 +1272,7 @@ function Profile({profile,setProfile,setPage,theme,authUser}) {
   const [draft,setDraft]=useState({...profile, email: profile?.email || authUser?.email || ""});
   const save=()=>setProfile({...draft, email:authUser?.email || draft.email || "", dailyGoal:Number(draft.dailyGoal)||60});
   const initials=(draft.name||"G").trim().split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase();
-  const avatars=["⭐","📚","🎓","🧠","✏️","🌟","🏆","📝"];
+  const avatars=["👩🏻","👨🏻","👩🏼","👨🏼","👩🏽","👨🏽","👩🏾","👨🏾","👩🏿","👨🏿","🧑🏻","🧑🏽"];
   return <div><PageHeader title="Profile" subtitle="Manage your learner profile and LET study goals." action={<button className="secondary-btn compact" onClick={()=>setPage("progress")}><ArrowLeft size={17}/> Back to Progress</button>}/><div className="profile-layout"><section className="panel profile-card"><div className="profile-hero"><div className="profile-avatar-large">{draft.avatar||initials||"G"}</div><div><h2>{draft.name||"Genius Learner"}</h2><p>{draft.goal||"Pass the LET"}</p><span className="tag">{theme==="dark"?"Dark mode":"Light mode"}</span></div></div><div className="profile-avatar-picker"><b>Choose your avatar</b><div className="avatar-choice-grid">{avatars.map(a=><button type="button" key={a} className={draft.avatar===a?"selected":""} onClick={()=>setDraft({...draft,avatar:a})} aria-label={`Choose avatar ${a}`}>{a}</button>)}</div></div><div className="profile-form"><label>Display name<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} placeholder="Your name"/></label><label>Google account email<input value={authUser?.email || draft.email || ""} readOnly aria-readonly="true"/></label><label>Study goal<input value={draft.goal} onChange={e=>setDraft({...draft,goal:e.target.value})} placeholder="e.g. Pass the LET"/></label><label>LET exam date<input type="date" value={draft.examDate} onChange={e=>setDraft({...draft,examDate:e.target.value})}/></label><label>Daily study goal (minutes)<input type="number" min="10" max="720" value={draft.dailyGoal} onChange={e=>setDraft({...draft,dailyGoal:e.target.value})}/></label><button className="primary-btn wide" onClick={save}><Save size={17}/> Save Profile</button></div></section><aside className="panel profile-summary"><h3>Your Study Identity</h3><div className="profile-stat"><span>Daily goal</span><b>{draft.dailyGoal||60} min</b></div><div className="profile-stat"><span>Exam date</span><b>{draft.examDate?new Date(draft.examDate+"T00:00:00").toLocaleDateString():"Not set"}</b></div><div className="profile-stat"><span>Appearance</span><b>{theme==="dark"?"Dark":"Light"}</b></div><div className="profile-tip"><UserCircle size={18}/><span>Your profile and study data are kept separate for your signed-in Google account.</span></div></aside></div></div>;
 }
 
