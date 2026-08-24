@@ -2822,3 +2822,20 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
 .app-shell.theme-dark .deck-folders-panel,.app-shell.theme-dark .folder-chip{background:#171c25;color:var(--ink);border-color:var(--line)}
 .app-shell.theme-dark .folder-chip span{background:#30384a;color:#aab6c7}
 @media(max-width:760px){.deck-page-actions{width:100%;overflow:auto;padding-bottom:2px}.deck-page-actions .secondary-btn,.deck-page-actions .primary-btn{flex:0 0 auto}.deck-folders-panel .section-head{align-items:flex-start}.folder-chip-row{overflow:auto;flex-wrap:nowrap;padding-bottom:3px}.folder-chip-wrap{flex:0 0 auto}.folder-chip{flex:0 0 auto}}
+
+/* V69 refinements */
+.study-question-card-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:12px}.study-edit-question-btn{display:inline-flex;align-items:center;gap:6px;border:1px solid #d9e0ea;background:#f8fafc;color:#536780;border-radius:8px;padding:6px 9px;font-size:12px;font-weight:800;white-space:nowrap;cursor:pointer}.study-edit-question-btn:hover{background:#f0f3f8;color:#273754;border-color:#c9d3e2}
+.profile-avatar-picker{margin:-6px 0 24px;padding:14px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}.profile-avatar-picker>b{display:block;font-size:13px;margin-bottom:10px}.avatar-choice-grid{display:flex;flex-wrap:wrap;gap:8px}.avatar-choice-grid button{width:42px;height:42px;border-radius:12px;border:1px solid var(--line);background:var(--card);font-size:20px;display:grid;place-items:center;cursor:pointer}.avatar-choice-grid button.selected{border:2px solid var(--primary);background:#f2f1ff;box-shadow:0 0 0 2px #5147df22}
+.sidebar-bottom .avatar-btn{font-size:17px!important}
+.mock-config-panel{padding:24px}.mock-config-panel .mock-section{padding:0 0 22px;margin-bottom:22px;border-bottom:1px solid var(--line)}.mock-config-panel .mock-section:last-child{border-bottom:0;margin-bottom:0;padding-bottom:0}.mock-config-panel .subheading{margin-top:0}.mock-config-panel .mock-cards{margin-bottom:0}.mock-config-panel .toggle-list{margin-top:18px}
+.schedule-list-panel{height:100%;min-height:100%;display:flex;flex-direction:column}.schedule-event-list{flex:1;max-height:none;min-height:420px}.schedule-empty{min-height:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center}
+@media(max-width:1250px){.schedule-list-panel{min-height:520px}.schedule-event-list{min-height:0}.mock-config-panel{padding:22px}}
+@media(max-width:620px){.study-question-card-head{margin-bottom:9px}.study-edit-question-btn{padding:5px 8px;font-size:11px}.profile-avatar-picker{margin-bottom:18px}.mock-config-panel{padding:18px}.mock-config-panel .mock-section{padding-bottom:18px;margin-bottom:18px}.schedule-event-list{min-height:280px}.schedule-list-panel{min-height:420px}}
+
+/* V70 — deck question PDF export + strict scanner controls */
+.question-bank-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.question-bank-actions .secondary-btn{white-space:nowrap}
+.question-scanner-modal{width:min(920px,calc(100vw - 32px))!important;max-height:88vh;overflow:auto}
+.scanner-score{font-weight:900;color:#4338ca;background:#eef0ff;border:1px solid #d9dcff;border-radius:999px;padding:5px 9px;font-size:12px}
+.scanner-pair{position:relative}
+@media(max-width:760px){.question-bank-actions{width:100%;justify-content:flex-start;overflow:auto;flex-wrap:nowrap;padding-bottom:2px}.question-bank-actions .secondary-btn{flex:0 0 auto}.scanner-pair{grid-template-columns:1fr!important}.scanner-vs{display:none}}
