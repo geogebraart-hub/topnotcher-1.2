@@ -1041,6 +1041,17 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,onEditQ
           <div className="study-progress-track"><i style={{width:`${pct}%`}}/></div>
           <section className="study-question-card">
             <div className="study-question-card-head"><span className="question-label">QUESTION {study.index+1}</span></div>
+            <div className="study-question-card-head">
+  <span className="question-label">QUESTION {study.index+1}</span>
+  <button
+    type="button"
+    className="study-edit-question-btn"
+    onClick={() => onEditQuestion?.(q)}
+  >
+    <Pencil size={14} />
+    Edit Question
+  </button>
+</div>
             <div className="options">{q.options.map((o,i)=><button key={i} className={(study.checked&&i===q.answer?"correct ":"")+(study.checked&&i===study.selected&&i!==q.answer?"wrong":"")} disabled={study.checked} onClick={()=>answer(i)}><span>{String.fromCharCode(65+i)}</span><MathText text={o}/></button>)}</div>
             {study.checked&&<div className={"explanation "+(study.selected===q.answer?"good":"bad")}><b>{study.selected===q.answer?"Correct!":"Not quite."}</b><p><MathText text={q.explanation}/></p></div>}
           </section>
