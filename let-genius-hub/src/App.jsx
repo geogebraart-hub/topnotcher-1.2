@@ -29,18 +29,39 @@ function ensureMathJax(){
   });
   return mathJaxPromise;
 }
+function hasMathExpression(value){
+  const s=String(value??"").trim();
+  if(!s) return false;
+  // Only invoke MathJax when the content contains explicit mathematical notation.
+  // Ordinary prose, dates, currency, and punctuation stay on the normal UI font.
+  const explicit = [
+    /\\\((?:.|\n)+?\\\)/,
+    /\\\[(?:.|\n)+?\\\]/,
+    /\$\$(?:.|\n)+?\$\$/,
+    /\\(?:frac|dfrac|tfrac|sqrt|sum|int|prod|lim|sin|cos|tan|log|ln|infty|alpha|beta|gamma|delta|theta|lambda|pi|times|div|leq|geq|neq|approx|pm)\b/,
+    /\b[A-Za-z]\s*(?:\^|_)\s*(?:\{[^}]+\}|[A-Za-z0-9]+)/,
+    /\b\d+\s*[+\-*=/]\s*\d+/,
+    /[∑∫√∞≤≥≠≈±×÷]/
+  ];
+  return explicit.some(pattern=>pattern.test(s));
+}
+
 function MathText({text,className=""}){
   const ref=useRef(null);
+  const value=String(text??"");
+  const shouldRender=hasMathExpression(value);
   useEffect(()=>{
     let alive=true;
     if(!ref.current) return;
-    ref.current.textContent=String(text??"");
-    if(/[\\$]|[∑∫√∞≤≥≠≈±×÷]/.test(String(text??""))){
-      ensureMathJax().then(m=>{if(alive&&m?.typesetPromise&&ref.current) m.typesetPromise([ref.current]);}).catch(()=>{});
+    ref.current.textContent=value;
+    if(shouldRender){
+      ensureMathJax().then(m=>{
+        if(alive&&m?.typesetPromise&&ref.current) m.typesetPromise([ref.current]).catch(()=>{});
+      }).catch(()=>{});
     }
     return ()=>{alive=false;};
-  },[text]);
-  return <span ref={ref} className={`math-text ${className}`.trim()}>{String(text??"")}</span>;
+  },[value,shouldRender]);
+  return <span ref={ref} className={`${shouldRender?"math-text ":""}${className}`.trim()}>{value}</span>;
 }
 
 export function TopnotcherBrand({ compact = false }) {
@@ -1011,7 +1032,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,onEditQ
           <div className="study-main-top"><div><span className="question-label">QUESTION {study.index+1}</span><span>of {study.pool.length}</span></div><span className="study-answered">{study.answered} answered</span></div>
           <div className="study-progress-track"><i style={{width:`${pct}%`}}/></div>
           <section className="study-question-card">
-            <div className="study-question-card-head"><span className="question-label">QUESTION {study.index+1}</span><button className="study-edit-question-btn" onClick={()=>onEditQuestion?.(q)}><Pencil size={14}/> Edit Question</button></div>
+            <div className="study-question-card-head"><span className="question-label">QUESTION {study.index+1}</span><button type="button" className="study-edit-question-btn" onMouseDown={e=>e.stopPropagation()} onClick={e=>{e.preventDefault();e.stopPropagation();if(typeof onEditQuestion==="function") onEditQuestion(q);}}><Pencil size={14}/> Edit Question</button></div>
             <h2><MathText text={q.q}/></h2>
             <div className="options">{q.options.map((o,i)=><button key={i} className={(study.checked&&i===q.answer?"correct ":"")+(study.checked&&i===study.selected&&i!==q.answer?"wrong":"")} disabled={study.checked} onClick={()=>answer(i)}><span>{String.fromCharCode(65+i)}</span><MathText text={o}/></button>)}</div>
             {study.checked&&<div className={"explanation "+(study.selected===q.answer?"good":"bad")}><b>{study.selected===q.answer?"Correct!":"Not quite."}</b><p><MathText text={q.explanation}/></p></div>}
