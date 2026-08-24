@@ -355,7 +355,7 @@ function App({ authUser, onSignOut }) {
       cat:deck?.category ?? existingQuestion?.cat ?? "mixed",
       options:data.options.map(x=>x.trim())
     };
-    if (normalized.id && questions.some(q=>q.id===normalized.id)) setQuestions(qs=>qs.map(q=>q.id===normalized.id?normalized:q));
+    if (normalized.id && questions.some(q=>String(q.id)===String(normalized.id))) setQuestions(qs=>qs.map(q=>String(q.id)===String(normalized.id)?normalized:q));
     else setQuestions(qs=>[...qs, normalized]);
     if (editingDuringStudy && studyPool && normalized.id) {
       setStudyPool(d => {
@@ -364,7 +364,7 @@ function App({ authUser, onSignOut }) {
         const nextResults = {...(d.results||{})};
         delete nextAnswers[normalized.id];
         delete nextResults[normalized.id];
-        const nextPool = d.pool.map(item => item.id===normalized.id ? normalized : item);
+        const nextPool = d.pool.map(item => String(item.id)===String(normalized.id) ? normalized : item);
         const nextAnswered = Object.keys(nextAnswers).length;
         const nextCorrect = Object.entries(nextAnswers).reduce((n,[id,choice]) => { const item=nextPool.find(x=>String(x.id)===String(id)); return n + (item && Number(choice)===Number(item.answer) ? 1 : 0); },0);
         return {...d,pool:nextPool,answers:nextAnswers,results:nextResults,answered:nextAnswered,correct:nextCorrect,selected:null,checked:false};
