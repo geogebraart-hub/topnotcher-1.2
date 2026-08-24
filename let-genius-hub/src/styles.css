@@ -3394,3 +3394,57 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
     align-self:start!important;
   }
 }
+
+
+/* V78.6 — targeted Study Now option sizing only.
+   Keep the V68-style choice presentation; reduce text slightly and remove
+   every hover/motion effect without changing answer-state colors. */
+.study-fullscreen .study-question-card .options button,
+.study-fullscreen .study-question-card .options button:hover,
+.study-fullscreen .study-question-card .options button:focus,
+.study-fullscreen .study-question-card .options button:focus-visible,
+.study-fullscreen .study-question-card .options button:active,
+.study-fullscreen .study-question-card .options button:disabled{
+  font-size:14px!important;
+  line-height:1.5!important;
+  transition:none!important;
+  transform:none!important;
+  translate:none!important;
+}
+.study-fullscreen .study-question-card .options button:hover{
+  box-shadow:0 5px 18px rgba(38,52,73,.035)!important;
+}
+.study-fullscreen .study-question-card .options button *{
+  transition:none!important;
+  transform:none!important;
+}
+
+/* V78.6 — targeted Mock Board Exam Summary placement only.
+   Keep it fixed during page scroll, but align its top with the Select Exam
+   Category panel and leave a clear 24px breathing gap from the category column. */
+@media(min-width:1251px){
+  .mock-layout{
+    position:relative!important;
+    grid-template-columns:minmax(0,1fr) 350px!important;
+    column-gap:24px!important;
+  }
+  .mock-layout>.exam-summary{
+    position:fixed!important;
+    top:150px!important;
+    right:max(24px,calc((100vw - 1440px)/2 + 24px))!important;
+    width:350px!important;
+    max-width:350px!important;
+    margin:0!important;
+    overflow:visible!important;
+    z-index:100!important;
+  }
+}
+@media(max-width:1250px){
+  .mock-layout>.exam-summary{
+    position:static!important;
+    width:auto!important;
+    max-width:none!important;
+    margin:0!important;
+    overflow:visible!important;
+  }
+}
