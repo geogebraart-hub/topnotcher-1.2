@@ -3132,3 +3132,95 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
 /* MathJax itself may create display boxes, but only when hasMathExpression()
    classified the text as mathematical. */
 .math-text mjx-container[display="true"]{display:block!important;margin:.35em 0!important;}
+
+/* V76 — restore V68 Study Now option presentation.  Math rendering is
+   opt-in and must never alter the ordinary option typography. */
+.study-question-card .options{gap:13px!important;}
+.study-question-card .options button,
+.study-question-card .options button:hover,
+.study-question-card .options button:disabled{
+  box-sizing:border-box!important;
+  width:100%!important;
+  min-height:0!important;
+  padding:18px 20px!important;
+  border:1px solid var(--line)!important;
+  border-radius:16px!important;
+  background:#fff!important;
+  color:#43546f!important;
+  font-size:17px!important;
+  font-weight:500!important;
+  line-height:1.5!important;
+  text-align:left!important;
+  display:flex!important;
+  align-items:center!important;
+  gap:15px!important;
+  box-shadow:0 5px 18px rgba(38,52,73,.035)!important;
+  overflow:hidden!important;
+}
+.study-question-card .options button:hover{border-color:#c7cdfd!important;background:#fafaff!important;}
+.study-question-card .options button>span:first-child{
+  flex:0 0 36px!important;
+  width:36px!important;height:36px!important;
+  margin:0!important;padding:0!important;
+  border-radius:50%!important;
+  display:grid!important;place-items:center!important;
+  background:#eef1f7!important;color:#667b98!important;
+  font-size:16px!important;font-weight:800!important;
+  line-height:1!important;
+}
+.study-question-card .options button.correct{border-color:#10b981!important;background:#ecfdf5!important;color:#176a4b!important;}
+.study-question-card .options button.correct>span:first-child{background:#10b981!important;color:#fff!important;}
+.study-question-card .options button.wrong{border-color:#ef4444!important;background:#fef2f2!important;color:#8b3030!important;}
+.study-question-card .options button.wrong>span:first-child{background:#ef4444!important;color:#fff!important;}
+.study-question-card .options button>.math-text,
+.study-question-card .options button>span:not(:first-child){
+  flex:1 1 auto!important;width:auto!important;min-width:0!important;
+  margin:0!important;padding:0!important;background:transparent!important;
+  color:inherit!important;font:inherit!important;line-height:1.5!important;
+  text-align:left!important;overflow-wrap:anywhere!important;
+}
+
+/* V76 — schedule bubble follows the calendar's grid row height; only the
+   list scrolls. Remove legacy fixed/minimum heights. */
+@media (min-width:901px){
+  .calendar-layout{align-items:stretch!important;}
+  .calendar-layout>.calendar{height:auto!important;min-height:0!important;align-self:stretch!important;}
+  .calendar-layout>.schedule-list-panel{
+    height:auto!important;min-height:0!important;max-height:none!important;
+    align-self:stretch!important;overflow:hidden!important;
+    display:flex!important;flex-direction:column!important;box-sizing:border-box!important;
+  }
+  .schedule-list-panel .schedule-side-head{flex:0 0 auto!important;}
+  .schedule-list-panel .schedule-event-list{
+    flex:1 1 auto!important;min-height:0!important;height:0!important;max-height:none!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+  }
+}
+@media (max-width:900px){
+  .schedule-list-panel{min-height:0!important;height:auto!important;overflow:visible!important;}
+  .schedule-list-panel .schedule-event-list{height:auto!important;max-height:55vh!important;overflow-y:auto!important;}
+}
+
+/* V76 — Mock Board summary: same top position as Select Exam Category,
+   intact/sticky while the page/configuration column scrolls. */
+@media (min-width:1251px){
+  .mock-layout{display:grid!important;grid-template-columns:minmax(0,1fr) 350px!important;gap:24px!important;align-items:start!important;}
+  .mock-config-panel{grid-column:1!important;width:auto!important;min-width:0!important;}
+  .mock-layout>.exam-summary{
+    grid-column:2!important;grid-row:1!important;
+    position:sticky!important;top:24px!important;
+    align-self:start!important;width:350px!important;max-width:350px!important;
+    height:max-content!important;min-height:0!important;max-height:none!important;
+    overflow:visible!important;overflow-y:visible!important;
+    box-sizing:border-box!important;z-index:30!important;
+  }
+  .mock-layout>.exam-summary h2{margin-top:0!important;}
+}
+@media (max-width:1250px){
+  .mock-layout>.exam-summary{position:static!important;width:auto!important;max-width:none!important;height:auto!important;max-height:none!important;overflow:visible!important;}
+}
+
+/* V76 — math display is opt-in only. Ordinary prose keeps the application's
+   normal font, weight, color, spacing, and backgrounds. */
+.math-text{font-family:inherit!important;font-weight:inherit!important;color:inherit!important;background:transparent!important;}
+.math-text mjx-container{font-family:inherit!important;background:transparent!important;}
