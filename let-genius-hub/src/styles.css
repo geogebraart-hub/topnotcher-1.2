@@ -2900,3 +2900,54 @@ body > .flashcard-view-backdrop .flashcard-view-card h1{
 /* People avatars */
 .avatar-choice-grid button{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif!important;font-size:23px!important;}
 .profile-avatar-large{font-family:"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif!important;}
+
+/* V72.1 — functional layout fixes */
+@media (min-width: 901px){
+  /* The calendar determines the row height. The schedule bubble stretches to
+     that exact grid-row height; only its inner list is allowed to scroll. */
+  .calendar-layout{align-items:stretch!important;}
+  .calendar-layout > .calendar{height:auto!important;min-height:0!important;align-self:stretch!important;}
+  .calendar-layout > .schedule-list-panel{
+    height:auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    align-self:stretch!important;
+    overflow:hidden!important;
+    display:flex!important;
+    flex-direction:column!important;
+    box-sizing:border-box!important;
+  }
+  .schedule-list-panel .schedule-side-head{flex:0 0 auto!important;}
+  .schedule-list-panel .schedule-event-list{
+    flex:1 1 auto!important;
+    min-height:0!important;
+    max-height:none!important;
+    height:auto!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+  }
+}
+
+/* The Mock Board Exam summary is a complete, non-scrolling card. The page
+   itself handles scrolling while this bubble remains intact/sticky. */
+.exam-summary{
+  position:sticky!important;
+  top:24px!important;
+  align-self:start!important;
+  height:max-content!important;
+  min-height:0!important;
+  max-height:none!important;
+  overflow:visible!important;
+  overscroll-behavior:contain!important;
+}
+@media(max-width:1250px){
+  .exam-summary{position:static!important;height:auto!important;max-height:none!important;overflow:visible!important;}
+}
+
+/* A Study Now session is itself a high-z-index workspace. Its edit dialog is
+   rendered outside that workspace, so it must sit above the study layer. */
+.modal-backdrop{z-index:20000!important;}
+.question-modal{z-index:20001!important;}
+
+/* Make the live-edit control unmistakably clickable. */
+.study-edit-question-btn{position:relative!important;z-index:2!important;cursor:pointer!important;pointer-events:auto!important;}
