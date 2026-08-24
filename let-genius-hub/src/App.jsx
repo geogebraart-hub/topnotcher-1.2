@@ -88,7 +88,7 @@ function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpe
     <div className="sidebar-bottom">
       <button className="nav-btn" title="Settings" onClick={onSettings}><Settings size={20}/><span>Settings</span></button>
       <button className="profile-nav-btn" title="Profile" onClick={()=>onNavigate("profile")}>
-        <span className="avatar avatar-btn">{(profile?.name||"G").trim().charAt(0).toUpperCase()}</span>
+        <span className="avatar avatar-btn">{profile?.avatar || (profile?.name||"G").trim().charAt(0).toUpperCase()}</span>
         <span className="profile-nav-copy"><strong>{profile?.name||"Profile"}</strong><small>View profile</small></span><ChevronRight size={16}/>
       </button>
       <button className="nav-btn signout-btn" title="Sign out" onClick={()=>{if(confirm("Sign out of TOPNOTCHER!?")) onSignOut?.();}}><LogOut size={20}/><span>Sign out</span></button>
@@ -156,7 +156,7 @@ function clearShareHash() {
 function App({ authUser, onSignOut }) {
   const [page, setPage] = useState("progress");
   const [theme, setTheme] = usePersistedState(accountStorageKey(authUser, "lgh-theme"), "light");
-  const [profile, setProfile] = usePersistedState(accountStorageKey(authUser, "lgh-profile"), {name:authUser?.displayName||"Genius Learner", email:authUser?.email||"", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60});
+  const [profile, setProfile] = usePersistedState(accountStorageKey(authUser, "lgh-profile"), {name:authUser?.displayName||"Genius Learner", email:authUser?.email||"", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60, avatar:"⭐"});
   useEffect(() => { if (authUser?.email && profile?.email !== authUser.email) setProfile(p => ({...p, email: authUser.email, name: p?.name || authUser.displayName || "Genius Learner"})); }, [authUser?.email]);
   const [category, setCategory] = usePersistedState(accountStorageKey(authUser, "lgh-category"), "gened");
   const [streak, setStreak] = usePersistedState(accountStorageKey(authUser, "lgh-streak"), 0);
@@ -180,6 +180,7 @@ function App({ authUser, onSignOut }) {
   const [showAIModal, setShowAIModal] = useState(false);
   const [aiDeckId, setAiDeckId] = useState(null);
   const [editingQuestion, setEditingQuestion] = useState(null);
+  const [editingDuringStudy, setEditingDuringStudy] = useState(false);
   const [questionDeckId, setQuestionDeckId] = useState(null);
   const [showSessionModal, setShowSessionModal] = useState(false);
   const [editingSession, setEditingSession] = useState(null);
@@ -346,7 +347,27 @@ function App({ authUser, onSignOut }) {
     const normalized = {...data, id:data.id || Date.now(), deckId:deck.id, cat:deck.category, options:data.options.map(x=>x.trim())};
     if (normalized.id && questions.some(q=>q.id===normalized.id)) setQuestions(qs=>qs.map(q=>q.id===normalized.id?normalized:q));
     else setQuestions(qs=>[...qs, normalized]);
-    setShowQuestionModal(false); setEditingQuestion(null); setQuestionDeckId(null);
+    if (editingDuringStudy && studyPool && normalized.id) {
+      setStudyPool(d => {
+        if (!d) return d;
+        const nextAnswers = {...(d.answers||{})};
+        const nextResults = {...(d.results||{})};
+        delete nextAnswers[normalized.id];
+        delete nextResults[normalized.id];
+        const nextPool = d.pool.map(item => item.id===normalized.id ? normalized : item);
+        const nextAnswered = Object.keys(nextAnswers).length;
+        const nextCorrect = Object.entries(nextAnswers).reduce((n,[id,choice]) => { const item=nextPool.find(x=>String(x.id)===String(id)); return n + (item && Number(choice)===Number(item.answer) ? 1 : 0); },0);
+        return {...d,pool:nextPool,answers:nextAnswers,results:nextResults,answered:nextAnswered,correct:nextCorrect,selected:null,checked:false};
+      });
+    }
+    setShowQuestionModal(false); setEditingQuestion(null); setQuestionDeckId(null); setEditingDuringStudy(false);
+  }
+
+  function editQuestionDuringStudy(q) {
+    setQuestionDeckId(q.deckId);
+    setEditingQuestion(q);
+    setEditingDuringStudy(true);
+    setShowQuestionModal(true);
   }
 
   function createFlashcardsForDeck(deckId) {
@@ -381,7 +402,7 @@ function App({ authUser, onSignOut }) {
   return <>
     {shareOpen && shareToken && <SharedStudyAccessModal token={shareToken} onClose={()=>{setShareOpen(false);setShareToken(null);clearShareHash();}} onOpen={startSharedStudy} />}
     {shareDeck && <ShareStudyQuestionsModal deck={shareDeck} questions={questions.filter(q=>q.deckId===shareDeck.id)} onClose={()=>setShareDeck(null)} />}
-    {studyPool && <StudyModal onSignOut={onSignOut} study={studyPool} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile} theme={theme}/>}
+    {studyPool && <StudyModal onSignOut={onSignOut} study={studyPool} onEditQuestion={editQuestionDuringStudy} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile} theme={theme}/>}
     {flashcardStudyPool && <FlashcardStudyModal cards={flashcardStudyPool} close={()=>setFlashcardStudyPool(null)} onFinish={({minutes,answered,correct,percentage})=>setSessions(ss=>[...ss,{id:Date.now(),type:"flashcard",answered,correct,minutes,percentage,wrongQuestions:[],finishedAt:new Date().toISOString()}])} />}
     {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats} theme={theme}/>}
     <div className={`app-shell theme-${theme}`}>
@@ -413,7 +434,7 @@ function App({ authUser, onSignOut }) {
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck} folders={folders}/>}
       {showFolderModal && <FolderModal close={()=>{setShowFolderModal(false);setEditingFolder(null)}} save={saveFolder} initial={editingFolder}/>} 
       {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
-      {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
+      {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null);setEditingDuringStudy(false)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId}/>} 
       {showSessionModal && <SessionModal close={()=>{setShowSessionModal(false);setEditingSession(null)}} save={data=>{if(editingSession?.id){setSessions(ss=>ss.map(s=>s.id===editingSession.id?{...s,...data,id:editingSession.id}:s));}else{setSessions(ss=>[...ss,{id:Date.now(),...data}]);}setShowSessionModal(false);setEditingSession(null)}} initial={editingSession}/>} 
       {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
@@ -486,6 +507,56 @@ function Decks({decks,folders,questions,questionStats,flashcards,setPage,openDec
 
 function DeckCard({deck,folder,questions,questionStats,flashcardCount,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; const categoryLabel=deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"); return <div className="deck-card"><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{categoryLabel}</span>{folder&&<span className="tag folder-tag"><Folder size={12}/> {folder.name}</span>}<div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {flashcardCount||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}><Play size={17}/> Open Deck</button></div>; }
 
+
+function pdfEscape(text){
+  return String(text ?? "").replace(/\\/g,"\\\\").replace(/\(/g,"\\(").replace(/\)/g,"\\)").replace(/[^\x20-\x7E]/g,"?");
+}
+function wrapPdfText(text, maxChars=92){
+  const words=String(text??"").split(/\s+/).filter(Boolean); const lines=[]; let line="";
+  for(const word of words){ if((line+" "+word).trim().length>maxChars && line){ lines.push(line); line=word; } else line=(line+" "+word).trim(); }
+  if(line) lines.push(line); return lines.length?lines:[""];
+}
+function downloadDeckQuestionsPdf(deck, questions){
+  if(!questions?.length){ alert("This deck has no questions to download."); return; }
+  const W=612,H=792, margin=42, leading=15, pageWidth=W-margin*2;
+  const pages=[]; let ops=[]; let y=H-margin;
+  const addPage=()=>{ if(ops.length) pages.push(ops); ops=[]; y=H-margin; };
+  const text=(str,x,yy,size=10,bold=false)=>{ ops.push(`${bold?"/F2":"/F1"} ${size} Tf 0 g 1 0 0 1 ${x.toFixed(1)} ${yy.toFixed(1)} Tm (${pdfEscape(str)}) Tj`); };
+  const line=()=>{ ops.push(`0.82 G 0.7 w ${margin} ${y.toFixed(1)} m ${W-margin} ${y.toFixed(1)} l S`); };
+  text("TOPNOTCHER! — STUDY DECK QUESTIONS",margin,y,15,true); y-=22;
+  text(deck?.name||"Study Deck",margin,y,12,true); y-=16;
+  text(`${questions.length} questions · ${deck?.category==="mixed"?"Mixed":deck?.category||""}`,margin,y,9,false); y-=14; line(); y-=18;
+  questions.forEach((q,idx)=>{
+    const blocks=[{t:`${idx+1}. ${q.q}`,size:10,bold:true},{t:"",size:9}];
+    q.options.forEach((o,i)=>blocks.push({t:`${String.fromCharCode(65+i)}. ${o}`,size:9,bold:false}));
+    blocks.push({t:`Correct answer: ${q.options[q.answer]||""}`,size:9,bold:true});
+    if(q.explanation) blocks.push({t:`Rationale: ${q.explanation}`,size:9,bold:false});
+    for(const b of blocks){
+      const lines=wrapPdfText(b.t,b.bold?86:92);
+      for(const ln of lines){ if(y<margin+28){ addPage(); } text(ln,margin,y,b.size,b.bold); y-=leading; }
+      if(b.t==="") y-=3;
+    }
+    y-=7; if(y<margin+55) addPage();
+  });
+  addPage();
+  const objects=[]; const addObj=body=>{objects.push(body);return objects.length;};
+  const font1=addObj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>");
+  const font2=addObj("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>");
+  const pageIds=[]; const contentIds=[];
+  for(const pageOps of pages){ const stream=pageOps.join("\n"); contentIds.push(addObj(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`)); pageIds.push(addObj("")); }
+  const pagesId=addObj(""); const catalogId=addObj("");
+  // Fill page and pages objects now that IDs are known.
+  const pageBodies=pageIds.map((id,i)=>`<< /Type /Page /Parent ${pagesId} 0 R /MediaBox [0 0 ${W} ${H}] /Resources << /Font << /F1 ${font1} 0 R /F2 ${font2} 0 R >> >> /Contents ${contentIds[i]} 0 R >>`);
+  pageIds.forEach((id,i)=>objects[id-1]=pageBodies[i]);
+  objects[pagesId-1]=`<< /Type /Pages /Kids [${pageIds.map(id=>id+" 0 R").join(" ")}] /Count ${pageIds.length} >>`;
+  objects[catalogId-1]=`<< /Type /Catalog /Pages ${pagesId} 0 R >>`;
+  let pdf="%PDF-1.4\n%\xE2\xE3\xCF\xD3\n", offsets=[0];
+  for(let i=0;i<objects.length;i++){ offsets[i+1]=pdf.length; pdf+=`${i+1} 0 obj\n${objects[i]}\nendobj\n`; }
+  const xref=pdf.length; pdf+=`xref\n0 ${objects.length+1}\n0000000000 65535 f \n`; for(let i=1;i<=objects.length;i++) pdf+=`${String(offsets[i]).padStart(10,"0")} 00000 n \n`;
+  pdf+=`trailer\n<< /Size ${objects.length+1} /Root ${catalogId} 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  const blob=new Blob([pdf],{type:"application/pdf"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${(deck?.name||"study-deck").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"")}-questions.pdf`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
+}
+
 function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onEdit,onDelete,onStudy,onStudyFlashcards,onShare}) {
   const [selectedQuestion,setSelectedQuestion]=useState(null);
   const [selectedFlashcard,setSelectedFlashcard]=useState(null);
@@ -493,26 +564,37 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
   const [scannerOpen,setScannerOpen]=useState(false);
   const [scanPairs,setScanPairs]=useState([]);
   const [scanRunning,setScanRunning]=useState(false);
-  const normalizeScan=v=>String(v||"").toLowerCase().replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
-  const scanTokens=v=>normalizeScan(v).split(" ").filter(w=>w.length>2);
+  const scanStopwords=new Set("the a an and or of to in on for from by with at as is are was were be been being which what when where who whom why how that this these those their its it into than then do does did can could should would may might will shall best most more less about through during between among after before not no nor only primarily generally generally considered used using based very each all any one two three following statement describes purpose process approach principle practice source question answer correct teacher learner students student concept role effect factor example");
+  const normalizeScan=v=>String(v||"").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9\s]/g," ").replace(/\s+/g," ").trim();
+  const stemScan=w=>{let x=w; if(x.length>5&&x.endsWith("ies"))x=x.slice(0,-3)+"y"; else if(x.length>5&&x.endsWith("ing"))x=x.slice(0,-3); else if(x.length>4&&x.endsWith("ed"))x=x.slice(0,-2); else if(x.length>4&&x.endsWith("es"))x=x.slice(0,-2); else if(x.length>4&&x.endsWith("s"))x=x.slice(0,-1); return x;};
+  const scanTokens=v=>normalizeScan(v).split(" ").map(stemScan).filter(w=>w.length>2&&!scanStopwords.has(w));
+  const scanVector=v=>{const m=new Map();scanTokens(v).forEach(t=>m.set(t,(m.get(t)||0)+1));return m;};
+  const cosineScan=(a,b)=>{const A=scanVector(a),B=scanVector(b);if(!A.size||!B.size)return 0;let dot=0,na=0,nb=0;A.forEach((v,k)=>{na+=v*v;dot+=v*(B.get(k)||0)});B.forEach(v=>nb+=v*v);return dot/Math.sqrt(na*nb)||0;};
+  const charNgramScan=v=>{const x=`  ${normalizeScan(v)}  `;const m=new Map();for(let i=0;i<x.length-2;i++){const g=x.slice(i,i+3);m.set(g,(m.get(g)||0)+1)}return m;};
+  const charCosineScan=(a,b)=>{const A=charNgramScan(a),B=charNgramScan(b);let dot=0,na=0,nb=0;A.forEach((v,k)=>{na+=v*v;dot+=v*(B.get(k)||0)});B.forEach(v=>nb+=v*v);return dot/Math.sqrt(na*nb)||0;};
+  const sequenceScan=(a,b)=>{const A=normalizeScan(a).split(" "),B=normalizeScan(b).split(" ");if(!A.length||!B.length)return 0;const dp=Array(B.length+1).fill(0).map(()=>Array(A.length+1).fill(0));for(let i=1;i<=B.length;i++)for(let j=1;j<=A.length;j++)dp[i][j]=B[i-1]===A[j-1]?dp[i-1][j-1]+1:Math.max(dp[i-1][j],dp[i][j-1]);return (2*dp[B.length][A.length])/(A.length+B.length);};
+  const keyOverlapScan=(a,b)=>{const A=new Set(scanTokens(a)),B=new Set(scanTokens(b));if(!A.size||!B.size)return 0;let inter=0;A.forEach(t=>{if(B.has(t))inter++});return inter/Math.min(A.size,B.size);};
   const scanSimilarity=(a,b)=>{
-    const A=new Set(scanTokens(a)), B=new Set(scanTokens(b));
-    if(!A.size||!B.size) return 0;
-    let inter=0; A.forEach(t=>{if(B.has(t)) inter++;});
-    const jaccard=inter/(A.size+B.size-inter);
-    const containment=inter/Math.min(A.size,B.size);
-    const bigrams=t=>{const x=scanTokens(t);const out=new Set();for(let i=0;i<x.length-1;i++)out.add(x[i]+" "+x[i+1]);return out};
-    const BA=bigrams(a), BB=bigrams(b); let bi=0; BA.forEach(x=>{if(BB.has(x))bi++;});
-    const biScore=(BA.size&&BB.size)?bi/(BA.size+BB.size-bi):0;
-    return Math.max(jaccard, containment*0.9, biScore*1.15);
+    const qA=a.q||"",qB=b.q||"";
+    const qCos=cosineScan(qA,qB), qChar=charCosineScan(qA,qB), qSeq=sequenceScan(qA,qB), qKey=keyOverlapScan(qA,qB);
+    const answerA=a.options?.[a.answer]||"", answerB=b.options?.[b.answer]||"";
+    const expA=a.explanation||"", expB=b.explanation||"";
+    const contextCos=cosineScan(`${answerA} ${expA}`,`${answerB} ${expB}`);
+    const contextChar=charCosineScan(`${answerA} ${expA}`,`${answerB} ${expB}`);
+    const score=Math.max(qChar*0.34+qCos*0.28+qSeq*0.16+qKey*0.12+contextCos*0.07+contextChar*0.03, qKey*0.55+contextCos*0.3+qChar*0.15);
+    const confidence=Math.min(0.99,Math.max(0,score));
+    return {score:confidence,signals:{qCos,qChar,qSeq,qKey,contextCos,contextChar}};
   };
   const runQuestionScanner=()=>{
     setScanRunning(true);
     setTimeout(()=>{
       const pairs=[];
       for(let i=0;i<questions.length;i++) for(let j=i+1;j<questions.length;j++){
-        const score=scanSimilarity(questions[i].q,questions[j].q);
-        if(score>=0.48) pairs.push({a:questions[i],b:questions[j],score});
+        const result=scanSimilarity(questions[i],questions[j]);
+        // Strict scanner: 70%+ is flagged; 60%+ is also flagged when the same
+        // answer/explanation context strongly indicates the same tested fact.
+        const strict=result.score>=0.70 || (result.score>=0.60 && result.signals.contextCos>=0.68 && result.signals.qKey>=0.55);
+        if(strict) pairs.push({a:questions[i],b:questions[j],score:result.score,signals:result.signals});
       }
       pairs.sort((a,b)=>b.score-a.score);
       setScanPairs(pairs); setScanRunning(false); setScannerOpen(true);
@@ -538,7 +620,7 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
         </div>
       </div>
     </div>
-    {activeTab==="questions"&&<section className="panel question-bank"><div className="section-head"><div><h2>Questions</h2><span className="muted">{questions.length} total · click a question to view it</span></div><button className="secondary-btn compact question-scanner-btn" onClick={runQuestionScanner} disabled={questions.length<2}><Search size={16}/> Scan for Similar Questions</button></div>
+    {activeTab==="questions"&&<section className="panel question-bank"><div className="section-head"><div><h2>Questions</h2><span className="muted">{questions.length} total · click a question to view it</span></div><div className="question-bank-actions"><button className="secondary-btn compact" onClick={()=>downloadDeckQuestionsPdf(deck,questions)} disabled={!questions.length}><FileDown size={16}/> Download Questions PDF</button><button className="secondary-btn compact question-scanner-btn" onClick={runQuestionScanner} disabled={questions.length<2}><Search size={16}/> {scanRunning?"Scanning…":"Scan for Similar Questions"}</button></div></div>
       {questions.length?<div className="question-list">{questions.map((q,i)=><div className="question-row" key={q.id}>
         <div className="question-number">{i+1}</div>
         <button className="question-row-main question-row-view" onClick={()=>setSelectedQuestion(q)}><b>{q.q}</b><span>{q.options.length} choices · {questionStats[q.id]?.attempts||0} attempts</span></button>
@@ -548,7 +630,7 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
     {activeTab==="flashcards"&&<section className="panel flashcard-bank"><div className="section-head"><div><h2>Flashcards</h2><span className="muted">{flashcards.length} created · choice-dependent questions are excluded</span></div><div className="flashcard-section-actions"><button className="secondary-btn compact" onClick={onGenerateFlashcards} disabled={!questions.length}><Layers3 size={16}/> Generate from Questions</button>{flashcards.length>0&&<button className="primary-btn compact" onClick={onStudyFlashcards}><BookOpen size={16}/> Study All</button>}</div></div>
       {flashcards.length?<div className="flashcard-grid">{flashcards.map(card=><FlashcardCard key={card.id} card={card} onDelete={onDeleteFlashcard} onOpen={()=>setSelectedFlashcard(card)}/>)}</div>:<div className="flashcard-empty"><Layers3/><b>No flashcards yet</b><span>Generate flashcards from the questions in this deck.</span></div>}
     </section>}
-    {scannerOpen&&createPortal(<div className="modal-backdrop scanner-backdrop" onClick={()=>setScannerOpen(false)}><div className="small-modal question-scanner-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION SCANNER</span><h2>{scanPairs.length ? `${scanPairs.length} similar pair${scanPairs.length===1?"":"s"} found` : "No redundant questions found"}</h2><span className="muted">Potentially duplicate or substantially similar questions are listed below. Review before deleting.</span></div><button onClick={()=>setScannerOpen(false)}><X/></button></div>{scanPairs.length?<div className="scanner-list">{scanPairs.map((pair,i)=><div className="scanner-pair" key={`${pair.a.id}-${pair.b.id}`}><div className="scanner-score">{Math.round(pair.score*100)}% similar</div><div className="scanner-q"><b>Question {questions.findIndex(q=>q.id===pair.a.id)+1}</b><p>{pair.a.q}</p><button className="danger-outline" onClick={()=>deleteScannedQuestion(pair.a.id)}><Trash2 size={14}/> Delete this question</button></div><div className="scanner-vs">VS</div><div className="scanner-q"><b>Question {questions.findIndex(q=>q.id===pair.b.id)+1}</b><p>{pair.b.q}</p><button className="danger-outline" onClick={()=>deleteScannedQuestion(pair.b.id)}><Trash2 size={14}/> Delete this question</button></div></div>)}</div>:<div className="scanner-empty"><CheckCircle2 size={30}/><b>Deck looks clean</b><span>No questions crossed the redundancy threshold.</span></div>}<div className="modal-foot"><button className="secondary-btn" onClick={()=>setScannerOpen(false)}>Close</button></div></div></div>, document.body)}
+    {scannerOpen&&createPortal(<div className="modal-backdrop scanner-backdrop" onClick={()=>setScannerOpen(false)}><div className="small-modal question-scanner-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION SCANNER</span><h2>{scanPairs.length ? `${scanPairs.length} similar pair${scanPairs.length===1?"":"s"} found` : "No redundant questions found"}</h2><span className="muted">Strict similarity scan: exact duplicates, close rewordings, shared key concepts, answer/explanation context, and wording patterns are compared. Review flagged pairs before deleting.</span></div><button onClick={()=>setScannerOpen(false)}><X/></button></div>{scanPairs.length?<div className="scanner-list">{scanPairs.map((pair,i)=><div className="scanner-pair" key={`${pair.a.id}-${pair.b.id}`}><div className="scanner-score">{Math.round(pair.score*100)}% similar</div><div className="scanner-q"><b>Question {questions.findIndex(q=>q.id===pair.a.id)+1}</b><p>{pair.a.q}</p><button className="danger-outline" onClick={()=>deleteScannedQuestion(pair.a.id)}><Trash2 size={14}/> Delete this question</button></div><div className="scanner-vs">VS</div><div className="scanner-q"><b>Question {questions.findIndex(q=>q.id===pair.b.id)+1}</b><p>{pair.b.q}</p><button className="danger-outline" onClick={()=>deleteScannedQuestion(pair.b.id)}><Trash2 size={14}/> Delete this question</button></div></div>)}</div>:<div className="scanner-empty"><CheckCircle2 size={30}/><b>Deck looks clean</b><span>No questions crossed the redundancy threshold.</span></div>}<div className="modal-foot"><button className="secondary-btn" onClick={()=>setScannerOpen(false)}>Close</button></div></div></div>, document.body)}
     {selectedQuestion&&createPortal(<div className="modal-backdrop question-view-backdrop" onClick={()=>setSelectedQuestion(null)}><div className="small-modal question-view-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION</span><h2>Question {questions.findIndex(x=>x.id===selectedQuestion.id)+1}</h2></div><button onClick={()=>setSelectedQuestion(null)}><X/></button></div><div className="question-view-content"><h3>{selectedQuestion.q}</h3><div className="question-view-options">{selectedQuestion.options.map((o,i)=><div className={i===selectedQuestion.answer?"correct":""} key={i}><b>{String.fromCharCode(65+i)}.</b><span>{o}</span></div>)}</div><div className="question-view-rationale"><CheckCircle2 size={18}/><div><b>Correct answer: {selectedQuestion.options[selectedQuestion.answer]}</b><p>{selectedQuestion.explanation}</p></div></div></div><div className="modal-foot"><button className="secondary-btn" onClick={()=>setSelectedQuestion(null)}>Close</button><button className="primary-btn" onClick={()=>{setSelectedQuestion(null);onEdit(selectedQuestion)}}><Pencil size={16}/> Edit Question</button></div></div></div>, document.body)}
     {selectedFlashcard&&createPortal(<FlashcardViewer card={selectedFlashcard} close={()=>setSelectedFlashcard(null)} />, document.body)}
   </div>;
@@ -677,13 +759,27 @@ function PaperScanModal({session,onClose,onVerified}){
   return <div className="modal-backdrop"><div className="small-modal paper-scan-modal"><div className="modal-head"><div><h2><ScanLine size={20}/> Scan Paper Answer Sheet</h2><span className="muted">Upload or photograph the TOPNOTCHER practice sheet. {expectedPages} page{expectedPages===1?'':'s'} expected.</span></div><button onClick={onClose}><X/></button></div>{cameraOpen?<div className="camera-box"><video ref={videoRef} playsInline muted/><div className="camera-guide">Fit the whole answer sheet inside the frame and keep all 4 black registration markers visible</div><div className="camera-actions"><button className="secondary-btn" onClick={()=>{setCameraOpen(false);streamRef.current?.getTracks?.().forEach(t=>t.stop())}}>Cancel</button><button className="primary-btn" onClick={capture}><Camera size={17}/> Capture Page</button></div></div>:<><label className="upload-drop"><Upload size={22}/><b>Upload scanned pages</b><span>Select one or more JPG/PNG images in page order.</span><input type="file" accept="image/*" multiple onChange={e=>setFiles(Array.from(e.target.files||[]))}/></label><div className="paper-scan-actions"><button className="secondary-btn" onClick={()=>setCameraOpen(true)} disabled={!navigator.mediaDevices?.getUserMedia}><Camera size={17}/> Use Camera</button><button className="secondary-btn" onClick={()=>openPaperAnswerSheet(session)}><Printer size={17}/> Print Sheet Again</button></div>{files.length>0&&<div className="scan-file-list">{files.map((f,i)=><div key={i}><span>Page {i+1}</span><b>{f.name}</b></div>)}</div>}<div className="scan-note"><CircleHelp size={16}/><span>For best results, use a flat, well-lit photo showing the entire page and all 4 black registration markers. The scanner first detects the markers and corrects for page position/perspective before reading bubble marks; unclear marks are reported as unanswered/ambiguous for review.</span></div><button className="primary-btn wide" disabled={!files.length||scanning} onClick={runScan}>{scanning?<><Loader2 className="spin" size={17}/> Scanning…</>:<><ScanLine size={17}/> Scan & Verify Answers</>}</button>{result&&<div className="scan-result"><b>{result.correct}/{total} correct · {result.score}%</b><span>{result.answered} answered · {result.ambiguous} unanswered/ambiguous</span></div>}</>}</div></div>;
 }
 
+function downloadPaperAnswerSheet({category,pool}){
+  const total=pool.length;
+  const pages=[];
+  for(let start=0;start<total;start+=100){
+    const pageItems=pool.slice(start,start+100);
+    const cols=Array.from({length:4},(_,col)=>pageItems.slice(col*25,col*25+25));
+    pages.push(`<section class="answer-sheet-page"><div class="sheet-border"></div><span class="reg-marker reg-tl"></span><span class="reg-marker reg-tr"></span><span class="reg-marker reg-bl"></span><span class="reg-marker reg-br"></span><header class="sheet-head"><div class="sheet-practice">PRACTICE ONLY</div><div class="sheet-brand"><div class="sheet-logo">★</div><b>TOPNOTCHER!</b><small>LET PRACTICE ANSWER SHEET</small></div><div class="sheet-meta"><span>Category</span><b>${(CATEGORIES.find(c=>c.id===category)?.short||category)}</b><span>Items ${start+1}–${Math.min(start+100,total)}</span></div></header><div class="sheet-instructions"><b>Instructions:</b> Shade one circle per item using a pencil. Keep all four black registration markers visible. This is a practice sheet and is not an official PRC answer form.</div><div class="sheet-columns">${cols.map((col,ci)=>`<div class="sheet-column"><div class="sheet-column-head">ITEMS ${start+ci*25+1}–${start+ci*25+col.length}</div>${col.map((_,ri)=>{const n=start+ci*25+ri+1;return `<div class="sheet-row"><b>${n}</b><span class="sheet-bubble">A</span><span class="sheet-bubble">B</span><span class="sheet-bubble">C</span><span class="sheet-bubble">D</span></div>`}).join('')}</div>`).join('')}</div><footer class="sheet-footer"><span>Write lightly and erase completely.</span><span>Practice only · TOPNOTCHER! By God's Grace</span></footer></section>`);
+  }
+  const html=`<!doctype html><html><head><meta charset="utf-8"><title>TOPNOTCHER Paper Answer Sheet</title><style>*{box-sizing:border-box}body{margin:0;background:#eef2f7;font-family:Arial,Helvetica,sans-serif;color:#17243a}.answer-sheet-page{position:relative;width:8.5in;min-height:11in;background:#fff;margin:0 auto 16px;padding:.28in .35in .32in;overflow:hidden}.sheet-border{position:absolute;inset:.14in;border:2px solid #1e4f95}.reg-marker{position:absolute;width:.18in;height:.18in;background:#050505}.reg-tl{left:.24in;top:.24in}.reg-tr{right:.24in;top:.24in}.reg-bl{left:.24in;bottom:.24in}.reg-br{right:.24in;bottom:.24in}.sheet-head{display:grid;grid-template-columns:1fr 1.6fr 1.2fr;gap:12px;align-items:center;border-bottom:2px solid #1e4f95;padding:.12in .08in .1in}.sheet-practice{font-size:14px;font-weight:800;color:#d71920;text-align:center}.sheet-brand{text-align:center}.sheet-logo{margin:0 auto 3px;width:32px;height:32px;border-radius:50%;background:#102a56;color:#ffd447;display:grid;place-items:center;font-size:17px}.sheet-brand b{display:block;font-size:17px;letter-spacing:.05em}.sheet-brand small{display:block;font-size:8px;color:#4b6380}.sheet-meta{display:flex;flex-direction:column;gap:3px;text-align:right;font-size:9px;color:#466080}.sheet-meta b{font-size:11px;color:#1e4f95}.sheet-instructions{margin:.08in 0 .1in;border:1px solid #a9bcd5;background:#f5f8fd;padding:7px 9px;font-size:8.5px;line-height:1.35}.sheet-columns{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.sheet-column{border:1px solid #b8c7da;padding:5px}.sheet-column-head{font-weight:800;text-align:center;color:#1e4f95;font-size:8px;border-bottom:1px solid #d8e0ea;padding-bottom:4px;margin-bottom:3px}.sheet-row{display:grid;grid-template-columns:20px repeat(4,1fr);align-items:center;height:22px;border-bottom:1px dotted #e4e9f0;font-size:8px}.sheet-row b{text-align:right;padding-right:4px;color:#314b69}.sheet-bubble{width:14px;height:14px;border:1.4px solid #4f6b8d;border-radius:50%;display:grid;place-items:center;font-size:6.5px;color:#52708f;justify-self:center}.sheet-footer{position:absolute;left:.35in;right:.35in;bottom:.24in;display:flex;justify-content:space-between;border-top:1px solid #b8c7da;padding-top:5px;font-size:7.5px;color:#60748f}@media print{body{background:#fff}.answer-sheet-page{margin:0;page-break-after:always}.answer-sheet-page:last-child{page-break-after:auto}}@media screen{body{padding:15px}} </style></head><body>${pages.join('')}</body></html>`;
+  const blob=new Blob([html],{type:'text/html;charset=utf-8'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');a.href=url;a.download=`TOPNOTCHER-${category}-paper-answer-sheet.html`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+
 function PreviewPaperSheetButton({category,count,questions}){
-  const preview=()=>{
+  const download=()=>{
     const pool=buildExamPool(category,questions).slice(0,count);
     if(!pool.length){alert('No questions are available for this answer sheet yet.');return;}
-    openPaperAnswerSheet({category,pool},false);
+    downloadPaperAnswerSheet({category,pool});
   };
-  return <button className="secondary-btn wide" type="button" onClick={preview}><FileText size={17}/> View / Download Paper Answer Sheet</button>;
+  return <button className="secondary-btn wide" type="button" onClick={download}><FileDown size={17}/> Download Paper Answer Sheet</button>;
 }
 
 function MockBoard({category,setCategory,mockScores,mockHistory,setExamSession,questions}) {
@@ -701,7 +797,7 @@ function MockBoard({category,setCategory,mockScores,mockHistory,setExamSession,q
     const ordered=shuffle?[...pool].sort(()=>Math.random()-0.5):[...pool];
     setExamSession({id:Date.now(), category, requestedCount:count, pool:ordered.slice(0,actualCount), timeLimit, showExplanations:explain, startedAt:Date.now(), paperMode});
   };
-  return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><div><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.id==="full"?QUESTION_BANK_COUNTS.full:QUESTION_BANK_COUNTS[c.id]}+ items</span><span>◷ {c.hours}</span></div></button>)}</div><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150,200,250,300,350,400,420].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/><Toggle label="Paper Mode" hint="Answer on a printed pencil-shading sheet; questions still appear on screen." value={paperMode} setValue={setPaperMode}/></div><aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Category</dt><dd>{selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Available</dt><dd>{available}</dd><dt>Time limit</dt><dd>{timeLimit} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div>{available>0&&available<count&&<div className="form-hint"><CircleHelp/> Only {available} questions are currently available, so this attempt will use {available} items.</div>}<div className="bank-ready"><CheckCircle2/> <span><b>Question bank ready.</b> Built-in LET-style items are available for long-form practice.</span></div><h4>RECENT SCORES</h4>{mockHistory?.length?<div className="recent-scores">{mockHistory.slice(-5).reverse().map((s,i)=><span key={i}>{s.score}%</span>)}</div>:<p className="muted">No attempts yet</p>}<PreviewPaperSheetButton category={category} count={Math.min(count,available)} questions={questions}/><button className="primary-btn wide" onClick={start}>Start Exam <ChevronRight/></button></aside></div></div>;
+  return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><section className="panel mock-config-panel"><div className="mock-section"><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.id==="full"?QUESTION_BANK_COUNTS.full:QUESTION_BANK_COUNTS[c.id]}+ items</span><span>◷ {c.hours}</span></div></button>)}</div></div><div className="mock-section"><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150,200,250,300,350,400,420].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/><Toggle label="Paper Mode" hint="Answer on a printed pencil-shading sheet; questions still appear on screen." value={paperMode} setValue={setPaperMode}/></div></div><aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Category</dt><dd>{selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Available</dt><dd>{available}</dd><dt>Time limit</dt><dd>{timeLimit} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div>{available>0&&available<count&&<div className="form-hint"><CircleHelp/> Only {available} questions are currently available, so this attempt will use {available} items.</div>}<div className="bank-ready"><CheckCircle2/> <span><b>Question bank ready.</b> Built-in LET-style items are available for long-form practice.</span></div><h4>RECENT SCORES</h4>{mockHistory?.length?<div className="recent-scores">{mockHistory.slice(-5).reverse().map((s,i)=><span key={i}>{s.score}%</span>)}</div>:<p className="muted">No attempts yet</p>}<PreviewPaperSheetButton category={category} count={Math.min(count,available)} questions={questions}/><button className="primary-btn wide" onClick={start}>Start Exam <ChevronRight/></button></aside></div></div>;
 }
 
 function ExamRunner({session,close,setMockScores,setMockHistory,setSessions,setQuestionStats,theme="light"}) {
@@ -807,7 +903,7 @@ function Schedule({sessions,onAdd,onEdit,onDelete,onToggleDone}) {
   </div>;
 }
 
-function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,theme="light"}) {
+function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,onEditQuestion,theme="light"}) {
   const subjectText = String(study.label || "Study Session").replace(/^Study\s*[·:-]?\s*/i, "");
   const subjectLower = subjectText.toLowerCase();
   const subjectObjects = subjectLower.includes("math") || subjectLower.includes("mathemat")
@@ -851,6 +947,7 @@ function StudyModal({study,answer,next,jump,close,goTo,profile,onSignOut,theme="
           <div className="study-main-top"><div><span className="question-label">QUESTION {study.index+1}</span><span>of {study.pool.length}</span></div><span className="study-answered">{study.answered} answered</span></div>
           <div className="study-progress-track"><i style={{width:`${pct}%`}}/></div>
           <section className="study-question-card">
+            <div className="study-question-card-head"><span className="question-label">QUESTION {study.index+1}</span><button className="study-edit-question-btn" onClick={()=>onEditQuestion?.(q)}><Pencil size={14}/> Edit Question</button></div>
             <h2>{q.q}</h2>
             <div className="options">{q.options.map((o,i)=><button key={i} className={(study.checked&&i===q.answer?"correct ":"")+(study.checked&&i===study.selected&&i!==q.answer?"wrong":"")} disabled={study.checked} onClick={()=>answer(i)}><span>{String.fromCharCode(65+i)}</span>{o}</button>)}</div>
             {study.checked&&<div className={"explanation "+(study.selected===q.answer?"good":"bad")}><b>{study.selected===q.answer?"Correct!":"Not quite."}</b><p>{q.explanation}</p></div>}
@@ -1145,7 +1242,8 @@ function Profile({profile,setProfile,setPage,theme,authUser}) {
   const [draft,setDraft]=useState({...profile, email: profile?.email || authUser?.email || ""});
   const save=()=>setProfile({...draft, email:authUser?.email || draft.email || "", dailyGoal:Number(draft.dailyGoal)||60});
   const initials=(draft.name||"G").trim().split(/\s+/).slice(0,2).map(x=>x[0]).join("").toUpperCase();
-  return <div><PageHeader title="Profile" subtitle="Manage your learner profile and LET study goals." action={<button className="secondary-btn compact" onClick={()=>setPage("progress")}><ArrowLeft size={17}/> Back to Progress</button>}/><div className="profile-layout"><section className="panel profile-card"><div className="profile-hero"><div className="profile-avatar-large">{initials||"G"}</div><div><h2>{draft.name||"Genius Learner"}</h2><p>{draft.goal||"Pass the LET"}</p><span className="tag">{theme==="dark"?"Dark mode":"Light mode"}</span></div></div><div className="profile-form"><label>Display name<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} placeholder="Your name"/></label><label>Google account email<input value={authUser?.email || draft.email || ""} readOnly aria-readonly="true"/></label><label>Study goal<input value={draft.goal} onChange={e=>setDraft({...draft,goal:e.target.value})} placeholder="e.g. Pass the LET"/></label><label>LET exam date<input type="date" value={draft.examDate} onChange={e=>setDraft({...draft,examDate:e.target.value})}/></label><label>Daily study goal (minutes)<input type="number" min="10" max="720" value={draft.dailyGoal} onChange={e=>setDraft({...draft,dailyGoal:e.target.value})}/></label><button className="primary-btn wide" onClick={save}><Save size={17}/> Save Profile</button></div></section><aside className="panel profile-summary"><h3>Your Study Identity</h3><div className="profile-stat"><span>Daily goal</span><b>{draft.dailyGoal||60} min</b></div><div className="profile-stat"><span>Exam date</span><b>{draft.examDate?new Date(draft.examDate+"T00:00:00").toLocaleDateString():"Not set"}</b></div><div className="profile-stat"><span>Appearance</span><b>{theme==="dark"?"Dark":"Light"}</b></div><div className="profile-tip"><UserCircle size={18}/><span>Your profile and study data are kept separate for your signed-in Google account.</span></div></aside></div></div>;
+  const avatars=["⭐","📚","🎓","🧠","✏️","🌟","🏆","📝"];
+  return <div><PageHeader title="Profile" subtitle="Manage your learner profile and LET study goals." action={<button className="secondary-btn compact" onClick={()=>setPage("progress")}><ArrowLeft size={17}/> Back to Progress</button>}/><div className="profile-layout"><section className="panel profile-card"><div className="profile-hero"><div className="profile-avatar-large">{draft.avatar||initials||"G"}</div><div><h2>{draft.name||"Genius Learner"}</h2><p>{draft.goal||"Pass the LET"}</p><span className="tag">{theme==="dark"?"Dark mode":"Light mode"}</span></div></div><div className="profile-avatar-picker"><b>Choose your avatar</b><div className="avatar-choice-grid">{avatars.map(a=><button type="button" key={a} className={draft.avatar===a?"selected":""} onClick={()=>setDraft({...draft,avatar:a})} aria-label={`Choose avatar ${a}`}>{a}</button>)}</div></div><div className="profile-form"><label>Display name<input value={draft.name} onChange={e=>setDraft({...draft,name:e.target.value})} placeholder="Your name"/></label><label>Google account email<input value={authUser?.email || draft.email || ""} readOnly aria-readonly="true"/></label><label>Study goal<input value={draft.goal} onChange={e=>setDraft({...draft,goal:e.target.value})} placeholder="e.g. Pass the LET"/></label><label>LET exam date<input type="date" value={draft.examDate} onChange={e=>setDraft({...draft,examDate:e.target.value})}/></label><label>Daily study goal (minutes)<input type="number" min="10" max="720" value={draft.dailyGoal} onChange={e=>setDraft({...draft,dailyGoal:e.target.value})}/></label><button className="primary-btn wide" onClick={save}><Save size={17}/> Save Profile</button></div></section><aside className="panel profile-summary"><h3>Your Study Identity</h3><div className="profile-stat"><span>Daily goal</span><b>{draft.dailyGoal||60} min</b></div><div className="profile-stat"><span>Exam date</span><b>{draft.examDate?new Date(draft.examDate+"T00:00:00").toLocaleDateString():"Not set"}</b></div><div className="profile-stat"><span>Appearance</span><b>{theme==="dark"?"Dark":"Light"}</b></div><div className="profile-tip"><UserCircle size={18}/><span>Your profile and study data are kept separate for your signed-in Google account.</span></div></aside></div></div>;
 }
 
 function SessionModal({close,save,initial}) {
