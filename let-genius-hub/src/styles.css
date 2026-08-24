@@ -3764,3 +3764,75 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
   margin-bottom: 0 !important;
 }
 
+
+/* =========================================================
+   FINAL STUDY NOW OPTION HOVER RESET
+   Do not add transforms/transitions to these options elsewhere.
+   ========================================================= */
+
+.study-fullscreen .study-main .study-question-card .options button,
+.study-fullscreen .study-main .study-question-card .options button:hover,
+.study-fullscreen .study-main .study-question-card .options button:focus,
+.study-fullscreen .study-main .study-question-card .options button:focus-visible,
+.study-fullscreen .study-main .study-question-card .options button:active,
+.study-fullscreen .study-main .study-question-card .options button:disabled {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+
+  animation: none !important;
+  transition: none !important;
+
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+
+  filter: none !important;
+  will-change: auto !important;
+
+  /* Keep the exact same shadow in every state */
+  box-shadow: 0 5px 18px rgba(38,52,73,.035) !important;
+}
+
+/* Hover must look EXACTLY like the normal option */
+.study-fullscreen .study-main .study-question-card .options button:hover {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+
+  border-color: var(--line) !important;
+  background: #fff !important;
+  color: #43546f !important;
+
+  box-shadow: 0 5px 18px rgba(38,52,73,.035) !important;
+}
+
+/* Do not allow any child element to animate or zoom */
+.study-fullscreen .study-main .study-question-card .options button *,
+.study-fullscreen .study-main .study-question-card .options button:hover * {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+
+  animation: none !important;
+  transition: none !important;
+
+  position: static !important;
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+}
+
+/* Keep the answer letter and text stationary */
+.study-fullscreen .study-main .study-question-card .options button > span:first-child,
+.study-fullscreen .study-main .study-question-card .options button > .math-text {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+}
