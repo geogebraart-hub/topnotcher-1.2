@@ -4092,3 +4092,42 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
   transition: none !important;
   animation: none !important;
 }
+
+
+/* FINAL FIX: preserve answer feedback colors while the pointer is over a checked option.
+   Hover must never turn a correct/incorrect answer back to the neutral white state. */
+.study-fullscreen .study-main .study-question-card .options button.correct:hover,
+.study-fullscreen .study-main .study-question-card .options button.correct:focus,
+.study-fullscreen .study-main .study-question-card .options button.correct:focus-visible,
+.study-fullscreen .study-main .study-question-card .options button.correct:active {
+  border-color: #10b981 !important;
+  background: #ecfdf5 !important;
+  color: #176a4b !important;
+  box-shadow: 0 5px 18px rgba(38,52,73,.035) !important;
+}
+
+.study-fullscreen .study-main .study-question-card .options button.wrong:hover,
+.study-fullscreen .study-main .study-question-card .options button.wrong:focus,
+.study-fullscreen .study-main .study-question-card .options button.wrong:focus-visible,
+.study-fullscreen .study-main .study-question-card .options button.wrong:active {
+  border-color: #ef4444 !important;
+  background: #fef2f2 !important;
+  color: #8b3030 !important;
+  box-shadow: 0 5px 18px rgba(38,52,73,.035) !important;
+}
+
+.study-fullscreen .study-main .study-question-card .options button.correct:hover > span:first-child,
+.study-fullscreen .study-main .study-question-card .options button.correct:focus > span:first-child,
+.study-fullscreen .study-main .study-question-card .options button.correct:focus-visible > span:first-child,
+.study-fullscreen .study-main .study-question-card .options button.correct:active > span:first-child {
+  background: #10b981 !important;
+  color: #fff !important;
+}
+
+.study-fullscreen .study-main .study-question-card .options button.wrong:hover > span:first-child,
+.study-fullscreen .study-main .study-question-card .options button.wrong:focus > span:first-child,
+.study-fullscreen .study-main .study-question-card .options button.wrong:focus-visible > span:first-child,
+.study-fullscreen .study-main .study-question-card .options button.wrong:active > span:first-child {
+  background: #ef4444 !important;
+  color: #fff !important;
+}
