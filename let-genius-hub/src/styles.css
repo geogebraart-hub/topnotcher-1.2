@@ -3987,3 +3987,108 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
     height: 40px !important;
   }
 }
+
+
+/* =========================================================
+   FINAL SAFE FIX — STUDY NOW OPTION BUBBLES
+   Visual/CSS only. No JSX or JavaScript changes.
+   ========================================================= */
+
+/* Give each answer bubble enough vertical room for one or two lines. */
+.study-fullscreen .study-main .study-question-card .options button {
+  min-height: 58px !important;
+  height: auto !important;
+  padding: 12px 16px !important;
+  box-sizing: border-box !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 12px !important;
+
+  line-height: 1.45 !important;
+  text-align: left !important;
+}
+
+/* Keep A/B/C/D centered vertically inside the bubble. */
+.study-fullscreen .study-main .study-question-card .options button > span:first-child {
+  flex: 0 0 32px !important;
+  width: 32px !important;
+  min-width: 32px !important;
+  height: 32px !important;
+
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  align-self: center !important;
+
+  margin: 0 !important;
+  padding: 0 !important;
+  line-height: 1 !important;
+  box-sizing: border-box !important;
+}
+
+/* Keep two-line (or longer) answer text vertically centered. */
+.study-fullscreen .study-main .study-question-card .options button > span:not(:first-child),
+.study-fullscreen .study-main .study-question-card .options button > .math-text {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
+
+  display: flex !important;
+  align-items: center !important;
+
+  align-self: center !important;
+  margin: 0 !important;
+  padding: 0 !important;
+
+  line-height: 1.45 !important;
+  text-align: left !important;
+  overflow-wrap: anywhere !important;
+}
+
+/* Absolutely no hover lift, zoom, slide, resize, or animation. */
+.study-fullscreen .study-main .study-question-card .options button,
+.study-fullscreen .study-main .study-question-card .options button:hover,
+.study-fullscreen .study-main .study-question-card .options button:focus,
+.study-fullscreen .study-main .study-question-card .options button:focus-visible,
+.study-fullscreen .study-main .study-question-card .options button:active,
+.study-fullscreen .study-main .study-question-card .options button:disabled {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+  rotate: none !important;
+
+  transition: none !important;
+  animation: none !important;
+
+  top: auto !important;
+  right: auto !important;
+  bottom: auto !important;
+  left: auto !important;
+
+  margin-top: 0 !important;
+  margin-bottom: 0 !important;
+
+  filter: none !important;
+  will-change: auto !important;
+}
+
+/* Hover must not visually lift the bubble. */
+.study-fullscreen .study-main .study-question-card .options button:hover {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+  box-shadow: 0 5px 18px rgba(38,52,73,.035) !important;
+}
+
+/* Prevent the letter, text, and MathJax content from moving independently. */
+.study-fullscreen .study-main .study-question-card .options button *,
+.study-fullscreen .study-main .study-question-card .options button:hover * {
+  transform: none !important;
+  translate: none !important;
+  scale: 1 !important;
+  rotate: none !important;
+
+  transition: none !important;
+  animation: none !important;
+}
