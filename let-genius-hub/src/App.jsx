@@ -412,6 +412,22 @@ function App({ authUser, onSignOut }) {
     };
     if (normalized.id && questions.some(q=>String(q.id)===String(normalized.id))) setQuestions(qs=>qs.map(q=>String(q.id)===String(normalized.id)?normalized:q));
     else setQuestions(qs=>[...qs, normalized]);
+
+    // Keep an already-saved flashcard synchronized with its edited question.
+    // Only existing flashcards are updated; this does not create new flashcards automatically.
+    if (normalized.id) {
+      setFlashcards(cards => cards.map(card =>
+        String(card.questionId) === String(normalized.id)
+          ? {
+              ...card,
+              front: normalized.q,
+              back: normalized.options?.[normalized.answer] || "",
+              explanation: normalized.explanation || ""
+            }
+          : card
+      ));
+    }
+
     if (editingDuringStudy && studyPool && normalized.id) {
       setStudyPool(d => {
         if (!d) return d;
