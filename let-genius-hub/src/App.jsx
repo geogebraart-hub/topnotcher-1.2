@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
-  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, Clock3, Copy, ExternalLink
+  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, Clock3, Copy, ExternalLink, Video, FileArchive, Download
 } from "lucide-react";
 
 let mathJaxPromise=null;
@@ -116,6 +116,35 @@ function usePersistedState(key, initial) {
   });
   useEffect(() => { localStorage.setItem(key, JSON.stringify(value)); }, [key, value]);
   return [value, setValue];
+}
+
+const MATERIAL_DB_NAME = "topnotcher-materials-v1";
+function openMaterialDB(){
+  return new Promise((resolve,reject)=>{
+    if(typeof indexedDB === "undefined") return reject(new Error("IndexedDB is not available in this browser."));
+    const req=indexedDB.open(MATERIAL_DB_NAME,1);
+    req.onupgradeneeded=()=>{ const db=req.result; if(!db.objectStoreNames.contains("materials")) db.createObjectStore("materials",{keyPath:"id"}); };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error||new Error("Could not open material storage."));
+  });
+}
+async function saveDeckMaterial({scope,deckId,type,file}){
+  const db=await openMaterialDB();
+  const item={id:`${scope}::${deckId}::${type}::${Date.now()}::${Math.random().toString(36).slice(2)}`,scope,deckId,type,name:file.name,size:file.size,mime:file.type||"application/octet-stream",createdAt:new Date().toISOString(),blob:file};
+  await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");tx.objectStore("materials").put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not save material."));});
+  db.close();
+  return item;
+}
+async function listDeckMaterials(scope,deckId,type){
+  const db=await openMaterialDB();
+  const rows=await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readonly");const req=tx.objectStore("materials").getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
+  db.close();
+  return rows.filter(x=>x.scope===scope && String(x.deckId)===String(deckId) && x.type===type).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+}
+async function deleteDeckMaterial(id){
+  const db=await openMaterialDB();
+  await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");tx.objectStore("materials").delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not delete material."));});
+  db.close();
 }
 
 
@@ -245,6 +274,7 @@ function App({ authUser, onSignOut }) {
   const [shareDeck, setShareDeck] = useState(null);
   const [shareToken, setShareToken] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
+  const [materialViewer, setMaterialViewer] = useState(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -370,7 +400,7 @@ function App({ authUser, onSignOut }) {
 
   function saveDeck(data) {
     if (data.id) setDecks(ds => ds.map(d => d.id===data.id ? {...d,...data, folderId:data.folderId||null} : d));
-    else setDecks(ds => [...ds, {id:Date.now(), name:data.name, category:data.category, description:data.description, folderId:data.folderId||null, deckColor:data.deckColor||"default", deckWallpaper:data.deckWallpaper||"none", flashcards:0}]);
+    else setDecks(ds => [...ds, {id:Date.now(), name:data.name, category:data.category, description:data.description, folderId:data.folderId||null, flashcards:0}]);
     setShowDeckModal(false); setEditingDeck(null);
   }
 
@@ -472,11 +502,6 @@ function App({ authUser, onSignOut }) {
 
   function deleteFlashcard(id) { setFlashcards(cards => cards.filter(card => card.id !== id)); }
 
-  function deleteQuestion(id) {
-    setQuestions(qs => qs.filter(q => String(q.id) !== String(id)));
-    setFlashcards(cards => cards.filter(card => String(card.questionId) !== String(id)));
-  }
-
   function goTo(nextPage) { setPage(nextPage); setMobileNav(false); setSelectedDeckId(null); }
 
   function jumpStudy(index) { setStudyPool(d => { if (!d) return d; const item=d.pool[index]; const saved=d.answers?.[item.id]; return {...d,index,selected:saved===undefined?null:saved,checked:saved!==undefined}; }); }
@@ -503,7 +528,7 @@ function App({ authUser, onSignOut }) {
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme} authUser={authUser}/>}
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} sessions={sessions} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
       {page==="decks" && <Decks decks={decks} folders={folders} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} setShowFolderModal={setShowFolderModal} setEditingFolder={setEditingFolder} deleteFolder={deleteFolder} deleteDeck={deleteDeck}/>} 
-      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={deleteQuestion} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))}/>} 
+      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))} onOpenMaterials={type=>setMaterialViewer({deckId:selectedDeckId,type})}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id && s.scheduleLogId!==id))} onToggleDone={id=>setSessions(ss=>{
         const target=ss.find(s=>s.id===id);
@@ -521,7 +546,7 @@ function App({ authUser, onSignOut }) {
 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck} folders={folders}/>}
       {showFolderModal && <FolderModal close={()=>{setShowFolderModal(false);setEditingFolder(null)}} save={saveFolder} initial={editingFolder}/>} 
-      {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
+      {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} materialScope={accountStorageKey(authUser,"lgh-materials")} onMaterialStored={()=>{}} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null);setEditingDuringStudy(false)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId} duringStudy={editingDuringStudy}/>} 
       {showSessionModal && <SessionModal close={()=>{setShowSessionModal(false);setEditingSession(null)}} save={data=>{
         setSessions(ss=>{
@@ -535,6 +560,7 @@ function App({ authUser, onSignOut }) {
         });
         setShowSessionModal(false);setEditingSession(null);
       }} initial={editingSession}/>} 
+      {materialViewer && <DeckMaterialsModal scope={accountStorageKey(authUser,"lgh-materials")} deckId={materialViewer.deckId} type={materialViewer.type} onClose={()=>setMaterialViewer(null)}/>}
       {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
     </div>
@@ -604,7 +630,7 @@ function Decks({decks,folders,questions,questionStats,flashcards,setPage,openDec
   </div>;
 }
 
-function DeckCard({deck,folder,questions,questionStats,flashcardCount,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; const categoryLabel=deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"); return <div className={`deck-card deck-color-${deck.deckColor || "default"} deck-wallpaper-${deck.deckWallpaper || "none"}`}><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{categoryLabel}</span>{folder&&<span className="tag folder-tag"><Folder size={12}/> {folder.name}</span>}<div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {flashcardCount||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}><Play size={17}/> Open Deck</button></div>; }
+function DeckCard({deck,folder,questions,questionStats,flashcardCount,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; const categoryLabel=deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"); return <div className="deck-card"><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{categoryLabel}</span>{folder&&<span className="tag folder-tag"><Folder size={12}/> {folder.name}</span>}<div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {flashcardCount||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}><Play size={17}/> Open Deck</button></div>; }
 
 
 function pdfEscape(text){
@@ -656,7 +682,7 @@ function downloadDeckQuestionsPdf(deck, questions){
   const blob=new Blob([pdf],{type:"application/pdf"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${(deck?.name||"study-deck").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"")}-questions.pdf`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 
-function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onEdit,onDelete,onStudy,onStudyFlashcards,onShare}) {
+function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onEdit,onDelete,onStudy,onStudyFlashcards,onShare,onOpenMaterials}) {
   const [selectedQuestion,setSelectedQuestion]=useState(null);
   const [selectedFlashcard,setSelectedFlashcard]=useState(null);
   const [activeTab,setActiveTab]=useState("questions");
@@ -723,7 +749,7 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
         <button className="secondary-btn study-now-inline share-study-btn" onClick={onShare} disabled={!questions.length}><Link2 size={17}/> Share Study Questions</button>
         <div className="deck-content-tabs" role="tablist" aria-label="Deck content">
           <button role="tab" aria-selected={activeTab==="questions"} className={activeTab==="questions"?"active":""} onClick={()=>setActiveTab("questions")}><FileText size={17}/> Questions <span>{questions.length}</span></button>
-          <button role="tab" aria-selected={activeTab==="flashcards"} className={activeTab==="flashcards"?"active":""} onClick={()=>setActiveTab("flashcards")}><Layers3 size={17}/> Flashcards <span>{flashcards.length}</span></button>
+          <button role="tab" aria-selected={activeTab==="flashcards"} className={activeTab==="flashcards"?"active":""} onClick={()=>setActiveTab("flashcards")}><Layers3 size={17}/> Flashcards <span>{flashcards.length}</span></button><button type="button" className="deck-material-tab study-materials-btn" onClick={()=>onOpenMaterials("study")}><FileArchive size={17}/> Study Materials</button><button type="button" className="deck-material-tab video-materials-btn" onClick={()=>onOpenMaterials("video")}><Video size={17}/> Video Materials</button>
         </div>
       </div>
     </div>
@@ -1153,92 +1179,36 @@ function SharedStudyAccessModal({token,onClose,onOpen}) {
   return <div className="modal-backdrop"><div className="small-modal share-access-modal"><div className="modal-head"><div><span className="question-label">SHARED STUDY QUESTIONS</span><h2>Password required</h2><span className="muted">Enter the password provided by the person who shared this Study Questions Now link.</span></div><button onClick={onClose}><X/></button></div><div className="share-access-icon"><LockKeyhole size={30}/></div><label>Share password<input type="password" autoFocus value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password" autoComplete="off"/></label>{error&&<div className="ai-error">{error}</div>}<div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Opening…</>:<><Play size={17}/> Study Questions Now</>}</button></div></div></div>;
 }
 
-function DeckModal({close,save,initial,folders=[]}) {
-  const [name,setName]=useState(initial?.name||"");
-  const [description,setDescription]=useState(initial?.description||"");
-  const [category,setCategory]=useState(initial?.category||"gened");
-  const [folderId,setFolderId]=useState(initial?.folderId?String(initial.folderId):"");
-  const [deckColor,setDeckColor]=useState(initial?.deckColor||"default");
-  const [deckWallpaper,setDeckWallpaper]=useState(initial?.deckWallpaper||"none");
-
-  return <div className="modal-backdrop">
-    <div className="small-modal">
-      <div className="modal-head">
-        <div>
-          <h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2>
-          <span className="muted">Choose a category and optionally organize the deck into a folder.</span>
-        </div>
-        <button onClick={close}><X/></button>
-      </div>
-
-      <label>Deck name
-        <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/>
-      </label>
-
-      <label>Category
-        <select value={category} onChange={e=>setCategory(e.target.value)}>
-          <option value="gened">GenEd</option>
-          <option value="profed">ProfEd</option>
-          <option value="majorship">Majorship</option>
-          <option value="mixed">Mixed — GenEd + ProfEd + Majorship</option>
-        </select>
-      </label>
-
-      <label>Folder
-        <select value={folderId} onChange={e=>setFolderId(e.target.value)}>
-          <option value="">No Folder</option>
-          {folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>
-      </label>
-
-      <label>Deck Color
-        <select value={deckColor} onChange={e=>setDeckColor(e.target.value)}>
-          <option value="default">Default</option>
-          <option value="blue">Blue</option>
-          <option value="violet">Violet</option>
-          <option value="green">Green</option>
-          <option value="navy">Navy</option>
-          <option value="warm">Warm</option>
-          <option value="blue-gradient">Blue Gradient</option>
-          <option value="violet-gradient">Violet Gradient</option>
-        </select>
-      </label>
-
-      <label>Deck Wallpaper
-        <select value={deckWallpaper} onChange={e=>setDeckWallpaper(e.target.value)}>
-          <option value="none">None</option>
-          <option value="circles">Circles</option>
-          <option value="geometric">Geometric</option>
-          <option value="blobs">Abstract Blobs</option>
-          <option value="stars">Stars</option>
-          <option value="waves">Waves</option>
-          <option value="dots">Dots</option>
-          <option value="grid">Grid</option>
-        </select>
-      </label>
-
-      <label>Description
-        <textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/>
-      </label>
-
-      <button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({
-        id:initial?.id,
-        name:name.trim(),
-        description,
-        category,
-        folderId:folderId?Number(folderId):null,
-        deckColor,
-        deckWallpaper
-      })}>
-        <Save size={17}/>{initial?"Save Changes":"Create Deck"}
-      </button>
-    </div>
-  </div>;
+function DeckMaterialsModal({scope,deckId,type,onClose}) {
+  const [items,setItems]=useState([]);
+  const [busy,setBusy]=useState(false);
+  const isVideo=type==="video";
+  const title=isVideo?"Video Materials":"Study Materials";
+  const subtitle=isVideo?"Upload video lessons and review them directly from this deck.":"PDF materials uploaded through AI Question Generator are saved here for later review.";
+  const reload=async()=>{try{setItems(await listDeckMaterials(scope,deckId,type));}catch(err){console.error(err);}};
+  useEffect(()=>{reload();},[scope,deckId,type]);
+  const upload=async e=>{
+    const files=[...(e.target.files||[])]; e.target.value="";
+    if(!files.length) return;
+    const allowed=isVideo?/\.(mp4|webm|mov|m4v)$/i:/\.pdf$/i;
+    const invalid=files.find(f=>!allowed.test(f.name) && !(isVideo?String(f.type).startsWith("video/"):f.type==="application/pdf"));
+    if(invalid){alert(isVideo?"Please upload an MP4, WebM, MOV, or M4V video.":"Study Materials accepts PDF files saved from the AI Question Generator.");return;}
+    setBusy(true);
+    try{for(const file of files) await saveDeckMaterial({scope,deckId,type,file}); await reload();}
+    catch(err){alert(err?.message||"Could not save the material in this browser.");}
+    finally{setBusy(false);}
+  };
+  const remove=async id=>{if(!confirm("Delete this material from the deck?"))return;try{await deleteDeckMaterial(id);await reload();}catch(err){alert("Could not delete this material.");}};
+  const openFile=item=>{const url=URL.createObjectURL(item.blob);const a=document.createElement("a");a.href=url;a.download=item.name;a.target="_blank";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);};
+  return <div className="modal-backdrop"><div className="small-modal deck-materials-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">DECK MATERIALS</span><h2>{title}</h2><span className="muted">{subtitle}</span></div><button onClick={onClose}><X/></button></div><label className="material-upload-box"><input type="file" multiple accept={isVideo?"video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v":"application/pdf,.pdf"} onChange={upload}/><Upload size={22}/><b>{busy?"Saving…":`Upload ${isVideo?"Video":"PDF"}`}</b><span>{isVideo?"MP4, WebM, MOV, or M4V":"PDF files from AI Question Generator"}</span></label><div className="deck-material-list">{items.length?items.map(item=><div className="deck-material-item" key={item.id}><div className="deck-material-icon">{isVideo?<Video size={20}/>:<FileArchive size={20}/>}</div><div className="deck-material-info"><b>{item.name}</b><span>{(item.size/1024/1024).toFixed(2)} MB · {new Date(item.createdAt).toLocaleDateString()}</span>{isVideo&&<video className="deck-material-video" controls preload="metadata" src={URL.createObjectURL(item.blob)} />}</div><div className="deck-material-actions"><button className="secondary-btn compact" type="button" onClick={()=>openFile(item)}><Download size={15}/> Download</button><button className="danger-outline" type="button" onClick={()=>remove(item.id)}><Trash2 size={14}/> Delete</button></div></div>):<div className="empty"><FileArchive/><b>No {isVideo?"video":"study"} materials yet</b><span>{isVideo?"Upload video lessons for this deck.":"Upload a PDF through AI Question Generator and it will appear here automatically."}</span></div>}</div><div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button></div></div></div>;
 }
+
+function DeckModal({close,save,initial,folders=[]}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); const [folderId,setFolderId]=useState(initial?.folderId?String(initial.folderId):""); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><div><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><span className="muted">Choose a category and optionally organize the deck into a folder.</span></div><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}><option value="gened">GenEd</option><option value="profed">ProfEd</option><option value="majorship">Majorship</option><option value="mixed">Mixed — GenEd + ProfEd + Majorship</option></select></label><label>Folder<select value={folderId} onChange={e=>setFolderId(e.target.value)}><option value="">No Folder</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category,folderId:folderId?Number(folderId):null})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
+
 function FolderModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); return <div className="modal-backdrop"><div className="small-modal folder-modal"><div className="modal-head"><div><h2>{initial?"Edit Folder":"Create Study Folder"}</h2><span className="muted">Group related study decks together for easier access.</span></div><button onClick={close}><X/></button></div><label>Folder name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. LET 2026 Review"/></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Optional folder description..."/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description:description.trim()})}><Save size={17}/>{initial?"Save Changes":"Create Folder"}</button></div></div>; }
 
 
-function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
+function AIQuestionModal({questions=[],deck,close,saveQuestions,materialScope,onMaterialStored}) {
   const [material,setMaterial]=useState("");
   const [sourceName,setSourceName]=useState("");
   const [count,setCount]=useState(50);
@@ -1279,6 +1249,14 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions}) {
         if (!text) throw new Error("PDF_TEXT_EMPTY");
         setMaterial(text);
         setError("");
+        if(deck?.id && materialScope){
+          try{
+            const saved=await saveDeckMaterial({scope:materialScope,deckId:deck.id,type:"study",file});
+            onMaterialStored?.(saved);
+          }catch(storageError){
+            console.warn("PDF was read successfully but could not be saved to Study Materials.",storageError);
+          }
+        }
         return;
       }
       if (!/\.(txt|md|csv)$/i.test(file.name)) {
