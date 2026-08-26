@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
-  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, Clock3, Copy, ExternalLink, Video, FileArchive, Download
+  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, Clock3, Copy, ExternalLink, Video, FileArchive, Download, Highlighter, Eye
 } from "lucide-react";
 
 let mathJaxPromise=null;
@@ -128,12 +128,24 @@ function openMaterialDB(){
     req.onerror=()=>reject(req.error||new Error("Could not open material storage."));
   });
 }
-async function saveDeckMaterial({scope,deckId,type,file}){
+async function saveDeckMaterial({scope,deckId,type,file,meta={}}){
   const db=await openMaterialDB();
-  const item={id:`${scope}::${deckId}::${type}::${Date.now()}::${Math.random().toString(36).slice(2)}`,scope,deckId,type,name:file.name,size:file.size,mime:file.type||"application/octet-stream",createdAt:new Date().toISOString(),blob:file};
+  const item={id:`${scope}::${deckId}::${type}::${Date.now()}::${Math.random().toString(36).slice(2)}`,scope,deckId,type,name:file.name,size:file.size,mime:file.type||"application/octet-stream",createdAt:new Date().toISOString(),blob:file,...meta};
   await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");tx.objectStore("materials").put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not save material."));});
   db.close();
   return item;
+}
+async function saveDeckMaterialBlob({scope,deckId,type,name,blob,mime="application/pdf",meta={}}){
+  return saveDeckMaterial({scope,deckId,type,file:new File([blob],name,{type:mime}),meta});
+}
+async function deleteDeckMaterialsBySource(scope,deckId,sourceId){
+  const db=await openMaterialDB();
+  const rows=await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readonly");const req=tx.objectStore("materials").getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
+  const ids=rows.filter(x=>x.scope===scope&&String(x.deckId)===String(deckId)&&x.sourceId===sourceId&&x.isHighlightedVersion).map(x=>x.id);
+  if(ids.length){
+    await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");const store=tx.objectStore("materials");ids.forEach(id=>store.delete(id));tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not replace highlighted material."));});
+  }
+  db.close();
 }
 async function listDeckMaterials(scope,deckId,type){
   const db=await openMaterialDB();
@@ -275,6 +287,7 @@ function App({ authUser, onSignOut }) {
   const [shareToken, setShareToken] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [materialViewer, setMaterialViewer] = useState(null);
+  const [materialStudyViewer, setMaterialStudyViewer] = useState(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -560,7 +573,8 @@ function App({ authUser, onSignOut }) {
         });
         setShowSessionModal(false);setEditingSession(null);
       }} initial={editingSession}/>} 
-      {materialViewer && <DeckMaterialsModal scope={accountStorageKey(authUser,"lgh-materials")} deckId={materialViewer.deckId} type={materialViewer.type} onClose={()=>setMaterialViewer(null)}/>}
+      {materialViewer && <DeckMaterialsModal scope={accountStorageKey(authUser,"lgh-materials")} deckId={materialViewer.deckId} type={materialViewer.type} onClose={()=>setMaterialViewer(null)} onStudyPdf={item=>{setMaterialViewer(null);setMaterialStudyViewer(item);}}/>}
+      {materialStudyViewer && <PDFStudyViewer scope={accountStorageKey(authUser,"lgh-materials")} item={materialStudyViewer} onClose={()=>setMaterialStudyViewer(null)}/>}
       {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
     </div>
@@ -1179,7 +1193,234 @@ function SharedStudyAccessModal({token,onClose,onOpen}) {
   return <div className="modal-backdrop"><div className="small-modal share-access-modal"><div className="modal-head"><div><span className="question-label">SHARED STUDY QUESTIONS</span><h2>Password required</h2><span className="muted">Enter the password provided by the person who shared this Study Questions Now link.</span></div><button onClick={onClose}><X/></button></div><div className="share-access-icon"><LockKeyhole size={30}/></div><label>Share password<input type="password" autoFocus value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password" autoComplete="off"/></label>{error&&<div className="ai-error">{error}</div>}<div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Opening…</>:<><Play size={17}/> Study Questions Now</>}</button></div></div></div>;
 }
 
-function DeckMaterialsModal({scope,deckId,type,onClose}) {
+function PDFStudyViewer({scope,item,onClose}) {
+  const containerRef=useRef(null);
+  const [pages,setPages]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [error,setError]=useState("");
+  const [savingVersion,setSavingVersion]=useState(false);
+  const [savedVersion,setSavedVersion]=useState(false);
+  const [highlights,setHighlights]=useState(()=>{
+    try{return JSON.parse(localStorage.getItem(`topnotcher-pdf-highlights::${scope}::${item.sourceId||item.id}`)||"[]");}catch{return [];}
+  });
+  const [selectedText,setSelectedText]=useState("");
+  const [activePage,setActivePage]=useState(null);
+
+  const highlightKey=`topnotcher-pdf-highlights::${scope}::${item.sourceId||item.id}`;
+  const persistHighlights=next=>{
+    setHighlights(next);
+    try{localStorage.setItem(highlightKey,JSON.stringify(next));}catch{}
+  };
+
+  useEffect(()=>{
+    let alive=true;
+    const render=async()=>{
+      try{
+        setLoading(true);setError("");setSavedVersion(false);
+        const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
+        const workerUrl=(await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url")).default;
+        pdfjs.GlobalWorkerOptions.workerSrc=workerUrl;
+        const bytes=new Uint8Array(await item.blob.arrayBuffer());
+        const pdf=await pdfjs.getDocument({data:bytes}).promise;
+        const rendered=[];
+        for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+          if(!alive) return;
+          const page=await pdf.getPage(pageNo);
+          const base=page.getViewport({scale:1.35});
+          const canvas=document.createElement("canvas");
+          const ctx=canvas.getContext("2d");
+          const viewport=base;
+          canvas.width=Math.ceil(viewport.width);
+          canvas.height=Math.ceil(viewport.height);
+          canvas.className="pdf-study-canvas";
+          await page.render({canvasContext:ctx,viewport}).promise;
+          const textContent=await page.getTextContent();
+          rendered.push({pageNo,canvas,textContent,viewport});
+        }
+        if(alive)setPages(rendered);
+      }catch(err){
+        console.error(err);
+        if(alive)setError("This PDF could not be opened in the study viewer. You can still download the original file from Study Materials.");
+      }finally{if(alive)setLoading(false);}
+    };
+    render();
+    return()=>{alive=false;};
+  },[item]);
+
+  useEffect(()=>{
+    if(!containerRef.current || !pages.length) return;
+    containerRef.current.innerHTML="";
+    pages.forEach(({pageNo,canvas,textContent,viewport})=>{
+      const pageWrap=document.createElement("div");
+      pageWrap.className="pdf-study-page";
+      pageWrap.dataset.page=String(pageNo);
+      pageWrap.appendChild(canvas);
+      const textLayer=document.createElement("div");
+      textLayer.className="pdf-study-text-layer";
+      textContent.items.forEach((itemText,idx)=>{
+        const span=document.createElement("span");
+        span.textContent=itemText.str||"";
+        span.dataset.textIndex=String(idx);
+        const tx=itemText.transform||[1,0,0,1,0,0];
+        const x=tx[4];
+        const y=tx[5];
+        const fontHeight=Math.abs(tx[3]||tx[0]||10);
+        span.style.left=`${x*1.35}px`;
+        span.style.top=`${viewport.height-(y*1.35)-fontHeight*1.35}px`;
+        span.style.fontSize=`${fontHeight*1.35}px`;
+        span.style.transform=`scaleX(${Math.abs(tx[0]||1)/Math.max(fontHeight,1)})`;
+        textLayer.appendChild(span);
+      });
+      pageWrap.appendChild(textLayer);
+      containerRef.current.appendChild(pageWrap);
+      applySavedPdfHighlights(textLayer,highlights.filter(h=>h.page===pageNo).map(h=>h.text));
+    });
+  },[pages,highlights]);
+
+  const handleSelection=()=>{
+    const sel=window.getSelection();
+    const text=sel?.toString().trim()||"";
+    if(!text){setSelectedText("");setActivePage(null);return;}
+    const anchor=sel.anchorNode?.parentElement?.closest?.(".pdf-study-page");
+    const focus=sel.focusNode?.parentElement?.closest?.(".pdf-study-page");
+    const node=anchor||focus;
+    setSelectedText(text);
+    setActivePage(node?Number(node.dataset.page):null);
+  };
+
+  const addHighlight=()=>{
+    const text=selectedText.trim();
+    if(!text || !activePage || !containerRef.current)return;
+    const sel=window.getSelection();
+    const pageEl=containerRef.current.querySelector(`.pdf-study-page[data-page="${activePage}"]`);
+    if(!pageEl)return;
+    const pageRect=pageEl.getBoundingClientRect();
+    const rects=sel?Array.from(sel.getRangeAt(0).getClientRects()).map(r=>({
+      x:(r.left-pageRect.left)/pageRect.width,
+      y:(r.top-pageRect.top)/pageRect.height,
+      w:r.width/pageRect.width,
+      h:r.height/pageRect.height
+    })).filter(r=>r.w>0&&r.h>0):[];
+    const exists=highlights.some(h=>h.page===activePage&&h.text===text);
+    if(!exists) persistHighlights([...highlights,{page:activePage,text,rects}]);
+    window.getSelection()?.removeAllRanges();
+    setSelectedText("");setActivePage(null);
+  };
+
+  const clearHighlights=()=>{
+    if(!highlights.length)return;
+    if(confirm("Remove all highlights from this PDF?")){persistHighlights([]);setSavedVersion(false);}
+  };
+
+  const downloadBlob=(blob,name)=>{
+    const url=URL.createObjectURL(blob);const a=document.createElement("a");a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);
+  };
+
+  const getSavedHighlightRects=(highlight)=>{
+    if(!containerRef.current)return [];
+    const pageEl=containerRef.current.querySelector(`.pdf-study-page[data-page="${highlight.page}"]`);
+    if(!pageEl)return [];
+    const layer=pageEl.querySelector(".pdf-study-text-layer");
+    if(!layer)return [];
+    const nodes=[...layer.querySelectorAll("span")];
+    const target=String(highlight.text||"").trim();
+    let full="";
+    const map=[];
+    nodes.forEach(node=>{const value=node.textContent||"";map.push({node,start:full.length,end:full.length+value.length});full+=value+" ";});
+    const pos=full.indexOf(target);
+    if(pos<0)return [];
+    const end=pos+target.length;
+    const first=map.find(m=>pos>=m.start&&pos<m.end);
+    const last=map.find(m=>end>m.start&&end<=m.end);
+    if(!first||!last)return [];
+    const range=document.createRange();
+    try{
+      range.setStart(first.node,Math.max(0,pos-first.start));
+      range.setEnd(last.node,Math.min((last.node.textContent||"").length,end-last.start));
+    }catch{return [];}
+    const pageRect=pageEl.getBoundingClientRect();
+    return Array.from(range.getClientRects()).map(r=>({x:(r.left-pageRect.left)/pageRect.width,y:(r.top-pageRect.top)/pageRect.height,w:r.width/pageRect.width,h:r.height/pageRect.height})).filter(r=>r.w>0&&r.h>0);
+  };
+
+  const saveHighlightedVersion=async()=>{
+    if(!highlights.length){alert("Add at least one highlight before saving a highlighted version.");return;}
+    setSavingVersion(true);setError("");
+    try{
+      const {PDFDocument,rgb}=await import("pdf-lib");
+      const originalBytes=await item.blob.arrayBuffer();
+      const pdfDoc=await PDFDocument.load(originalBytes);
+      const pdfPages=pdfDoc.getPages();
+      const effectiveHighlights=highlights.map(h=>({...h,rects:h.rects?.length?h.rects:getSavedHighlightRects(h)}));
+      effectiveHighlights.forEach(h=>{
+        const page=pdfPages[h.page-1];
+        if(!page)return;
+        const pw=page.getWidth(),ph=page.getHeight();
+        (h.rects||[]).forEach(r=>{
+          page.drawRectangle({
+            x:r.x*pw,
+            y:ph-(r.y+r.h)*ph,
+            width:r.w*pw,
+            height:r.h*ph,
+            color:rgb(1,0.86,0.12),
+            opacity:0.42,
+            borderOpacity:0
+          });
+        });
+      });
+      const bytes=await pdfDoc.save();
+      const baseName=item.name.replace(/\.pdf$/i,"");
+      const highlightedName=`${baseName} — Highlighted.pdf`;
+      await deleteDeckMaterialsBySource(scope,item.deckId,item.sourceId||item.id);
+      await saveDeckMaterialBlob({
+        scope,deckId:item.deckId,type:"study",name:highlightedName,blob:new Blob([bytes],{type:"application/pdf"}),
+        meta:{isHighlightedVersion:true,sourceId:item.sourceId||item.id}
+      });
+      setSavedVersion(true);
+    }catch(err){
+      console.error(err);
+      setError("The highlighted version could not be saved. Please make sure the project dependencies are installed and try again.");
+    }finally{setSavingVersion(false);}
+  };
+
+  return <div className="pdf-study-screen">
+    <header className="pdf-study-header">
+      <div className="pdf-study-title"><button className="icon-btn" onClick={onClose} aria-label="Back to Study Materials"><ArrowLeft size={19}/></button><div><span className="question-label">STUDY MATERIAL</span><h1>{item.name}</h1><span>{pages.length?`${pages.length} page${pages.length===1?"":"s"}`:"PDF Review"}</span></div></div>
+      <div className="pdf-study-tools"><button className="secondary-btn compact" type="button" disabled={!selectedText} onClick={addHighlight}><Highlighter size={15}/> {selectedText?"Highlight Selection":"Select Text"}</button><button className="primary-btn compact" type="button" disabled={!highlights.length||savingVersion} onClick={saveHighlightedVersion}>{savingVersion?<><Loader2 className="spin" size={15}/> Saving…</>:<><Save size={15}/> Save Highlighted Version</>}{savedVersion&&!savingVersion?" ✓":""}</button><button className="secondary-btn compact" type="button" onClick={clearHighlights}>Clear Highlights</button><button className="secondary-btn compact" type="button" onClick={()=>downloadBlob(item.blob,item.name)}><Download size={15}/> Download</button><button className="icon-btn" onClick={onClose} aria-label="Close"><X size={19}/></button></div>
+    </header>
+    <div className="pdf-study-help"><Highlighter size={15}/> Select text in the PDF, then click <b>Highlight Selection</b>. Use <b>Save Highlighted Version</b> to create a separate PDF copy with the highlights embedded.</div>
+    <main className="pdf-study-scroll" onMouseUp={handleSelection}>
+      {loading&&<div className="pdf-study-loading"><Loader2 className="spin" size={24}/> Opening study material…</div>}
+      {error&&<div className="pdf-study-error"><FileText size={24}/><b>{error}</b></div>}
+      <div ref={containerRef} className="pdf-study-pages" />
+    </main>
+  </div>;
+}
+
+function applySavedPdfHighlights(container,texts){
+  if(!container || !texts?.length)return;
+  const nodes=[...container.querySelectorAll("span")];
+  texts.forEach(search=>{
+    if(!search)return;
+    const target=String(search).trim();
+    let full="";
+    const map=[];
+    nodes.forEach((node,idx)=>{const value=node.textContent||"";map.push({node,start:full.length,end:full.length+value.length});full+=value+" ";});
+    const pos=full.indexOf(target);
+    if(pos<0)return;
+    const end=pos+target.length;
+    const first=map.find(m=>pos>=m.start&&pos<m.end);
+    const last=map.find(m=>end>m.start&&end<=m.end);
+    if(!first||!last)return;
+    const range=document.createRange();
+    range.setStart(first.node,Math.max(0,pos-first.start));
+    range.setEnd(last.node,Math.min((last.node.textContent||"").length,end-last.start));
+    const mark=document.createElement("mark");
+    mark.className="pdf-study-highlight";
+    try{range.surroundContents(mark);}catch{}
+  });
+}
+
+function DeckMaterialsModal({scope,deckId,type,onClose,onStudyPdf}) {
   const [items,setItems]=useState([]);
   const [busy,setBusy]=useState(false);
   const isVideo=type==="video";
@@ -1188,19 +1429,19 @@ function DeckMaterialsModal({scope,deckId,type,onClose}) {
   const reload=async()=>{try{setItems(await listDeckMaterials(scope,deckId,type));}catch(err){console.error(err);}};
   useEffect(()=>{reload();},[scope,deckId,type]);
   const upload=async e=>{
-    const files=[...(e.target.files||[])]; e.target.value="";
-    if(!files.length) return;
+    const files=[...(e.target.files||[])];e.target.value="";
+    if(!files.length)return;
     const allowed=isVideo?/\.(mp4|webm|mov|m4v)$/i:/\.pdf$/i;
-    const invalid=files.find(f=>!allowed.test(f.name) && !(isVideo?String(f.type).startsWith("video/"):f.type==="application/pdf"));
+    const invalid=files.find(f=>!allowed.test(f.name)&&!(isVideo?String(f.type).startsWith("video/"):f.type==="application/pdf"));
     if(invalid){alert(isVideo?"Please upload an MP4, WebM, MOV, or M4V video.":"Study Materials accepts PDF files saved from the AI Question Generator.");return;}
     setBusy(true);
-    try{for(const file of files) await saveDeckMaterial({scope,deckId,type,file}); await reload();}
+    try{for(const file of files)await saveDeckMaterial({scope,deckId,type,file});await reload();}
     catch(err){alert(err?.message||"Could not save the material in this browser.");}
     finally{setBusy(false);}
   };
   const remove=async id=>{if(!confirm("Delete this material from the deck?"))return;try{await deleteDeckMaterial(id);await reload();}catch(err){alert("Could not delete this material.");}};
-  const openFile=item=>{const url=URL.createObjectURL(item.blob);const a=document.createElement("a");a.href=url;a.download=item.name;a.target="_blank";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);};
-  return <div className="modal-backdrop"><div className="small-modal deck-materials-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">DECK MATERIALS</span><h2>{title}</h2><span className="muted">{subtitle}</span></div><button onClick={onClose}><X/></button></div><label className="material-upload-box"><input type="file" multiple accept={isVideo?"video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v":"application/pdf,.pdf"} onChange={upload}/><Upload size={22}/><b>{busy?"Saving…":`Upload ${isVideo?"Video":"PDF"}`}</b><span>{isVideo?"MP4, WebM, MOV, or M4V":"PDF files from AI Question Generator"}</span></label><div className="deck-material-list">{items.length?items.map(item=><div className="deck-material-item" key={item.id}><div className="deck-material-icon">{isVideo?<Video size={20}/>:<FileArchive size={20}/>}</div><div className="deck-material-info"><b>{item.name}</b><span>{(item.size/1024/1024).toFixed(2)} MB · {new Date(item.createdAt).toLocaleDateString()}</span>{isVideo&&<video className="deck-material-video" controls preload="metadata" src={URL.createObjectURL(item.blob)} />}</div><div className="deck-material-actions"><button className="secondary-btn compact" type="button" onClick={()=>openFile(item)}><Download size={15}/> Download</button><button className="danger-outline" type="button" onClick={()=>remove(item.id)}><Trash2 size={14}/> Delete</button></div></div>):<div className="empty"><FileArchive/><b>No {isVideo?"video":"study"} materials yet</b><span>{isVideo?"Upload video lessons for this deck.":"Upload a PDF through AI Question Generator and it will appear here automatically."}</span></div>}</div><div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button></div></div></div>;
+  const downloadFile=item=>{const url=URL.createObjectURL(item.blob);const a=document.createElement("a");a.href=url;a.download=item.name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);};
+  return <div className="modal-backdrop"><div className="small-modal deck-materials-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">DECK MATERIALS</span><h2>{title}</h2><span className="muted">{subtitle}</span></div><button onClick={onClose}><X/></button></div><label className="material-upload-box"><input type="file" multiple accept={isVideo?"video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v":"application/pdf,.pdf"} onChange={upload}/><Upload size={22}/><b>{busy?"Saving…":`Upload ${isVideo?"Video":"PDF"}`}</b><span>{isVideo?"MP4, WebM, MOV, or M4V":"PDF files from AI Question Generator"}</span></label><div className="deck-material-list">{items.length?items.map(item=><div className="deck-material-item" key={item.id}><div className="deck-material-icon">{isVideo?<Video size={20}/>:<FileArchive size={20}/>}</div><div className="deck-material-info"><b>{item.name}</b><span>{(item.size/1024/1024).toFixed(2)} MB · {new Date(item.createdAt).toLocaleDateString()}</span>{!isVideo&&item.isHighlightedVersion&&<small className="deck-material-highlighted-label">Saved Highlighted Version</small>}{isVideo&&<video className="deck-material-video" controls preload="metadata" src={URL.createObjectURL(item.blob)}/>}</div><div className="deck-material-actions">{!isVideo&&<button className="primary-btn compact" type="button" onClick={()=>onStudyPdf?.(item)}><Eye size={15}/> Study</button>}<button className="secondary-btn compact" type="button" onClick={()=>downloadFile(item)}><Download size={15}/> Download</button><button className="danger-outline" type="button" onClick={()=>remove(item.id)}><Trash2 size={14}/> Delete</button></div></div>):<div className="empty"><FileArchive/><b>No {isVideo?"video":"study"} materials yet</b><span>{isVideo?"Upload video lessons for this deck.":"Upload a PDF through AI Question Generator and it will appear here automatically."}</span></div>}</div><div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button></div></div></div>;
 }
 
 function DeckModal({close,save,initial,folders=[]}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); const [folderId,setFolderId]=useState(initial?.folderId?String(initial.folderId):""); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><div><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><span className="muted">Choose a category and optionally organize the deck into a folder.</span></div><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}><option value="gened">GenEd</option><option value="profed">ProfEd</option><option value="majorship">Majorship</option><option value="mixed">Mixed — GenEd + ProfEd + Majorship</option></select></label><label>Folder<select value={folderId} onChange={e=>setFolderId(e.target.value)}><option value="">No Folder</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category,folderId:folderId?Number(folderId):null})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
