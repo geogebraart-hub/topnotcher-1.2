@@ -4131,3 +4131,177 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
   background: #ef4444 !important;
   color: #fff !important;
 }
+
+
+/* =========================================================
+   STUDY DECK CUSTOM COLORS + CSS WALLPAPERS
+   ========================================================= */
+
+.deck-card.deck-color-default { background: #ffffff; }
+.deck-card.deck-color-blue { background: #eaf3ff; }
+.deck-card.deck-color-violet { background: #f1edff; }
+.deck-card.deck-color-green { background: #eaf8f1; }
+.deck-card.deck-color-navy { background: #eaf0fa; }
+.deck-card.deck-color-warm { background: #fff5e8; }
+.deck-card.deck-color-blue-gradient {
+  background: linear-gradient(135deg, #eef6ff 0%, #dcecff 100%);
+}
+.deck-card.deck-color-violet-gradient {
+  background: linear-gradient(135deg, #f5f0ff 0%, #e5ddff 100%);
+}
+
+.deck-card[class*="deck-wallpaper-"] {
+  position: relative;
+  overflow: hidden;
+}
+
+.deck-card[class*="deck-wallpaper-"] > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Circles */
+.deck-wallpaper-circles::before {
+  content: "";
+  position: absolute;
+  width: 150px;
+  height: 150px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.30);
+  top: -55px;
+  right: -45px;
+  z-index: 1;
+}
+.deck-wallpaper-circles::after {
+  content: "";
+  position: absolute;
+  width: 95px;
+  height: 95px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.22);
+  bottom: -35px;
+  left: -25px;
+  z-index: 1;
+}
+
+/* Geometric */
+.deck-wallpaper-geometric::before {
+  content: "";
+  position: absolute;
+  width: 130px;
+  height: 130px;
+  background: rgba(255,255,255,.20);
+  transform: rotate(28deg);
+  right: -35px;
+  top: -45px;
+  z-index: 1;
+}
+.deck-wallpaper-geometric::after {
+  content: "";
+  position: absolute;
+  width: 75px;
+  height: 75px;
+  border: 12px solid rgba(255,255,255,.16);
+  transform: rotate(45deg);
+  left: -25px;
+  bottom: -25px;
+  z-index: 1;
+}
+
+/* Abstract blobs */
+.deck-wallpaper-blobs::before {
+  content: "";
+  position: absolute;
+  width: 180px;
+  height: 100px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.20);
+  right: -60px;
+  top: 15px;
+  transform: rotate(-18deg);
+  z-index: 1;
+}
+.deck-wallpaper-blobs::after {
+  content: "";
+  position: absolute;
+  width: 120px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255,255,255,.16);
+  left: -45px;
+  bottom: 5px;
+  transform: rotate(25deg);
+  z-index: 1;
+}
+
+/* Stars */
+.deck-wallpaper-stars::before {
+  content: "✦  ✧  ✦";
+  position: absolute;
+  right: 15px;
+  top: 12px;
+  color: rgba(255,255,255,.38);
+  font-size: 24px;
+  letter-spacing: 10px;
+  z-index: 1;
+}
+.deck-wallpaper-stars::after {
+  content: "✧  ✦";
+  position: absolute;
+  left: 15px;
+  bottom: 15px;
+  color: rgba(255,255,255,.30);
+  font-size: 20px;
+  letter-spacing: 8px;
+  z-index: 1;
+}
+
+/* Waves */
+.deck-wallpaper-waves::before {
+  content: "";
+  position: absolute;
+  width: 170%;
+  height: 90px;
+  border-radius: 50%;
+  border-top: 18px solid rgba(255,255,255,.18);
+  right: -55%;
+  top: 15px;
+  transform: rotate(-8deg);
+  z-index: 1;
+}
+.deck-wallpaper-waves::after {
+  content: "";
+  position: absolute;
+  width: 170%;
+  height: 90px;
+  border-radius: 50%;
+  border-top: 14px solid rgba(255,255,255,.13);
+  left: -65%;
+  bottom: 5px;
+  transform: rotate(-8deg);
+  z-index: 1;
+}
+
+/* Dots */
+.deck-wallpaper-dots::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(rgba(70,90,120,.16) 1.3px, transparent 1.3px);
+  background-size: 16px 16px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* Grid */
+.deck-wallpaper-grid::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(70,90,120,.10) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(70,90,120,.10) 1px, transparent 1px);
+  background-size: 22px 22px;
+  z-index: 1;
+  pointer-events: none;
+}
