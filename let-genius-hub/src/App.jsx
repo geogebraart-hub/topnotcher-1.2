@@ -275,6 +275,7 @@ function App({ authUser, onSignOut }) {
   const [shareToken, setShareToken] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
   const [materialViewer, setMaterialViewer] = useState(null);
+  const [importQuestionsDeckId, setImportQuestionsDeckId] = useState(null);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -528,7 +529,7 @@ function App({ authUser, onSignOut }) {
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme} authUser={authUser}/>}
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} sessions={sessions} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
       {page==="decks" && <Decks decks={decks} folders={folders} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} setShowFolderModal={setShowFolderModal} setEditingFolder={setEditingFolder} deleteFolder={deleteFolder} deleteDeck={deleteDeck}/>} 
-      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>setQuestions(qs=>qs.filter(q=>q.id!==id))} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))} onOpenMaterials={type=>setMaterialViewer({deckId:selectedDeckId,type})}/>} 
+      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onImportQuestions={()=>setImportQuestionsDeckId(selectedDeckId)} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>{setQuestions(qs=>qs.filter(q=>String(q.id)!==String(id)));setFlashcards(cards=>cards.filter(card=>String(card.questionId)!==String(id)));}} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))} onOpenMaterials={type=>setMaterialViewer({deckId:selectedDeckId,type})}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id && s.scheduleLogId!==id))} onToggleDone={id=>setSessions(ss=>{
         const target=ss.find(s=>s.id===id);
@@ -547,6 +548,7 @@ function App({ authUser, onSignOut }) {
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck} folders={folders}/>}
       {showFolderModal && <FolderModal close={()=>{setShowFolderModal(false);setEditingFolder(null)}} save={saveFolder} initial={editingFolder}/>} 
       {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} materialScope={accountStorageKey(authUser,"lgh-materials")} onMaterialStored={()=>{}} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
+      {importQuestionsDeckId && <ImportQuestionsModal deck={decks.find(d=>d.id===importQuestionsDeckId)} existingQuestions={questions} close={()=>setImportQuestionsDeckId(null)} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setImportQuestionsDeckId(null);}} />}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null);setEditingDuringStudy(false)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId} duringStudy={editingDuringStudy}/>} 
       {showSessionModal && <SessionModal close={()=>{setShowSessionModal(false);setEditingSession(null)}} save={data=>{
         setSessions(ss=>{
@@ -682,7 +684,7 @@ function downloadDeckQuestionsPdf(deck, questions){
   const blob=new Blob([pdf],{type:"application/pdf"}); const url=URL.createObjectURL(blob); const a=document.createElement("a"); a.href=url; a.download=`${(deck?.name||"study-deck").replace(/[^a-z0-9]+/gi,"-").replace(/^-|-$/g,"")}-questions.pdf`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1500);
 }
 
-function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onEdit,onDelete,onStudy,onStudyFlashcards,onShare,onOpenMaterials}) {
+function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcards,onDeleteFlashcard,onBack,onAdd,onAI,onImportQuestions,onEdit,onDelete,onStudy,onStudyFlashcards,onShare,onOpenMaterials}) {
   const [selectedQuestion,setSelectedQuestion]=useState(null);
   const [selectedFlashcard,setSelectedFlashcard]=useState(null);
   const [activeTab,setActiveTab]=useState("questions");
@@ -740,7 +742,7 @@ function DeckDetail({deck,questions,questionStats,flashcards,onGenerateFlashcard
   const attempts=questions.reduce((sum,q)=>sum+(questionStats[q.id]?.attempts||0),0);
   const pct=questions.length?Math.round(reviewed/questions.length*100):0;
   return <div>
-    <PageHeader title={deck.name} subtitle={<><span>{deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed")} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="secondary-btn" onClick={onAI}><WandSparkles size={17}/> AI Generate</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/>
+    <PageHeader title={deck.name} subtitle={<><span>{deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed")} · {deck.description||"Review deck"}</span><span className="date-badge">{questions.length} questions</span></>} action={<div className="detail-actions"><button className="secondary-btn compact" onClick={onBack}><ArrowLeft size={17}/> Back</button><button className="secondary-btn" onClick={onAI}><WandSparkles size={17}/> AI Generate</button><button className="secondary-btn" onClick={onImportQuestions}><Upload size={17}/> Import Questions</button><button className="primary-btn" onClick={onAdd}><Plus/> Add Question</button></div>}/>
     <div className="deck-detail-stats"><div><b>{questions.length}</b><span>Questions</span></div><div><b>{reviewed}</b><span>Reviewed</span></div><div><b>{pct}%</b><span>Deck progress</span></div><div><b>{attempts?Math.round(accuracy/attempts*100):0}%</b><span>Accuracy</span></div></div>
     <div className="detail-toolbar deck-action-row">
       <div className="detail-primary-actions">
@@ -1400,6 +1402,101 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions,materialScope,on
     {generated.length>0&&!busy&&<div className="ai-preview ai-preview-v2"><div className="section-head"><div><h3>Generated Questions</h3><span className="muted">Review the questions and rationales before saving them to your deck.</span></div><span className="tag">{generated.length} ready</span></div>{generated.map((q,i)=><div className="ai-q" key={i}><div className="ai-q-head"><b>{i+1}. <MathText text={q.question}/></b><span className="tag">{q.difficulty||difficulty}</span></div><div className="ai-options">{q.options.map((o,j)=><div className={j===Number(q.correctAnswer)?"correct":""} key={j}><b>{String.fromCharCode(65+j)}.</b> <MathText text={o}/></div>)}</div><div className="ai-rationale"><CheckCircle2 size={16}/><div><b>Correct answer: {String.fromCharCode(65+Number(q.correctAnswer))}</b><p><MathText text={q.rationale}/></p></div></div></div>)}</div>}
     <div className="modal-foot ai-footer"><button className="secondary-btn" onClick={close}>Cancel</button>{generated.length>0&&<button className="primary-btn" onClick={save}><Save size={17}/> Save {generated.length} Questions to Deck</button>}</div>
   </div></div>;
+}
+
+
+function parseImportedQuestions(rawText) {
+  const text=String(rawText||"").replace(/\r/g,"\n").replace(/[\u00a0\u2007\u202f]/g," ");
+  // Reconstruct useful line boundaries when PDF.js has flattened columns/lines.
+  const prepared=text
+    .replace(/\s+(?=\d{1,4}[.)]\s+)/g,"\n")
+    .replace(/\s+(?=[A-D][.)]\s+)/g,"\n")
+    .replace(/\s+(?=(?:Answer|Correct Answer)\s*[:\-])/gi,"\n")
+    .split("\n")
+    .map(x=>x.trim())
+    .filter(Boolean);
+  const starts=[];
+  for(let i=0;i<prepared.length;i++) if(/^\d{1,4}[.)]\s+/.test(prepared[i])) starts.push(i);
+  const blocks=[];
+  for(let i=0;i<starts.length;i++) blocks.push(prepared.slice(starts[i],starts[i+1]??prepared.length));
+  const parsed=[];
+  for(const block of blocks){
+    const first=block.shift();
+    const qm=first.match(/^\d{1,4}[.)]\s+(.*)$/);
+    if(!qm) continue;
+    const q=qm[1].trim();
+    const optionLines=[];
+    let rationale=[];
+    let answer=-1;
+    let inRationale=false;
+    for(const line of block){
+      const am=line.match(/^([A-D])[.)]\s*(.*)$/i);
+      const ans=line.match(/^(?:answer|correct\s+answer)\s*[:\-]?\s*([A-D])\b/i);
+      if(ans){answer=ans[1].toUpperCase().charCodeAt(0)-65;inRationale=true;continue;}
+      if(inRationale){
+        rationale.push(line.replace(/^rationale\s*[:\-]?\s*/i,""));
+        continue;
+      }
+      if(am) optionLines.push(am[2].trim());
+      else if(optionLines.length) optionLines[optionLines.length-1]+=" "+line;
+    }
+    if(optionLines.length>=2){
+      const options=optionLines.slice(0,4);
+      if(options.length===4) parsed.push({question:q,options,correctAnswer:answer,rationale:rationale.join(" ")});
+    }
+  }
+  return parsed;
+}
+
+function ImportQuestionsModal({deck,existingQuestions=[],close,saveQuestions}) {
+  const [rows,setRows]=useState([]);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const [sourceName,setSourceName]=useState("");
+  const readPdf=async file=>{
+    setBusy(true);setError("");setSourceName(file.name);
+    try{
+      const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
+      const workerUrl=(await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url")).default;
+      pdfjs.GlobalWorkerOptions.workerSrc=workerUrl;
+      const bytes=new Uint8Array(await file.arrayBuffer());
+      const pdf=await pdfjs.getDocument({data:bytes,disableWorker:true,useWorkerFetch:false,isEvalSupported:false}).promise;
+      const pages=[];
+      for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
+        const page=await pdf.getPage(pageNo);
+        const content=await page.getTextContent();
+        const items=(content.items||[]).filter(x=>String(x.str||"").trim());
+        const lines=[];
+        for(const item of items){
+          const y=Math.round(Number(item.transform?.[5]||0));
+          let line=lines.find(l=>Math.abs(l.y-y)<=2);
+          if(!line){line={y,text:""};lines.push(line);}
+          line.text+=(line.text?" ":"")+String(item.str||"").trim();
+        }
+        lines.sort((a,b)=>b.y-a.y);
+        pages.push(lines.map(x=>x.text).join("\n"));
+      }
+      const parsed=parseImportedQuestions(pages.join("\n"));
+      if(!parsed.length) throw new Error("No four-choice questions could be detected. Make sure the PDF contains selectable text with numbered questions and A–D choices.");
+      const existing=new Set(existingQuestions.map(q=>String(q.q||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()));
+      const unique=parsed.filter(x=>!existing.has(String(x.question).toLowerCase().replace(/[^a-z0-9]+/g," ").trim()));
+      setRows(unique.map((x,i)=>({id:`import-${Date.now()}-${i}`,...x,include:true})));
+    }catch(err){console.error(err);setRows([]);setError(err?.message||"Could not parse this PDF.");}
+    finally{setBusy(false);}
+  };
+  const updateRow=(id,key,value)=>setRows(rs=>rs.map(r=>r.id===id?{...r,[key]:value}:r));
+  const updateOption=(id,index,value)=>setRows(rs=>rs.map(r=>r.id===id?{...r,options:r.options.map((o,i)=>i===index?value:o)}:r));
+  const importSelected=()=>{
+    const chosen=rows.filter(r=>r.include);
+    if(!chosen.length){setError("Select at least one question to import.");return;}
+    if(chosen.some(r=>r.options.some(o=>!String(o).trim()))){setError("Every imported question needs four choices.");return;}
+    if(chosen.some(r=>!Number.isInteger(Number(r.correctAnswer))||Number(r.correctAnswer)<0||Number(r.correctAnswer)>3)){
+      setError("Set the correct answer for every selected question before importing.");return;
+    }
+    const now=Date.now();
+    saveQuestions(chosen.map((r,i)=>({id:now+i,deckId:deck.id,cat:deck.category,q:r.question.trim(),options:r.options.map(o=>o.trim()),answer:Number(r.correctAnswer),explanation:r.rationale?.trim()||"",topic:"Imported from PDF",sourceMaterial:sourceName,aiGenerated:false,importedFromPdf:true})));
+  };
+  return <div className="modal-backdrop"><div className="small-modal import-questions-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">PDF QUESTION IMPORT</span><h2>Import Questions from PDF</h2><span className="muted">No AI is used. TOPNOTCHER only extracts existing text, then lets you review it before adding it to this deck.</span></div><button onClick={close}><X/></button></div><label className="material-upload-box import-question-upload"><input type="file" accept="application/pdf,.pdf" onChange={e=>{const f=e.target.files?.[0];e.target.value="";if(f)readPdf(f);}}/><Upload size={22}/><b>{busy?"Parsing PDF…":"Upload Question PDF"}</b><span>{sourceName||"Select a text-based PDF containing numbered questions and A–D choices."}</span></label>{error&&<div className="ai-error">{error}</div>}{rows.length>0&&<div className="import-preview"><div className="section-head"><div><h3>Preview & Edit</h3><span className="muted">Review extracted questions before importing. Questions with no detected answer need a correct answer selected.</span></div><span className="tag">{rows.filter(r=>r.include).length} selected</span></div>{rows.map((r,idx)=><div className="import-question-row" key={r.id}><div className="import-question-top"><label className="import-check"><input type="checkbox" checked={r.include} onChange={e=>updateRow(r.id,"include",e.target.checked)}/><b>{idx+1}</b></label><textarea value={r.question} onChange={e=>updateRow(r.id,"question",e.target.value)} /></div><div className="import-options">{r.options.map((o,i)=><label key={i}><span>{String.fromCharCode(65+i)}.</span><input value={o} onChange={e=>updateOption(r.id,i,e.target.value)}/></label>)}</div><div className="import-bottom"><label>Correct answer<select value={r.correctAnswer<0?"":r.correctAnswer} onChange={e=>updateRow(r.id,"correctAnswer",e.target.value===""?-1:Number(e.target.value))}><option value="">Not detected — select</option><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></label><label>Rationale (optional)<textarea value={r.rationale||""} onChange={e=>updateRow(r.id,"rationale",e.target.value)} /></label></div></div>)}</div>}{!busy&&!rows.length&&!error&&<div className="import-empty"><FileText size={28}/><b>Upload a question PDF to begin</b><span>The importer works without AI and does not consume AI-generation credits.</span></div>}<div className="modal-foot"><button className="secondary-btn" onClick={close}>Cancel</button>{rows.length>0&&<button className="primary-btn" onClick={importSelected}><Save size={17}/> Import {rows.filter(r=>r.include).length} Questions</button>}</div></div></div>;
 }
 
 function QuestionModal({close,save,initial,deckId,duringStudy=false}) {
