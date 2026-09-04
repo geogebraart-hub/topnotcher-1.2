@@ -240,9 +240,11 @@ function clearShareHash() {
 function App({ authUser, onSignOut }) {
   const [page, setPage] = useState("progress");
   const [theme, setTheme] = usePersistedState(accountStorageKey(authUser, "lgh-theme"), "light");
+  const [palette, setPalette] = usePersistedState(accountStorageKey(authUser, "lgh-palette"), "violet");
   const [profile, setProfile] = usePersistedState(accountStorageKey(authUser, "lgh-profile"), {name:authUser?.displayName||"Genius Learner", email:authUser?.email||"", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60, avatar:"⭐"});
   useEffect(() => { if (authUser?.email && profile?.email !== authUser.email) setProfile(p => ({...p, email: authUser.email, name: p?.name || authUser.displayName || "Genius Learner"})); }, [authUser?.email]);
   const [category, setCategory] = usePersistedState(accountStorageKey(authUser, "lgh-category"), "gened");
+  const [dailyDrillCount, setDailyDrillCount] = usePersistedState(accountStorageKey(authUser, "lgh-daily-drill-count"), 20);
   const [streak, setStreak] = usePersistedState(accountStorageKey(authUser, "lgh-streak"), 0);
   const [lastActiveDate, setLastActiveDate] = usePersistedState(accountStorageKey(authUser, "lgh-last-active-date"), null);
   const [questions, setQuestions] = usePersistedState(accountStorageKey(authUser, "lgh-questions"), seedQuestions);
@@ -280,7 +282,9 @@ function App({ authUser, onSignOut }) {
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.body.dataset.theme = theme;
-  }, [theme]);
+    document.documentElement.dataset.palette = palette;
+    document.body.dataset.palette = palette;
+  }, [theme, palette]);
 
   useEffect(() => {
     const hash = window.location.hash || "";
@@ -339,12 +343,13 @@ function App({ authUser, onSignOut }) {
     setStudyPool({ label, pool:[...pool].sort(()=>Math.random()-0.5), index:0, correct:0, answered:0, selected:null, checked:false, answers:{}, results:{}, startedAt:Date.now(), finishedRecorded:false });
   }
 
-  function startDrill(cat = category) {
-    const pool = questions.filter(q => q.cat === cat).sort(()=>Math.random()-0.5).slice(0, 20);
-    if (pool.length < 20) {
-      alert(`Daily Drill requires at least 20 questions in this category. Only ${pool.length} are currently available.`);
-      return;
-    }
+  function startDrill(cat = category, requestedCount = dailyDrillCount) {
+    const available = questions.filter(q => q.cat === cat);
+    if (!available.length) { alert("There are no questions available in this category yet."); return; }
+    const requested = Math.max(1, Math.min(500, Number(requestedCount) || 20));
+    const count = Math.min(requested, available.length);
+    if (count < requested) alert(`You selected ${requested} questions, but only ${available.length} are currently available. The drill will use ${count} questions.`);
+    const pool = [...available].sort(()=>Math.random()-0.5).slice(0, count);
     startStudy(pool, `${CATEGORIES.find(c=>c.id===cat)?.label || "Daily"} Drill`);
   }
 
@@ -524,7 +529,7 @@ function App({ authUser, onSignOut }) {
     <AppSidebar page={page} profile={profile} onNavigate={goTo} onSettings={()=>setShowSettings(true)} onSignOut={onSignOut} mobileOpen={mobileNav} />
     <main className="main">
       <header className="mobile-header"><div className="mobile-brand-lockup"><div className="brand-mark topnotcher-medal" aria-hidden="true"><TopnotcherMedal size={25}/></div><div className="sidebar-brand-copy"><strong>TOPNOTCHER!</strong><span>By God’s Grace</span></div></div><button className="icon-btn" aria-label="Open navigation" onClick={()=>setMobileNav(v=>!v)}><Menu/></button></header>
-      {page==="dashboard" && <Dashboard setPage={setPage} streak={streak} category={category} setCategory={setCategory} startDrill={startDrill} stats={stats} decks={decks} questions={questions}/>} 
+      {page==="dashboard" && <Dashboard setPage={setPage} streak={streak} category={category} setCategory={setCategory} startDrill={startDrill} stats={stats} decks={decks} questions={questions} dailyDrillCount={dailyDrillCount} setDailyDrillCount={setDailyDrillCount}/> } 
       
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme} authUser={authUser}/>}
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} sessions={sessions} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
@@ -563,7 +568,7 @@ function App({ authUser, onSignOut }) {
         setShowSessionModal(false);setEditingSession(null);
       }} initial={editingSession}/>} 
       {materialViewer && <DeckMaterialsModal scope={accountStorageKey(authUser,"lgh-materials")} deckId={materialViewer.deckId} type={materialViewer.type} onClose={()=>setMaterialViewer(null)}/>}
-      {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
+      {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} palette={palette} setPalette={setPalette} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
     </div>
   </>;
@@ -571,12 +576,14 @@ function App({ authUser, onSignOut }) {
 
 function PageHeader({title,subtitle,action}) { return <div className="page-header"><div><h1>{title}</h1>{subtitle&&<p>{subtitle}</p>}</div>{action}</div>; }
 
-function Dashboard({setPage,streak,category,setCategory,startDrill,stats,decks,questions}) {
+function Dashboard({setPage,streak,category,setCategory,startDrill,stats,decks,questions,dailyDrillCount,setDailyDrillCount}) {
   const cat=CATEGORIES.find(c=>c.id===category)||CATEGORIES[0];
-  return <div><PageHeader title="Daily Drill" subtitle="20 questions per daily drill — build your review habit daily." action={<div className="streak-pill"><Flame size={20}/> {streak} day streak</div>}/>
+  const available=questions.filter(q=>q.cat===cat.id).length;
+  const count=Math.max(1,Math.min(500,Number(dailyDrillCount)||20));
+  return <div><PageHeader title="Daily Drill" subtitle={`${count} questions per drill — build your review habit daily.`} action={<div className="streak-pill"><Flame size={20}/> {streak} day streak</div>}/>
     <div className="category-tabs">{CATEGORIES.slice(0,3).map(c=><button className={category===c.id?"selected":""} key={c.id} onClick={()=>setCategory(c.id)}><c.icon size={20}/>{c.label}</button>)}</div>
-    <section className="hero-card"><div className="hero-icon"><Target size={42}/></div><h2>{cat.title.replace("General Education","GenEd")} Drill</h2><div className="hero-count">20 questions per drill · {questions.filter(q=>q.cat===cat.id).length} available</div><p>Answer one question at a time. Each correct answer on your first<br className="desktop"/> daily drill keeps your streak alive!</p><button className="primary-btn big" onClick={()=>startDrill(category)}><Play size={20} fill="currentColor"/> Start Drill</button></section>
-    <div className="three-cards">{CATEGORIES.slice(0,3).map(c=><button className="info-card" key={c.id} onClick={()=>{setCategory(c.id);startDrill(c.id)}}><div className={"mini-icon "+c.color}><c.icon size={24}/></div><h3>{c.label}</h3><p>{questions.filter(q=>q.cat===c.id).length} questions</p></button>)}</div>
+    <section className="hero-card"><div className="hero-icon"><Target size={42}/></div><h2>{cat.title.replace("General Education","GenEd")} Drill</h2><div className="hero-count">{count} questions per drill · {available} available</div><p>Choose how many questions you want to answer, then take your drill one question at a time.</p><div className="daily-count-setting dashboard-daily-count"><div className="ai-setting-label"><b>Number of Questions</b><span>{count} items</span></div><input className="daily-count-slider" type="range" min="1" max="500" step="1" value={count} onChange={e=>setDailyDrillCount(Number(e.target.value))}/><div className="daily-count-scale"><span>1</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div></div><button className="primary-btn big" onClick={()=>startDrill(category,count)}><Play size={20} fill="currentColor"/> Start {count}-Question Drill</button></section>
+    <div className="three-cards">{CATEGORIES.slice(0,3).map(c=><button className="info-card" key={c.id} onClick={()=>{setCategory(c.id);startDrill(c.id,count)}}><div className={"mini-icon "+c.color}><c.icon size={24}/></div><h3>{c.label}</h3><p>{questions.filter(q=>q.cat===c.id).length} questions</p></button>)}</div>
     <div className="streak-banner"><Flame/><div><b>Start your streak today!</b> Answer at least one question correctly to keep your streak alive.</div><strong>{streak} days</strong></div>
     <div className="quick-grid"><button onClick={()=>setPage("progress")}><BarChart3/><span>View progress</span></button><button onClick={()=>setPage("decks")}><Layers3/><span>Open study decks</span></button><button onClick={()=>setPage("mock")}><FileText/><span>Take a mock exam</span></button></div>
   </div>;
@@ -618,16 +625,18 @@ function Decks({decks,folders,questions,questionStats,flashcards,setPage,openDec
   const [search,setSearch]=useState("");
   const [filter,setFilter]=useState("All");
   const [folderFilter,setFolderFilter]=useState("All");
-  const shown=decks.filter(d=>{
-    const categoryOk=filter==="All"||d.category===filter.toLowerCase();
-    const folderOk=folderFilter==="All"||(folderFilter==="uncategorized"?!d.folderId:d.folderId===Number(folderFilter));
-    return categoryOk&&folderOk&&d.name.toLowerCase().includes(search.toLowerCase());
-  });
+  const [viewMode,setViewMode]=useState("card");
+  const shown=decks.filter(d=>{ const categoryOk=filter==="All"||d.category===filter.toLowerCase(); const folderOk=folderFilter==="All"||(folderFilter==="uncategorized"?!d.folderId:d.folderId===Number(folderFilter)); return categoryOk&&folderOk&&d.name.toLowerCase().includes(search.toLowerCase()); });
+  const sortedFolders=[...folders].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:"base"}));
+  const sortedDecks=items=>[...items].sort((a,b)=>a.name.localeCompare(b.name,undefined,{sensitivity:"base"}));
+  const renderDecks=items=>viewMode==="list"?<div className="deck-list-view">{sortedDecks(items).map(d=><DeckCard key={d.id} deck={d} folder={folders.find(f=>f.id===d.folderId)} questions={questions} questionStats={questionStats} flashcardCount={flashcards.filter(f=>f.deckId===d.id).length} openDeck={openDeck} edit={()=>{setEditingDeck(d);setShowDeckModal(true)}} deleteDeck={deleteDeck}/>)}</div>:<div className="deck-grid">{sortedDecks(items).map(d=><DeckCard key={d.id} deck={d} folder={folders.find(f=>f.id===d.folderId)} questions={questions} questionStats={questionStats} flashcardCount={flashcards.filter(f=>f.deckId===d.id).length} openDeck={openDeck} edit={()=>{setEditingDeck(d);setShowDeckModal(true)}} deleteDeck={deleteDeck}/>)}</div>;
+  const groups=sortedFolders.map(f=>({folder:f,items:shown.filter(d=>d.folderId===f.id)}));
+  const uncategorized=shown.filter(d=>!d.folderId);
   return <div>
     <PageHeader title="Study Decks" subtitle={`${decks.length} decks · ${questions.length} questions total`} action={<div className="deck-page-actions"><button className="secondary-btn compact" onClick={()=>{setEditingFolder(null);setShowFolderModal(true)}}><FolderPlus size={17}/> Create Folder</button><button className="primary-btn" onClick={()=>{setEditingDeck(null);setShowDeckModal(true)}}><Plus/> Create Deck</button></div>}/>
-    {folders.length>0&&<section className="panel deck-folders-panel"><div className="section-head"><div><h2><Folder size={19}/> Deck Folders</h2><span className="muted">Organize your study decks into folders.</span></div><button className="secondary-btn compact" onClick={()=>{setEditingFolder(null);setShowFolderModal(true)}}><FolderPlus size={15}/> New Folder</button></div><div className="folder-chip-row"><button className={`folder-chip ${folderFilter==="All"?"selected":""}`} onClick={()=>setFolderFilter("All")}><Folder size={16}/> All Decks <span>{decks.length}</span></button>{folders.map(f=><div className="folder-chip-wrap" key={f.id}><button className={`folder-chip ${folderFilter===String(f.id)?"selected":""}`} onClick={()=>setFolderFilter(String(f.id))}><Folder size={16}/> {f.name} <span>{decks.filter(d=>d.folderId===f.id).length}</span></button><button className="folder-delete" title={`Delete ${f.name}`} onClick={()=>deleteFolder(f.id)}><Trash2 size={13}/></button></div>)}<button className={`folder-chip ${folderFilter==="uncategorized"?"selected":""}`} onClick={()=>setFolderFilter("uncategorized")}><Folder size={16}/> Uncategorized <span>{decks.filter(d=>!d.folderId).length}</span></button></div></section>}
-    <div className="deck-toolbar"><div className="search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search decks..."/></div><div className="filters">{["All","GenEd","ProfEd","Majorship","Mixed"].map(x=><button key={x} className={filter===x?"selected":""} onClick={()=>setFilter(x)}>{x}</button>)}</div></div>
-    <div className="deck-grid">{shown.map(d=><DeckCard key={d.id} deck={d} folder={folders.find(f=>f.id===d.folderId)} questions={questions} questionStats={questionStats} flashcardCount={flashcards.filter(f=>f.deckId===d.id).length} openDeck={openDeck} edit={()=>{setEditingDeck(d);setShowDeckModal(true)}} deleteDeck={deleteDeck}/>)}</div>
+    <section className="panel deck-folders-panel deck-folders-first"><div className="section-head"><div><h2><Folder size={19}/> Study Folders</h2><span className="muted">Folders are arranged alphabetically. Select a folder to view its decks.</span></div><button className="secondary-btn compact" onClick={()=>{setEditingFolder(null);setShowFolderModal(true)}}><FolderPlus size={15}/> New Folder</button></div><div className="folder-tile-row"><button className={`folder-tile ${folderFilter==="All"?"selected":""}`} onClick={()=>setFolderFilter("All")}><Folder size={23}/><b>All Decks</b><span>{decks.length} decks</span></button>{sortedFolders.map(f=><button className={`folder-tile ${folderFilter===String(f.id)?"selected":""}`} key={f.id} onClick={()=>setFolderFilter(String(f.id))}><Folder size={23}/><b>{f.name}</b><span>{decks.filter(d=>d.folderId===f.id).length} decks</span><span className="folder-tile-delete" onClick={e=>{e.stopPropagation();deleteFolder(f.id)}}><Trash2 size={14}/></span></button>)}<button className={`folder-tile ${folderFilter==="uncategorized"?"selected":""}`} onClick={()=>setFolderFilter("uncategorized")}><Folder size={23}/><b>Uncategorized</b><span>{decks.filter(d=>!d.folderId).length} decks</span></button></div></section>
+    <div className="deck-toolbar"><div className="search"><Search/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search decks..."/></div><div className="filters">{["All","GenEd","ProfEd","Majorship","Mixed"].map(x=><button key={x} className={filter===x?"selected":""} onClick={()=>setFilter(x)}>{x}</button>)}<button className={viewMode==="list"?"selected":""} onClick={()=>setViewMode("list")}>☰ List</button><button className={viewMode==="card"?"selected":""} onClick={()=>setViewMode("card")}>▦ Cards</button></div></div>
+    {folderFilter!=="All" ? renderDecks(shown) : <div className="deck-folder-groups">{groups.map(g=><section className="deck-folder-group" key={g.folder.id}><div className="deck-folder-heading"><Folder size={19}/><h2>{g.folder.name}</h2><span>{g.items.length} deck{g.items.length===1?"":"s"}</span></div>{g.items.length?renderDecks(g.items):<div className="empty panel"><b>No decks in this folder</b><span>Create a deck and assign it to this folder.</span></div>}</section>)}{uncategorized.length>0&&<section className="deck-folder-group"><div className="deck-folder-heading"><Folder size={19}/><h2>Uncategorized</h2><span>{uncategorized.length} deck{uncategorized.length===1?"":"s"}</span></div>{renderDecks(uncategorized)}</section>}</div>}
     {!shown.length&&<div className="empty panel"><Layers3/><b>No decks found</b><span>Create a deck or change your search/filter.</span></div>}
   </div>;
 }
@@ -1538,7 +1547,10 @@ function QuestionModal({close,save,initial,deckId,duringStudy=false}) {
   return typeof document !== "undefined" ? createPortal(modal, document.body) : null;
 }
 
-function SettingsModal({close,theme,setTheme,profile,openProfile}) { return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your TOPNOTCHER! experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, theme, and study data are stored separately for your signed-in Google account in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
+function SettingsModal({close,theme,setTheme,palette,setPalette,profile,openProfile}) {
+  const palettes=[{id:"red",label:"Red",primary:"#dc2626"},{id:"orange",label:"Orange",primary:"#ea580c"},{id:"yellow",label:"Yellow",primary:"#ca8a04"},{id:"blue",label:"Blue",primary:"#2563eb"},{id:"indigo",label:"Indigo",primary:"#4f46e5"},{id:"violet",label:"Violet",primary:"#7c3aed"},{id:"green",label:"Green",primary:"#16a34a"},{id:"sunset",label:"Sunset Gradient",primary:"linear-gradient(135deg,#f97316,#dc2626)"},{id:"ocean",label:"Ocean Gradient",primary:"linear-gradient(135deg,#2563eb,#06b6d4)"},{id:"aurora",label:"Aurora Gradient",primary:"linear-gradient(135deg,#16a34a,#7c3aed)"}];
+  return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your TOPNOTCHER! experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section palette-section"><b>Website Color Palette</b><span>Change buttons, highlights, active states, progress bars, and accent colors.</span><div className="palette-grid">{palettes.map(p=><button type="button" key={p.id} className={palette===p.id?"selected":""} onClick={()=>setPalette(p.id)}><span className="palette-swatch" style={{background:p.primary}}/><b>{p.label}</b></button>)}</div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, palette, theme, and study data are stored separately for your signed-in Google account in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
+
 function Profile({profile,setProfile,setPage,theme,authUser}) {
   const [draft,setDraft]=useState({...profile, email: profile?.email || authUser?.email || ""});
   const save=()=>setProfile({...draft, email:authUser?.email || draft.email || "", dailyGoal:Number(draft.dailyGoal)||60});
