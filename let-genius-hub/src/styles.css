@@ -4468,3 +4468,78 @@ body[data-theme="dark"] .question-editor-modal label{color:#b7c3d3!important;}
 
 /* Per-deck solid/gradient color is supplied by the deck card itself. */
 .deck-card[style]{background-clip:padding-box}
+
+/* V79 — Study Deck organization, Daily Drill count, and user color palettes */
+.deck-folders-first{margin-bottom:26px}
+.folder-tile-row{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:12px;margin-top:20px}
+.folder-tile{position:relative;min-height:108px;border:1px solid var(--line);background:var(--surface,#fff);color:var(--ink);border-radius:16px;padding:16px;text-align:left;display:flex;flex-direction:column;align-items:flex-start;justify-content:center;gap:7px;transition:none}
+.folder-tile:hover{transform:none;box-shadow:none;border-color:var(--line)}
+.folder-tile svg{color:var(--primary);fill:color-mix(in srgb,var(--primary) 12%,transparent)}
+.folder-tile b{font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;padding-right:20px}
+.folder-tile span:not(.folder-tile-delete){font-size:12px;color:var(--muted)}
+.folder-tile.selected{border-color:var(--primary);background:color-mix(in srgb,var(--primary) 7%,#fff)}
+.folder-tile-delete{position:absolute;right:10px;top:10px;width:27px;height:27px;border-radius:8px;display:grid;place-items:center;color:#8a98ac;background:transparent}
+.folder-tile-delete:hover{color:var(--red);background:#fff0f0}
+.deck-folder-groups{display:grid;gap:28px}
+.deck-folder-group{min-width:0}
+.deck-folder-heading{display:flex;align-items:center;gap:9px;margin:0 0 13px;padding:0 2px}
+.deck-folder-heading svg{color:var(--primary)}
+.deck-folder-heading h2{margin:0;font-size:21px}
+.deck-folder-heading span{color:var(--muted);font-size:13px}
+.deck-list-view{display:grid;gap:12px}
+.deck-list-view .deck-card{display:grid;grid-template-columns:auto minmax(180px,1.2fr) minmax(180px,1fr) auto;align-items:center;gap:18px;padding:18px 20px}
+.deck-list-view .deck-card .deck-top{min-width:0}
+.deck-list-view .deck-card .deck-top .tag,.deck-list-view .deck-card .folder-tag{display:none}
+.deck-list-view .deck-card h3{margin:0;font-size:18px}
+.deck-list-view .deck-card p{margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.deck-list-view .deck-card .deck-meta{margin:0}
+.deck-list-view .deck-card .progress-track,.deck-list-view .deck-card .deck-percent{display:none}
+.deck-list-view .deck-card>.secondary-btn{width:auto;min-width:130px}
+.dashboard-daily-count{max-width:760px;margin:0 auto 25px;text-align:left;padding:18px 20px;border:1px solid var(--line);border-radius:15px;background:rgba(248,249,251,.72)}
+.daily-count-setting{margin:10px 0 24px}
+.daily-count-slider,.ai-count-slider{width:100%;accent-color:var(--primary);cursor:pointer}
+.daily-count-scale,.ai-count-slider-scale{display:flex;justify-content:space-between;color:var(--muted);font-size:11px;margin-top:5px}
+.dashboard-daily-count .ai-setting-label{display:flex;justify-content:space-between;gap:12px;margin-bottom:10px}
+.dashboard-daily-count .ai-setting-label span{color:var(--primary);font-weight:800}
+
+/* User-selectable website palettes */
+html[data-palette="red"]{--primary:#dc2626;--primary-hover:#b91c1c;--primary-soft:#fee2e2;--primary-wash:#fff1f2}
+html[data-palette="orange"]{--primary:#ea580c;--primary-hover:#c2410c;--primary-soft:#ffedd5;--primary-wash:#fff7ed}
+html[data-palette="yellow"]{--primary:#ca8a04;--primary-hover:#a16207;--primary-soft:#fef3c7;--primary-wash:#fffbeb}
+html[data-palette="blue"]{--primary:#2563eb;--primary-hover:#1d4ed8;--primary-soft:#dbeafe;--primary-wash:#eff6ff}
+html[data-palette="indigo"]{--primary:#4f46e5;--primary-hover:#4338ca;--primary-soft:#e0e7ff;--primary-wash:#eef2ff}
+html[data-palette="violet"]{--primary:#7c3aed;--primary-hover:#6d28d9;--primary-soft:#ede9fe;--primary-wash:#f5f3ff}
+html[data-palette="green"]{--primary:#16a34a;--primary-hover:#15803d;--primary-soft:#dcfce7;--primary-wash:#f0fdf4}
+html[data-palette="sunset"]{--primary:#ea580c;--primary-hover:#c2410c;--primary-soft:#ffedd5;--primary-wash:#fff7ed}
+html[data-palette="ocean"]{--primary:#2563eb;--primary-hover:#1d4ed8;--primary-soft:#dbeafe;--primary-wash:#eff6ff}
+html[data-palette="aurora"]{--primary:#16a34a;--primary-hover:#15803d;--primary-soft:#dcfce7;--primary-wash:#f0fdf4}
+
+.primary-btn{background:var(--primary)!important;box-shadow:0 8px 18px color-mix(in srgb,var(--primary) 20%,transparent)}
+.primary-btn:hover{background:var(--primary-hover)!important;transform:translateY(-1px)}
+.category-tabs button.selected,.filters button.selected,.item-options button.selected{background:var(--primary)!important;border-color:var(--primary)!important;color:#fff!important}
+.choice-card.chosen{border-color:var(--primary)!important;background:var(--primary-wash)!important}
+.check-dot{background:var(--primary)!important}
+.progress-track i{background:var(--primary)!important}
+.date-badge,.tag{background:var(--primary-soft);color:var(--primary)}
+.mini-icon.purple{background:var(--primary-soft);color:var(--primary)}
+.brand-mark{background:var(--primary)}
+.nav-btn:hover,.nav-btn.active{color:var(--primary)}
+.nav-btn:hover{background:var(--primary-wash)}
+.nav-btn.active{background:var(--primary-soft)}
+.deck-card .progress-track i{background:var(--primary)!important}
+
+/* Gradient palettes use a gradient surface for primary controls while retaining a solid readable accent variable. */
+html[data-palette="sunset"] .primary-btn,
+html[data-palette="ocean"] .primary-btn,
+html[data-palette="aurora"] .primary-btn{background:var(--palette-gradient)!important}
+html[data-palette="sunset"]{--palette-gradient:linear-gradient(135deg,#f97316,#dc2626)}
+html[data-palette="ocean"]{--palette-gradient:linear-gradient(135deg,#2563eb,#06b6d4)}
+html[data-palette="aurora"]{--palette-gradient:linear-gradient(135deg,#16a34a,#7c3aed)}
+
+@media(max-width:760px){
+  .folder-tile-row{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .deck-list-view .deck-card{grid-template-columns:auto minmax(0,1fr);gap:10px}
+  .deck-list-view .deck-card .deck-meta{grid-column:2}
+  .deck-list-view .deck-card>.secondary-btn{grid-column:1/-1;width:100%}
+  .dashboard-daily-count{padding:15px}
+}
