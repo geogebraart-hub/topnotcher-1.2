@@ -1476,127 +1476,176 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions,materialScope,on
 
 
 function parseImportedQuestions(rawText) {
+  // Stateful parser: after Rationale/Explanation starts, all following source text
+  // belongs to that rationale until a genuine next question is confirmed.
+  // This is deliberately loss-tolerant for PDFs containing equations, Unicode
+  // symbols, LaTeX, numbered solution steps, and wrapped lines.
   const text=String(rawText||"")
-    .replace(/\r/g,"\n")
+    .replace(/\r\n?/g,"\n")
     .replace(/[\u00a0\u2007\u202f]/g," ")
     .replace(/[\u2013\u2014]/g,"-");
 
-  // PDF text extraction can flatten wrapped lines into one line. Only create
-  // new structural lines for strong markers; all other text is preserved and
-  // assigned to the current question/choice/rationale state.
   const prepared=text
-    .replace(/\s+(?=(?:Question\s*)?\d{1,4}[.)\-:]\s+)/gi,"\n")
-    .replace(/\s+(?=\b(?:QUESTION)\s*[:\-]\s*)/gi,"\n")
-    .replace(/\s+(?=[A-D][.)\-:]\s+)/g,"\n")
-    .replace(/\s+(?=(?:Correct\s+Answer|(?<!Correct\s)Answer)\s*[:\-]?\s*[A-D]\b)/gi,"\n")
-    .replace(/\s+(?=(?:Rationale|Explanation|Reason|Solution)\s*[:\-])/gi,"\n")
+    .replace(/[ \t]+(?=(?:Question\s*)?\d{1,4}[.)\-:]\s+)/gi,"\n")
+    .replace(/[ \t]+(?=\bQUESTION\s*[:\-]\s*)/gi,"\n")
+    .replace(/[ \t]+(?=[A-D][.)\-:]\s+)/g,"\n")
+    .replace(/[ \t]+(?=(?:Correct\s+Answer|(?<!Correct\s)Answer)\s*[:\-]?\s*[A-D]\b)/gi,"\n")
+    .replace(/[ \t]+(?=(?:Rationale|Explanation|Reason|Solution)\s*[:\-])/gi,"\n")
     .split("\n")
-    .map(x=>x.replace(/\s+/g," ").trim())
+    .map(x=>x.trim())
     .filter(Boolean);
 
   const isQuestionStart=line=>/^(?:(?:Question\s*)?\d{1,4}[.)\-:]\s+|Question\s*[:\-]\s+)/i.test(line);
-  const isOption=line=>/^([A-D])[.)\-:]\s*(.*)$/i.test(line);
-  const isRationaleStart=line=>/^(?:Rationale|Explanation|Reason|Solution)\s*[:\-]\s*/i.test(line);
-  const cleanQuestionStart=line=>line
-    .replace(/^(?:(?:Question\s*)?\d{1,4}[.)\-:]\s+|Question\s*[:\-]\s+)/i,"")
-    .trim();
+  const questionNumber=line=>{
+    const m=line.match(/^(?:Question\s*)?(\d{1,4})[.)\-:]\s+/i);
+    return m?Number(m[1]):null;
+  };
+  const cleanQuestionStart=line=>line.replace(/^(?:(?:Question\s*)?\d{1,4}[.)\-:]\s+|Question\s*[:\-]\s+)/i,"").trim();
+  const isRationaleStart=line=>/^(?:Rationale|Explanation|Reason|Solution)\s*[:\-]?\s*/i.test(line);
   const cleanRationaleStart=line=>line.replace(/^(?:Rationale|Explanation|Reason|Solution)\s*[:\-]?\s*/i,"").trim();
-  const rationaleMarker=/(?:Rationale|Explanation|Reason|Solution)\s*[:\-]\s*/i;
-
-  const blocks=[];
-  let current=[];
-  for(const line of prepared){
-    if(isQuestionStart(line) && current.length){
-      blocks.push(current);
-      current=[];
-    }
-    current.push(line);
-  }
-  if(current.length) blocks.push(current);
+  const rationaleMarker=/(?:Rationale|Explanation|Reason|Solution)\s*[:\-]?\s*/i;
+  const answerMarker=/^(?:Correct\s+Answer|Answer)\s*[:\-]?\s*([A-D])\b(.*)$/i;
+  const optionMarker=/^([A-D])[.)\-:]\s*(.*)$/i;
 
   const parsed=[];
-  for(const rawBlock of blocks){
-    const block=[...rawBlock];
-    const first=block.shift()||"";
-    if(!isQuestionStart(first)) continue;
+  let current=null;
+  let state="question";
+  let lastQuestionNumber=null;
+  let pendingQuestion=null;
 
-    const questionParts=[cleanQuestionStart(first)];
-    const options=[];
-    let answer=-1;
-    const rationale=[];
-    let state="question";
+  const appendToRationale=line=>{
+    if(!current) return;
+    if(line) current.rationale.push(line);
+  };
 
-    for(const rawLine of block){
-      const line=rawLine.trim();
-      if(!line) continue;
+  const finish=()=>{
+    if(!current) return;
+    const question=String(current.questionParts.join(" ")).replace(/\s+/g," ").trim();
+    const options=current.options.slice(0,4).map(x=>String(x).replace(/\s+/g," ").trim());
+    const rationale=String(current.rationale.join(" ")).replace(/\s+/g," ").trim();
+    if(question && options.length===4){
+      parsed.push({question,options,correctAnswer:current.answer,rationale});
+    }
+    current=null;
+    state="question";
+  };
 
-      const am=line.match(/^([A-D])[.)\-:]\s*(.*)$/i);
-      const ans=line.match(/^(?:Correct\s+Answer|Answer)\s*[:\-]?\s*([A-D])\b(.*)$/i);
-      const rat=isRationaleStart(line);
+  const startQuestion=line=>{
+    current={questionParts:[cleanQuestionStart(line)],options:[],answer:-1,rationale:[]};
+    state="question";
+    const n=questionNumber(line);
+    if(n!==null) lastQuestionNumber=n;
+  };
 
-      if(rat){
-        const firstRationale=cleanRationaleStart(line);
-        if(firstRationale) rationale.push(firstRationale);
-        state="rationale";
+  for(const rawLine of prepared){
+    const line=rawLine.trim();
+    if(!line) continue;
+
+    // A candidate question encountered inside a rationale is not accepted yet.
+    // It becomes a new question only when its A-D choices actually appear.
+    if(pendingQuestion){
+      const candidateOption=line.match(optionMarker);
+      if(candidateOption){
+        finish();
+        startQuestion(pendingQuestion.line);
+        pendingQuestion=null;
+        // fall through and process this A choice normally
+      }else if(isQuestionStart(line)){
+        // Keep the earlier candidate in the rationale and replace it with the
+        // newer candidate. This protects numbered mathematical solution steps.
+        appendToRationale(pendingQuestion.line);
+        pendingQuestion={line};
         continue;
-      }
-
-      if(ans){
-        answer=ans[1].toUpperCase().charCodeAt(0)-65;
-        const trailing=ans[2].trim().replace(/^[.\-:]+\s*/,"");
-        if(trailing) rationale.push(trailing);
-        state="answer";
+      }else{
+        appendToRationale(pendingQuestion.line);
+        appendToRationale(line);
+        pendingQuestion=null;
         continue;
-      }
-
-      if(state==="rationale"){
-        rationale.push(line);
-        continue;
-      }
-
-      if(am){
-        let optionText=am[2].trim();
-        // Protect against PDFs that put "Rationale:" directly after choice D.
-        const rm=optionText.search(rationaleMarker);
-        if(rm>=0){
-          const choicePart=optionText.slice(0,rm).trim();
-          const rationalePart=optionText.slice(rm).trim();
-          options.push(choicePart);
-          rationale.push(cleanRationaleStart(rationalePart));
-          state="rationale";
-          continue;
-        }
-        options.push(optionText);
-        state="options";
-        continue;
-      }
-
-      if(state==="question"){
-        // Wrapped question continuation — preserve every line until A-D begins.
-        questionParts.push(line);
-      }else if(state==="options" && options.length){
-        const rm=line.search(rationaleMarker);
-        if(rm>=0){
-          const choiceContinuation=line.slice(0,rm).trim();
-          const rationalePart=line.slice(rm).trim();
-          if(choiceContinuation) options[options.length-1]=(options[options.length-1]+" "+choiceContinuation).trim();
-          rationale.push(cleanRationaleStart(rationalePart));
-          state="rationale";
-        }else{
-          options[options.length-1]=(options[options.length-1]+" "+line).trim();
-        }
-      }else if(state==="answer"){
-        rationale.push(line);
       }
     }
 
-    const question=questionParts.join(" ").replace(/\s+/g," ").trim();
-    const cleanOptions=options.slice(0,4).map(x=>x.replace(/\s+/g," ").trim());
-    if(question && cleanOptions.length===4){
-      parsed.push({question,options:cleanOptions,correctAnswer:answer,rationale:rationale.join(" ").trim()});
+    if(!current){
+      if(isQuestionStart(line)) startQuestion(line);
+      continue;
+    }
+
+    const qStart=isQuestionStart(line);
+    const am=line.match(optionMarker);
+    const ans=line.match(answerMarker);
+    const rat=isRationaleStart(line);
+
+    if(qStart){
+      if(state==="rationale"){
+        // Do not immediately split on "2. ..." inside a mathematical explanation.
+        pendingQuestion={line};
+        continue;
+      }
+      finish();
+      startQuestion(line);
+      continue;
+    }
+
+    if(rat){
+      const first=cleanRationaleStart(line);
+      if(first) current.rationale.push(first);
+      state="rationale";
+      continue;
+    }
+
+    if(ans){
+      current.answer=ans[1].toUpperCase().charCodeAt(0)-65;
+      const trailing=ans[2].trim().replace(/^[.\-:]\s*/,"");
+      if(trailing) current.rationale.push(trailing);
+      state="answer";
+      continue;
+    }
+
+    if(state==="rationale"){
+      // Never truncate this state. Mathematical lines, Unicode symbols, LaTeX,
+      // numbered steps, and wrapped paragraphs all remain part of the rationale.
+      current.rationale.push(line);
+      continue;
+    }
+
+    if(am){
+      let optionText=am[2].trim();
+      const rm=optionText.search(rationaleMarker);
+      if(rm>=0){
+        const choicePart=optionText.slice(0,rm).trim();
+        const rationalePart=optionText.slice(rm).trim();
+        if(current.options.length<4) current.options.push(choicePart);
+        const first=cleanRationaleStart(rationalePart);
+        if(first) current.rationale.push(first);
+        state="rationale";
+      }else if(current.options.length<4){
+        current.options.push(optionText);
+        state="options";
+      }
+      continue;
+    }
+
+    if(state==="question"){
+      current.questionParts.push(line);
+    }else if(state==="options" && current.options.length){
+      const rm=line.search(rationaleMarker);
+      if(rm>=0){
+        const choiceContinuation=line.slice(0,rm).trim();
+        const rationalePart=line.slice(rm).trim();
+        if(choiceContinuation) current.options[current.options.length-1]=(current.options[current.options.length-1]+" "+choiceContinuation).trim();
+        const first=cleanRationaleStart(rationalePart);
+        if(first) current.rationale.push(first);
+        state="rationale";
+      }else{
+        current.options[current.options.length-1]=(current.options[current.options.length-1]+" "+line).trim();
+      }
+    }else if(state==="answer"){
+      current.rationale.push(line);
+      state="rationale";
     }
   }
 
+  if(pendingQuestion) appendToRationale(pendingQuestion.line);
+  finish();
   return parsed;
 }
 
@@ -1616,19 +1665,34 @@ function ImportQuestionsModal({deck,existingQuestions=[],close,saveQuestions}) {
       const pages=[];
       for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
         const page=await pdf.getPage(pageNo);
-        const content=await page.getTextContent();
-        const items=(content.items||[]).filter(x=>String(x.str||"").trim());
+        const content=await page.getTextContent({disableCombineTextItems:false});
+        const items=(content.items||[]).filter(x=>String(x.str??"").trim() || x.hasEOL);
         const lines=[];
         for(const item of items){
+          const value=String(item.str??"");
           const y=Number(item.transform?.[5]||0);
           const x=Number(item.transform?.[4]||0);
-          let line=lines.find(l=>Math.abs(l.y-y)<=2.5);
+          // hasEOL is a strong PDF.js signal. Geometry is used as a fallback for
+          // PDFs that do not provide reliable end-of-line flags. A slightly wider
+          // tolerance keeps superscripts, subscripts, fractions, and math glyphs
+          // on the same logical line instead of fragmenting the source text.
+          let line=lines.find(l=>Math.abs(l.y-y)<=4.5);
           if(!line){line={y,textParts:[]};lines.push(line);}
-          line.textParts.push({x,text:String(item.str||"").trim()});
+          if(value.trim()) line.textParts.push({x,text:value,hasEOL:Boolean(item.hasEOL)});
+          if(item.hasEOL) line.hasEOL=true;
         }
         lines.sort((a,b)=>b.y-a.y);
-        lines.forEach(line=>line.text=line.textParts.sort((a,b)=>a.x-b.x).map(part=>part.text).join(" ").replace(/\s+/g," ").trim());
-        pages.push(lines.map(x=>x.text).join("\n"));
+        lines.forEach(line=>{
+          line.text=line.textParts
+            .sort((a,b)=>a.x-b.x)
+            .map(part=>part.text)
+            .join(" ")
+            // Only normalize layout whitespace. Do NOT strip or replace math
+            // characters such as √ ∑ ∫ ≤ ≥ ≠ ± × ÷, Greek letters, or LaTeX.
+            .replace(/[ \t]+/g," ")
+            .trim();
+        });
+        pages.push(lines.map(x=>x.text).filter(Boolean).join("\n"));
       }
       const parsed=parseImportedQuestions(pages.join("\n"));
       if(!parsed.length) throw new Error("No four-choice questions could be detected. Make sure the PDF contains selectable text with numbered questions and A–D choices.");
