@@ -635,7 +635,7 @@ function Progress({stats,streak,decks,mockScores,questions,questionStats,session
   const weakAreas=[...subjectStats].sort((a,b)=>a.accuracy-b.accuracy);
   const todayKey=new Date().toLocaleDateString("en-CA");
   const todaySessions=sessions.filter(s=>s.date===todayKey || (s.finishedAt&&new Date(s.finishedAt).toLocaleDateString("en-CA")===todayKey)).slice(0,4);
-  const recent=[...sessions.map(s=>({id:`session-${s.id}`,type:"study",title:s.title||(s.type==="flashcard"?"Flashcard Study":s.type==="drill"?"Daily Drill":"Study Questions"),detail:s.type==="flashcard"?`${s.answered||0} cards reviewed · ${s.percentage??100}% complete`:`${s.correct||0}/${s.answered||0} correct · ${s.percentage??0}%`,date:s.finishedAt?new Date(s.finishedAt).toLocaleDateString():"Recent",action:s.type==="drill"?"dashboard":"decks"})),...mockScores.map((score,i)=>({id:`mock-${i}`,type:"mock",title:"Mock Board Exam",detail:`Scored ${Math.round(score)}%`,date:"Recent",action:"mock"})))].slice(-6).reverse();
+  const recent=[...sessions.map(s=>({id:`session-${s.id}`,type:"study",title:s.title||(s.type==="flashcard"?"Flashcard Study":s.type==="drill"?"Daily Drill":"Study Questions"),detail:s.type==="flashcard"?`${s.answered||0} cards reviewed · ${s.percentage??100}% complete`:`${s.correct||0}/${s.answered||0} correct · ${s.percentage??0}%`,date:s.finishedAt?new Date(s.finishedAt).toLocaleDateString():"Recent",action:s.type==="drill"?"dashboard":"decks"})),...mockScores.map((score,i)=>({id:`mock-${i}`,type:"mock",title:"Mock Board Exam",detail:`Scored ${Math.round(score)}%`,date:"Recent",action:"mock"}))].slice(-6).reverse();
   const go=(target,cat)=>{if(cat)setCategory(cat);setPage(target);};
   const readiness=Math.round(Math.min(100,accuracy));
   const metricCards=[
