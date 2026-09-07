@@ -4955,3 +4955,130 @@ body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",san
   .schedule-stats>div span{font-size:8px!important}
   .day>span{font-size:9px!important}
 }
+
+/* ==========================================================
+   V84 — COHESIVE NATURAL 100% SCALE
+   Normalize visual scale and grid behavior without browser zoom.
+   ========================================================== */
+@media (min-width:1101px){
+  :root{
+    --ui-text:14px;
+    --ui-small:12px;
+    --ui-title:30px;
+    --ui-section:18px;
+    --ui-gap:18px;
+    --ui-card-pad:20px;
+    --ui-control-h:42px;
+  }
+
+  /* Stable app frame */
+  .main{
+    margin-left:240px!important;
+    width:calc(100vw - 240px)!important;
+    padding:30px 36px 56px!important;
+    box-sizing:border-box!important;
+  }
+  .main>div:not(.modal-backdrop),.main>.page-header{max-width:1380px!important}
+  .sidebar{width:240px!important;min-width:240px!important}
+
+  /* One typography scale across the product */
+  body{font-size:var(--ui-text)!important}
+  .page-header h1{font-size:var(--ui-title)!important;line-height:1.18!important}
+  .page-header p{font-size:14px!important;line-height:1.5!important}
+  .section-head h2,.chart-card h2{font-size:var(--ui-section)!important;line-height:1.3!important}
+  .muted{font-size:12px!important;line-height:1.45!important}
+  .primary-btn,.secondary-btn{min-height:var(--ui-control-h)!important;line-height:1.2!important}
+  .primary-btn{font-size:14px!important;padding:10px 16px!important}
+  .secondary-btn{font-size:13px!important;padding:10px 14px!important}
+
+  /* Sidebar is the reference scale, not a competing visual system */
+  .sidebar .topnotcher-brand{padding:6px 9px 17px!important}
+  .sidebar .topnotcher-brand .topnotcher-logo-circle{width:36px!important;height:36px!important;min-width:36px!important}
+  .sidebar .topnotcher-name{font-size:14px!important}
+  .sidebar .topnotcher-tagline{font-size:9px!important}
+  .sidebar-section-label{font-size:10px!important;padding:18px 10px 8px!important}
+  .sidebar .nav-btn{height:42px!important;min-height:42px!important;padding:0 12px!important;gap:11px!important}
+  .sidebar .nav-btn span{font-size:13px!important;line-height:1.2!important}
+  .sidebar .nav-btn svg{width:18px!important;height:18px!important}
+  .sidebar-bottom .nav-btn{height:40px!important;min-height:40px!important}
+
+  /* Dashboard metric grid: equal tracks prevent cards pushing each other down. */
+  .metrics{grid-template-columns:repeat(5,minmax(0,1fr))!important;gap:16px!important}
+  .metric,.metric.primary{grid-column:auto!important;min-height:128px!important;height:128px!important;box-sizing:border-box!important;padding:18px!important}
+  .metric.primary{grid-column:span 1!important}
+  .metric strong{font-size:28px!important;line-height:1.05!important}
+  .metric span{font-size:12px!important}
+  .metric small,.metric b{font-size:10px!important}
+  .progress-main-grid{grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr)!important;gap:18px!important;align-items:stretch!important}
+  .progress-main-grid>.panel{min-height:320px!important;height:100%!important;box-sizing:border-box!important}
+  .progress-secondary-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;gap:18px!important;align-items:stretch!important}
+  .progress-secondary-grid>.panel{min-height:250px!important;height:100%!important;box-sizing:border-box!important}
+  .readiness-content{grid-template-columns:170px minmax(0,1fr)!important;gap:30px!important}
+  .readiness-ring{width:160px!important;height:160px!important}
+  .readiness-ring strong{font-size:36px!important}
+
+  /* Study library: fixed equal-height cards keep every row aligned. */
+  .deck-grid{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:18px!important;align-items:stretch!important}
+  .deck-grid .deck-card{min-height:245px!important;height:100%!important;box-sizing:border-box!important;padding:20px!important;display:flex!important;flex-direction:column!important}
+  .deck-grid .deck-card .deck-card-actions{margin-top:auto!important}
+  .folder-tile-row{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:14px!important}
+  .folder-tile{min-height:112px!important;padding:16px!important}
+  .folder-tile b{font-size:13px!important}
+  .folder-tile span{font-size:11px!important}
+  .deck-toolbar{gap:12px!important}
+  .search{width:340px!important}
+  .search input{font-size:13px!important;min-height:42px!important}
+  .filters button{font-size:12px!important;min-height:38px!important}
+
+  /* Daily drill: consistent content width and controls. */
+  .category-tabs{max-width:760px!important}
+  .category-tabs button{font-size:12px!important;padding:10px 15px!important;min-height:40px!important}
+  .hero-card{max-width:900px!important;padding:34px 30px!important}
+  .hero-card h2{font-size:24px!important;line-height:1.25!important}
+  .hero-card p{font-size:13px!important;line-height:1.55!important}
+  .hero-count{font-size:13px!important}
+  .hero-icon{width:64px!important;height:64px!important}
+  .three-cards{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:16px!important;align-items:stretch!important}
+  .three-cards>.info-card{min-height:150px!important;height:100%!important;box-sizing:border-box!important}
+
+  /* Mock board: stable two-column geometry and equal option cards. */
+  .mock-layout{grid-template-columns:minmax(0,1fr) 340px!important;gap:20px!important;align-items:start!important}
+  .mock-config-panel{padding:24px!important}
+  .mock-cards{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:12px!important;align-items:stretch!important}
+  .mock-card{min-height:190px!important;height:100%!important;box-sizing:border-box!important;padding:17px!important;display:flex!important;flex-direction:column!important}
+  .mock-card h2{font-size:15px!important;line-height:1.25!important}
+  .mock-card p{font-size:12px!important;line-height:1.45!important;min-height:52px!important}
+  .item-options button{font-size:12px!important;min-height:38px!important;padding:8px 12px!important}
+  .exam-summary{padding:22px!important}
+  .exam-summary h2{font-size:19px!important}
+  .exam-summary dl,.exam-summary dd{font-size:12px!important}
+  .warning,.bank-ready{font-size:12px!important;padding:11px!important}
+  .recent-scores span{font-size:11px!important;padding:7px 9px!important}
+
+  /* Schedule: calendar and side plan share one baseline. */
+  .schedule-stats{grid-template-columns:repeat(4,minmax(0,1fr))!important;gap:14px!important}
+  .schedule-stats>div{min-height:96px!important;padding:17px!important;box-sizing:border-box!important}
+  .schedule-stats>div b{font-size:24px!important}
+  .schedule-stats>div span{font-size:11px!important}
+  .calendar-layout{grid-template-columns:minmax(0,1.5fr) minmax(320px,.5fr)!important;gap:20px!important;align-items:stretch!important}
+  .calendar{padding:20px!important}
+  .calendar-head h2{font-size:18px!important}
+  .calendar-nav button{width:34px!important;height:34px!important}
+  .weekday b{font-size:10px!important}
+  .day{min-height:92px!important;padding:8px!important;box-sizing:border-box!important}
+  .day>span{font-size:11px!important}
+  .calendar-event{font-size:9px!important;padding:4px!important}
+  .event-side{padding:20px!important}
+  .schedule-side-head h3{font-size:16px!important}
+  .schedule-side-head span{font-size:10px!important}
+  .schedule-event-card{padding:12px!important}
+  .schedule-event-info strong{font-size:11px!important}
+  .schedule-event-info span{font-size:9px!important}
+  .schedule-event-actions button{width:30px!important;height:30px!important}
+}
+
+/* Prevent natural text growth from changing neighboring card geometry. */
+@media (min-width:1101px){
+  .metrics>* , .progress-main-grid>* , .progress-secondary-grid>* , .deck-grid>* , .three-cards>* , .mock-cards>* , .schedule-stats>*{min-width:0!important}
+  .metric h3,.metric p,.deck-card h3,.deck-card p,.mock-card h2,.mock-card p,.schedule-event-info strong,.schedule-event-info span{overflow-wrap:anywhere!important}
+}
