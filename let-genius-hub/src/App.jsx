@@ -162,9 +162,15 @@ function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpe
   ];
   return <aside className={"sidebar unified-sidebar "+(mobileOpen?"mobile-open ":"")+(studyMode?"study-app-sidebar":"")}>
     <TopnotcherBrand compact={studyMode} />
-    <div className="sidebar-section-label">MAIN MENU</div>
+    <div className="sidebar-section-label">REVIEW</div>
     <nav className="sidebar-nav">
-      {nav.map(([id,Icon,label])=><button key={id} className={"nav-btn "+((page===id || (page==="deck-detail"&&id==="decks"))?"active":"")} title={label} onClick={()=>onNavigate(id)}>
+      {nav.slice(0,4).map(([id,Icon,label])=><button key={id} className={"nav-btn "+((page===id || (page==="deck-detail"&&id==="decks"))?"active":"")} title={label} onClick={()=>onNavigate(id)}>
+        <Icon size={20}/><span>{label}</span>
+      </button>)}
+    </nav>
+    <div className="sidebar-section-label planning-label">PLANNING</div>
+    <nav className="sidebar-nav">
+      {nav.slice(4).map(([id,Icon,label])=><button key={id} className={"nav-btn "+(page===id?"active":"")} title={label} onClick={()=>onNavigate(id)}>
         <Icon size={20}/><span>{label}</span>
       </button>)}
     </nav>
@@ -272,6 +278,7 @@ function App({ authUser, onSignOut }) {
   const [editingSession, setEditingSession] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
+  const [drillSetup, setDrillSetup] = useState(null);
   const [examSession, setExamSession] = usePersistedState(accountStorageKey(authUser, "lgh-active-exam"), null);
   const [shareDeck, setShareDeck] = useState(null);
   const [shareToken, setShareToken] = useState(null);
@@ -343,13 +350,22 @@ function App({ authUser, onSignOut }) {
     setStudyPool({ label, pool:[...pool].sort(()=>Math.random()-0.5), index:0, correct:0, answered:0, selected:null, checked:false, answers:{}, results:{}, startedAt:Date.now(), finishedRecorded:false });
   }
 
-  function startDrill(cat = category, requestedCount = dailyDrillCount) {
-    const available = questions.filter(q => q.cat === cat);
-    if (!available.length) { alert("There are no questions available in this category yet."); return; }
+  function startDrill(cat = category) {
+    const available = questions.filter(q => q.cat === cat).length;
+    if (!available) { alert("There are no questions available in this category yet."); return; }
+    const requested = Math.max(1, Math.min(500, Number(dailyDrillCount) || 20));
+    setDrillSetup({ cat, count: Math.min(requested, 500), available });
+  }
+
+  function beginDrill(cat, requestedCount) {
+    const availableQuestions = questions.filter(q => q.cat === cat);
+    if (!availableQuestions.length) { setDrillSetup(null); alert("There are no questions available in this category yet."); return; }
     const requested = Math.max(1, Math.min(500, Number(requestedCount) || 20));
-    const count = Math.min(requested, available.length);
-    if (count < requested) alert(`You selected ${requested} questions, but only ${available.length} are currently available. The drill will use ${count} questions.`);
-    const pool = [...available].sort(()=>Math.random()-0.5).slice(0, count);
+    const count = Math.min(requested, availableQuestions.length);
+    setDailyDrillCount(requested);
+    setDrillSetup(null);
+    if (count < requested) alert(`You selected ${requested} questions, but only ${availableQuestions.length} are currently available. The drill will use ${count} questions.`);
+    const pool = [...availableQuestions].sort(()=>Math.random()-0.5).slice(0, count);
     startStudy(pool, `${CATEGORIES.find(c=>c.id===cat)?.label || "Daily"} Drill`);
   }
 
@@ -568,6 +584,7 @@ function App({ authUser, onSignOut }) {
         setShowSessionModal(false);setEditingSession(null);
       }} initial={editingSession}/>} 
       {materialViewer && <DeckMaterialsModal scope={accountStorageKey(authUser,"lgh-materials")} deckId={materialViewer.deckId} type={materialViewer.type} onClose={()=>setMaterialViewer(null)}/>}
+      {drillSetup && <DrillCountModal setup={drillSetup} close={()=>setDrillSetup(null)} begin={beginDrill}/>}
       {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} palette={palette} setPalette={setPalette} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
     </div>
@@ -576,19 +593,37 @@ function App({ authUser, onSignOut }) {
 
 function PageHeader({title,subtitle,action}) { return <div className="page-header"><div><h1>{title}</h1>{subtitle&&<p>{subtitle}</p>}</div>{action}</div>; }
 
-function Dashboard({setPage,streak,category,setCategory,startDrill,stats,decks,questions,dailyDrillCount,setDailyDrillCount}) {
+function DrillCountModal({setup,close,begin}) {
+  const [count,setCount]=useState(Math.max(1,Math.min(500,Number(setup?.count)||20)));
+  const cat=CATEGORIES.find(c=>c.id===setup?.cat)||CATEGORIES[0];
+  const available=Number(setup?.available)||0;
+  const effective=Math.min(count,available);
+  return <div className="modal-backdrop drill-count-backdrop">
+    <div className="small-modal drill-count-modal">
+      <div className="modal-head"><div><h2>How many questions?</h2><span className="muted">Set the number of {cat.label} questions for this drill.</span></div><button onClick={close} aria-label="Close"><X/></button></div>
+      <div className="drill-count-hero"><strong>{count}</strong><span>questions selected</span></div>
+      <div className="drill-count-control">
+        <input className="daily-count-slider" type="range" min="1" max="500" step="1" value={count} onChange={e=>setCount(Number(e.target.value))}/>
+        <div className="daily-count-scale"><span>1</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div>
+      </div>
+      <div className="drill-count-available"><span>Available in {cat.label}</span><b>{available}</b></div>
+      {count>available&&<div className="drill-count-warning">Only {available} questions are currently available. The drill will start with {effective} questions.</div>}
+      <button className="primary-btn wide" onClick={()=>begin(setup.cat,count)}><Play size={18} fill="currentColor"/> Start {effective || count}-Question Drill</button>
+    </div>
+  </div>;
+}
+
+function Dashboard({setPage,streak,category,setCategory,startDrill,stats,decks,questions}) {
   const cat=CATEGORIES.find(c=>c.id===category)||CATEGORIES[0];
   const available=questions.filter(q=>q.cat===cat.id).length;
-  const count=Math.max(1,Math.min(500,Number(dailyDrillCount)||20));
-  return <div><PageHeader title="Daily Drill" subtitle={`${count} questions per drill — build your review habit daily.`} action={<div className="streak-pill"><Flame size={20}/> {streak} day streak</div>}/>
+  return <div><PageHeader title="Daily Drill" subtitle="Choose a category, then choose how many questions you want to take." action={<div className="streak-pill"><Flame size={20}/> {streak} day streak</div>}/>
     <div className="category-tabs">{CATEGORIES.slice(0,3).map(c=><button className={category===c.id?"selected":""} key={c.id} onClick={()=>setCategory(c.id)}><c.icon size={20}/>{c.label}</button>)}</div>
-    <section className="hero-card"><div className="hero-icon"><Target size={42}/></div><h2>{cat.title.replace("General Education","GenEd")} Drill</h2><div className="hero-count">{count} questions per drill · {available} available</div><p>Choose how many questions you want to answer, then take your drill one question at a time.</p><div className="daily-count-setting dashboard-daily-count"><div className="ai-setting-label"><b>Number of Questions</b><span>{count} items</span></div><input className="daily-count-slider" type="range" min="1" max="500" step="1" value={count} onChange={e=>setDailyDrillCount(Number(e.target.value))}/><div className="daily-count-scale"><span>1</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div></div><button className="primary-btn big" onClick={()=>startDrill(category,count)}><Play size={20} fill="currentColor"/> Start {count}-Question Drill</button></section>
-    <div className="three-cards">{CATEGORIES.slice(0,3).map(c=><button className="info-card" key={c.id} onClick={()=>{setCategory(c.id);startDrill(c.id,count)}}><div className={"mini-icon "+c.color}><c.icon size={24}/></div><h3>{c.label}</h3><p>{questions.filter(q=>q.cat===c.id).length} questions</p></button>)}</div>
+    <section className="hero-card"><div className="hero-icon"><Target size={42}/></div><h2>{cat.title.replace("General Education","GenEd")} Drill</h2><div className="hero-count">{available} questions available</div><p>Click Start Drill and a quick setup bubble will let you choose from 1 to 500 questions.</p><button className="primary-btn big" onClick={()=>startDrill(category)}><Play size={20} fill="currentColor"/> Start Drill</button></section>
+    <div className="three-cards">{CATEGORIES.slice(0,3).map(c=><button className="info-card" key={c.id} onClick={()=>{setCategory(c.id);startDrill(c.id)}}><div className={"mini-icon "+c.color}><c.icon size={24}/></div><h3>{c.label}</h3><p>{questions.filter(q=>q.cat===c.id).length} questions</p></button>)}</div>
     <div className="streak-banner"><Flame/><div><b>Start your streak today!</b> Answer at least one question correctly to keep your streak alive.</div><strong>{streak} days</strong></div>
     <div className="quick-grid"><button onClick={()=>setPage("progress")}><BarChart3/><span>View progress</span></button><button onClick={()=>setPage("decks")}><Layers3/><span>Open study decks</span></button><button onClick={()=>setPage("mock")}><FileText/><span>Take a mock exam</span></button></div>
   </div>;
 }
-
 function DailyDrill({category,setCategory,startDrill,streak,questions}) { return <div><PageHeader title="Daily Drill" subtitle="Practice 20 questions one at a time and keep your streak going." action={<div className="streak-pill"><Flame size={20}/>{streak} day streak</div>}/><div className="drill-layout"><section className="panel"><div className="panel-title"><Target/> Choose a category</div><div className="choice-list">{CATEGORIES.slice(0,3).map(c=><button className={"choice-card "+(category===c.id?"chosen":"")} key={c.id} onClick={()=>setCategory(c.id)}><div className={"mini-icon "+c.color}><c.icon size={23}/></div><div><b>{c.title}</b><span>{Math.min(20, questions.filter(q=>q.cat===c.id).length)} selected · 20 required</span></div>{category===c.id&&<div className="check-dot">✓</div>}</button>)}</div><button className="primary-btn wide" onClick={()=>startDrill(category)}><Play size={19}/> Start {CATEGORIES.find(c=>c.id===category)?.label} Drill</button></section><aside className="panel tips"><h3>How it works</h3><p><Target/> Answer one question at a time.</p><p><Trophy/> A correct first answer helps your daily streak.</p><p><Sparkles/> Review the explanation after submitting.</p></aside></div></div>; }
 
 function Progress({stats,streak,decks,mockScores,questions,questionStats,sessions=[],setPage,setCategory,profile}) {
@@ -596,27 +631,35 @@ function Progress({stats,streak,decks,mockScores,questions,questionStats,session
   const examDate = profile?.examDate ? new Date(profile.examDate + "T00:00:00") : null;
   const examDateText = examDate ? examDate.toLocaleDateString("en-US", {month:"long", day:"numeric", year:"numeric"}) : "Not set";
   const daysAway = examDate ? Math.max(0, Math.ceil((examDate - new Date()) / 86400000)) : null;
-  const updated=new Intl.DateTimeFormat("en-US",{month:"short",day:"numeric",hour:"numeric",minute:"2-digit"}).format(new Date());
   const subjectStats=CATEGORIES.slice(0,3).map(c=>{const qs=questions.filter(q=>q.cat===c.id);const attempts=qs.reduce((n,q)=>n+(questionStats[q.id]?.attempts||0),0);const correct=qs.reduce((n,q)=>n+(questionStats[q.id]?.correct||0),0);return {...c,attempts,correct,accuracy:attempts?Math.round(correct/attempts*100):0};});
   const weakAreas=[...subjectStats].sort((a,b)=>a.accuracy-b.accuracy);
-  const recent=[...sessions.map(s=>({id:`session-${s.id}`,type:"study",title:s.type==="flashcard"?"Flashcard Study":(s.type==="drill"?"Daily Drill":"Study Questions"),detail:s.type==="flashcard"?`${s.answered||0} cards reviewed · ${s.percentage??100}% complete`:`Scored ${s.correct||0}/${s.answered||0} · ${s.percentage??0}% · ${(s.wrongQuestions||[]).length} wrong`,date:s.finishedAt?new Date(s.finishedAt).toLocaleDateString():"Recent",action:s.type==="drill"?"dashboard":"decks"})),...mockScores.map((score,i)=>({id:`mock-${i}`,type:"mock",title:"Mock Board Exam",detail:`Scored ${Math.round(score)}%`,date:"Recent",action:"mock"})),...decks.flatMap(d=>questions.filter(q=>q.deckId===d.id&&questionStats[q.id]?.lastAnswered).map(q=>({id:`q-${q.id}`,type:"study",title:d.name,detail:`Reviewed a question · ${questionStats[q.id].correct||0}/${questionStats[q.id].attempts||0} correct`,date:new Date(questionStats[q.id].lastAnswered).toLocaleDateString(),action:"decks"})))].slice(-8).reverse();
+  const todayKey=new Date().toLocaleDateString("en-CA");
+  const todaySessions=sessions.filter(s=>s.date===todayKey || (s.finishedAt&&new Date(s.finishedAt).toLocaleDateString("en-CA")===todayKey)).slice(0,4);
+  const recent=[...sessions.map(s=>({id:`session-${s.id}`,type:"study",title:s.title||(s.type==="flashcard"?"Flashcard Study":s.type==="drill"?"Daily Drill":"Study Questions"),detail:s.type==="flashcard"?`${s.answered||0} cards reviewed · ${s.percentage??100}% complete`:`${s.correct||0}/${s.answered||0} correct · ${s.percentage??0}%`,date:s.finishedAt?new Date(s.finishedAt).toLocaleDateString():"Recent",action:s.type==="drill"?"dashboard":"decks"})),...mockScores.map((score,i)=>({id:`mock-${i}`,type:"mock",title:"Mock Board Exam",detail:`Scored ${Math.round(score)}%`,date:"Recent",action:"mock"})))].slice(-6).reverse();
   const go=(target,cat)=>{if(cat)setCategory(cat);setPage(target);};
+  const readiness=Math.round(Math.min(100,accuracy));
   const metricCards=[
-    {label:"Overall Readiness Score",value:`${Math.round(Math.min(100,accuracy))}%`,small:"Target: 75% to pass all sub-tests",foot:"View readiness details",target:"progress",primary:true},
-    {label:"Mock Exam Average",value:mockScores.length?`${Math.round(stats.mockAverage)}%`:"0.0%",small:"Last 5 mock exams",foot:mockScores.length?"Review mock exams":"Take your first mock",target:"mock"},
-    {label:"Daily Drill Streak",value:streak,small:"days in a row — keep it up!",foot:"Plan your study time",target:"schedule"},
-    {label:"Total Hours Studied",value:`${stats.hours.toFixed(1)}h`,small:"Recorded study time",foot:"Open study schedule",target:"schedule"},
-    {label:"Questions Answered",value:stats.answered,small:`${accuracy.toFixed(1)}% accuracy overall`,foot:"Open study decks",target:"decks"}
+    {label:"Overall Readiness",value:`${readiness}%`,small:"Target: 75% passing level",foot:"View readiness",target:"progress",primary:true},
+    {label:"Mock Exam Average",value:mockScores.length?`${Math.round(stats.mockAverage)}%`:"—",small:"Across recent attempts",foot:"Review exams",target:"mock"},
+    {label:"Daily Streak",value:`${streak} days`,small:"Keep your study habit alive",foot:"Plan your week",target:"schedule"},
+    {label:"Study Hours",value:`${stats.hours.toFixed(1)} h`,small:"Recorded study time",foot:"View schedule",target:"schedule"},
+    {label:"Questions Answered",value:stats.answered.toLocaleString(),small:`${accuracy.toFixed(1)}% accuracy`,foot:"Open study decks",target:"decks"}
   ];
-  return <div>
-    <PageHeader title="Progress Dashboard" subtitle={<><span>LET Exam Date: {examDateText}</span>{daysAway !== null && <span className="date-badge">{daysAway} days away</span>}</>} action={<span className="updated">Updated {updated}</span>}/>
-    <div className="metrics">{metricCards.map((m,i)=><button key={m.label} className={`metric metric-button ${m.primary?"primary":""}`} onClick={()=>go(m.target)}><span>{m.label}</span><strong>{m.value}</strong><small>{m.small}</small><b className={i===1&&mockScores.length?"danger":""}>{m.foot}</b><ChevronRight className="metric-arrow" size={18}/></button>)}</div>
-    <div className="progress-two-col">
-      <section className="panel weak-card"><div className="section-head"><div><h2>Weak Areas</h2><p className="muted">Focus on the subjects with the lowest accuracy.</p></div><button onClick={()=>go("mock")}>Practice all <ChevronRight size={16}/></button></div><div className="weak-list">{weakAreas.map(c=><button className="weak-row" key={c.id} onClick={()=>go("mock",c.id)}><div className={`mini-icon ${c.color}`}><c.icon size={21}/></div><div className="weak-main"><div><b>{c.label}</b><span>{c.attempts?`${c.attempts} attempts`:"Not practiced yet"}</span></div><div className="progress-track"><i style={{width:`${Math.min(100,c.accuracy)}%`}}/></div></div><strong>{c.attempts?`${c.accuracy}%`:"—"}</strong><ChevronRight size={18}/></button>)}</div></section>
-      <section className="panel recent-card"><div className="section-head"><div><h2>Recent Activity</h2><p className="muted">Your latest study and exam activity.</p></div><button onClick={()=>go("mock")}>View exams <ChevronRight size={16}/></button></div><div className="recent-list">{recent.length?recent.map(item=><button className="recent-row" key={item.id} onClick={()=>go(item.action)}><div className={`activity-icon ${item.type}`}><FileText size={18}/></div><div><b>{item.title}</b><span>{item.detail}</span></div><small>{item.date}</small><ChevronRight size={17}/></button>):<button className="recent-empty" onClick={()=>go("mock")}><Sparkles/><div><b>No activity yet</b><span>Start a mock exam or study a deck to see activity here.</span></div><ChevronRight/></button>}</div></section>
+  return <div className="progress-dashboard-page">
+    <PageHeader title={`Good morning, ${profile?.name?.split(" ")[0]||"Learner"}! 👋`} subtitle={<><span>Keep going! Your hard work is bringing you closer to your goal.</span>{daysAway!==null&&<span className="date-badge"><CalendarDays size={14}/> {daysAway} days left</span>}</>} action={<div className="progress-header-actions"><div className="exam-date-chip"><CalendarDays size={15}/><span>{examDateText}</span></div><button className="secondary-btn compact" onClick={()=>go("schedule")}>Today's Plan <ChevronRight size={15}/></button></div>}/>
+    <div className="metrics">{metricCards.map((m,i)=><button key={m.label} className={`metric metric-button ${m.primary?"primary":""}`} onClick={()=>go(m.target)}><div className="metric-icon"><Target size={19}/></div><span>{m.label}</span><strong>{m.value}</strong><small>{m.small}</small><b>{m.foot}</b><ChevronRight className="metric-arrow" size={17}/></button>)}</div>
+    <div className="progress-main-grid">
+      <section className="panel readiness-card">
+        <div className="section-head"><div><h2>Your Readiness</h2><p className="muted">See how prepared you are across the three LET areas.</p></div><span className="section-kicker">CURRENT</span></div>
+        <div className="readiness-content"><div className="readiness-ring" style={{"--progress":`${readiness}%`}}><div><strong>{readiness}%</strong><span>Readiness</span></div></div><div className="subject-readiness">{subjectStats.map(c=><button key={c.id} onClick={()=>go("mock",c.id)}><div><span><c.icon size={15}/>{c.label}</span><b>{c.attempts?`${c.accuracy}%`:"—"}</b></div><div className="progress-track"><i style={{width:`${Math.min(100,c.accuracy)}%`}}/></div><small>{c.attempts?`${c.correct}/${c.attempts} correct`:"Start practicing"}</small></button>)}</div></div>
+      </section>
+      <section className="panel today-plan-card"><div className="section-head"><div><h2>Today's Study Plan</h2><p className="muted">Your next best actions for today.</p></div><button onClick={()=>go("schedule")}>View all <ChevronRight size={15}/></button></div><div className="today-plan-list">{todaySessions.length?todaySessions.map((s,i)=><button className={`plan-row ${i===0&&!s.completed?"next": ""}`} key={s.id} onClick={()=>go(s.type==="mock"?"mock":s.type==="drill"?"dashboard":"decks",s.studyCategory)}><span className={`plan-status ${s.completed?"done":""}`}>{s.completed?<CheckCircle2 size={15}/>:<Clock3 size={15}/>}</span><div><b>{s.title||"Study Session"}</b><span>{CATEGORIES.find(c=>c.id===s.studyCategory)?.label||"All Subjects"} · {s.type==="mock"?"Simulation":s.type==="drill"?"Practice":"Review"}</span><small>{s.hours||1} hr{s.hours==1?"":"s"} · {s.completed?"Completed":"START NEXT →"}</small></div></button>):<button className="plan-empty" onClick={()=>go("schedule")}><CalendarDays/><div><b>No plan for today yet</b><span>Schedule your next review session.</span></div><ChevronRight/></button>}</div></section>
     </div>
-    <section className="panel deck-progress interactive-panel"><div className="section-head"><div><h2>Your Study Decks</h2><p className="muted">Click a deck to continue studying.</p></div><button onClick={()=>go("decks")}>View all <ChevronRight size={16}/></button></div>{decks.map(d=>{const qs=questions.filter(q=>q.deckId===d.id);const answered=qs.filter(q=>questionStats[q.id]?.attempts).length;const pct=qs.length?Math.round(answered/qs.length*100):0;return <button className="deck-row interactive-row" key={d.id} onClick={()=>go("decks")}><div><b>{d.name}</b><span className="tag">{CATEGORIES.find(c=>c.id===d.category)?.label||"Mixed"}</span><small>{qs.length} questions · {answered} reviewed</small></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><strong>{pct}%</strong><ChevronRight size={17}/></button>})}</section>
-    <div className="chart-grid"><button className="panel chart-card chart-button" onClick={()=>go("mock")}><h2>Mock Exam Score Trend <ChevronRight size={18}/></h2><ChartInner type="line" values={mockScores.length?mockScores:[62,65,68,70,71,74,76,78]}/></button><button className="panel chart-card chart-button" onClick={()=>go("mock")}><h2>Accuracy by Subject <ChevronRight size={18}/></h2><ChartInner type="bar" values={subjectStats.map(c=>c.accuracy)}/></button></div>
+    <div className="progress-secondary-grid">
+      <section className="panel weak-card"><div className="section-head"><div><h2>Weak Areas</h2><p className="muted">Focus on topics that need the most practice.</p></div><button onClick={()=>go("mock")}>Practice all <ChevronRight size={15}/></button></div><div className="weak-list">{weakAreas.map(c=><button className="weak-row" key={c.id} onClick={()=>go("mock",c.id)}><div className={`mini-icon ${c.color}`}><c.icon size={18}/></div><div className="weak-main"><div><b>{c.label}</b><span>{c.attempts?`${c.attempts} attempts`:"Not practiced yet"}</span></div><div className="progress-track"><i style={{width:`${Math.min(100,c.accuracy)}%`}}/></div></div><strong className={c.accuracy<60?"priority-high":c.accuracy<75?"priority-medium":"priority-low"}>{c.attempts?`${c.accuracy}%`:"—"}</strong><ChevronRight size={16}/></button>)}</div></section>
+      <section className="panel recent-card"><div className="section-head"><div><h2>Recent Activity</h2><p className="muted">Your latest study and exam activity.</p></div><button onClick={()=>go("mock")}>View all <ChevronRight size={15}/></button></div><div className="recent-list">{recent.length?recent.map(item=><button className="recent-row" key={item.id} onClick={()=>go(item.action)}><div className={`activity-icon ${item.type}`}><FileText size={16}/></div><div><b>{item.title}</b><span>{item.detail}</span></div><small>{item.date}</small><ChevronRight size={15}/></button>):<button className="recent-empty" onClick={()=>go("mock")}><Sparkles/><div><b>No activity yet</b><span>Start a deck or mock exam to see your progress here.</span></div><ChevronRight/></button>}</div></section>
+    </div>
+    <section className="panel deck-progress continue-section"><div className="section-head"><div><h2>Continue Studying</h2><p className="muted">Pick up where you left off.</p></div><button onClick={()=>go("decks")}>View all <ChevronRight size={15}/></button></div><div className="continue-table-head"><span>Deck / Exam</span><span>Subject</span><span>Progress</span><span>Last Studied</span><span></span></div>{decks.slice(0,5).map(d=>{const qs=questions.filter(q=>q.deckId===d.id);const answered=qs.filter(q=>questionStats[q.id]?.attempts).length;const pct=qs.length?Math.round(answered/qs.length*100):0;const last=qs.map(q=>questionStats[q.id]?.lastAnswered).filter(Boolean).sort().pop();return <button className="continue-row" key={d.id} onClick={()=>go("decks")}><b>{d.name}</b><span>{CATEGORIES.find(c=>c.id===d.category)?.label||"Mixed"}</span><div className="progress-track"><i style={{width:pct+"%"}}/></div><strong>{pct}%</strong><small>{last?new Date(last).toLocaleDateString():"Not started"}</small><ChevronRight size={16}/></button>})}</section>
   </div>;
 }
 function Chart({title,type,values}) { return <section className="panel chart-card"><h2>{title}</h2><ChartInner type={type} values={values}/></section>; }
@@ -1549,7 +1592,7 @@ function QuestionModal({close,save,initial,deckId,duringStudy=false}) {
 
 function SettingsModal({close,theme,setTheme,palette,setPalette,profile,openProfile}) {
   const palettes=[{id:"red",label:"Red",primary:"#dc2626"},{id:"orange",label:"Orange",primary:"#ea580c"},{id:"yellow",label:"Yellow",primary:"#ca8a04"},{id:"blue",label:"Blue",primary:"#2563eb"},{id:"indigo",label:"Indigo",primary:"#4f46e5"},{id:"violet",label:"Violet",primary:"#7c3aed"},{id:"green",label:"Green",primary:"#16a34a"},{id:"sunset",label:"Sunset Gradient",primary:"linear-gradient(135deg,#f97316,#dc2626)"},{id:"ocean",label:"Ocean Gradient",primary:"linear-gradient(135deg,#2563eb,#06b6d4)"},{id:"aurora",label:"Aurora Gradient",primary:"linear-gradient(135deg,#16a34a,#7c3aed)"}];
-  return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your TOPNOTCHER! experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section palette-section"><b>Website Color Palette</b><span>Change buttons, highlights, active states, progress bars, and accent colors.</span><div className="palette-grid">{palettes.map(p=><button type="button" key={p.id} className={palette===p.id?"selected":""} onClick={()=>setPalette(p.id)}><span className="palette-swatch" style={{background:p.primary}}/><b>{p.label}</b></button>)}</div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, palette, theme, and study data are stored separately for your signed-in Google account in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
+  return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your TOPNOTCHER! experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section palette-section"><b>Website Color Palette</b><span>Change buttons, sidebar highlights, active navigation states, progress bars, and accent colors.</span><div className="palette-grid">{palettes.map(p=><button type="button" key={p.id} className={palette===p.id?"selected":""} onClick={()=>setPalette(p.id)}><span className="palette-swatch" style={{background:p.primary}}/><b>{p.label}</b></button>)}</div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, palette, theme, and study data are stored separately for your signed-in Google account in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
 
 function Profile({profile,setProfile,setPage,theme,authUser}) {
   const [draft,setDraft]=useState({...profile, email: profile?.email || authUser?.email || ""});
