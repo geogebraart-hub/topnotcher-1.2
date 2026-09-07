@@ -1476,45 +1476,127 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions,materialScope,on
 
 
 function parseImportedQuestions(rawText) {
-  const text=String(rawText||"").replace(/\r/g,"\n").replace(/[\u00a0\u2007\u202f]/g," ");
-  // Reconstruct useful line boundaries when PDF.js has flattened columns/lines.
+  const text=String(rawText||"")
+    .replace(/\r/g,"\n")
+    .replace(/[\u00a0\u2007\u202f]/g," ")
+    .replace(/[\u2013\u2014]/g,"-");
+
+  // PDF text extraction can flatten wrapped lines into one line. Only create
+  // new structural lines for strong markers; all other text is preserved and
+  // assigned to the current question/choice/rationale state.
   const prepared=text
-    .replace(/\s+(?=\d{1,4}[.)]\s+)/g,"\n")
-    .replace(/\s+(?=[A-D][.)]\s+)/g,"\n")
-    .replace(/\s+(?=(?:Answer|Correct Answer)\s*[:\-])/gi,"\n")
+    .replace(/\s+(?=(?:Question\s*)?\d{1,4}[.)\-:]\s+)/gi,"\n")
+    .replace(/\s+(?=\b(?:QUESTION)\s*[:\-]\s*)/gi,"\n")
+    .replace(/\s+(?=[A-D][.)\-:]\s+)/g,"\n")
+    .replace(/\s+(?=(?:Correct\s+Answer|(?<!Correct\s)Answer)\s*[:\-]?\s*[A-D]\b)/gi,"\n")
+    .replace(/\s+(?=(?:Rationale|Explanation|Reason|Solution)\s*[:\-])/gi,"\n")
     .split("\n")
-    .map(x=>x.trim())
+    .map(x=>x.replace(/\s+/g," ").trim())
     .filter(Boolean);
-  const starts=[];
-  for(let i=0;i<prepared.length;i++) if(/^\d{1,4}[.)]\s+/.test(prepared[i])) starts.push(i);
+
+  const isQuestionStart=line=>/^(?:(?:Question\s*)?\d{1,4}[.)\-:]\s+|Question\s*[:\-]\s+)/i.test(line);
+  const isOption=line=>/^([A-D])[.)\-:]\s*(.*)$/i.test(line);
+  const isRationaleStart=line=>/^(?:Rationale|Explanation|Reason|Solution)\s*[:\-]\s*/i.test(line);
+  const cleanQuestionStart=line=>line
+    .replace(/^(?:(?:Question\s*)?\d{1,4}[.)\-:]\s+|Question\s*[:\-]\s+)/i,"")
+    .trim();
+  const cleanRationaleStart=line=>line.replace(/^(?:Rationale|Explanation|Reason|Solution)\s*[:\-]?\s*/i,"").trim();
+  const rationaleMarker=/(?:Rationale|Explanation|Reason|Solution)\s*[:\-]\s*/i;
+
   const blocks=[];
-  for(let i=0;i<starts.length;i++) blocks.push(prepared.slice(starts[i],starts[i+1]??prepared.length));
+  let current=[];
+  for(const line of prepared){
+    if(isQuestionStart(line) && current.length){
+      blocks.push(current);
+      current=[];
+    }
+    current.push(line);
+  }
+  if(current.length) blocks.push(current);
+
   const parsed=[];
-  for(const block of blocks){
-    const first=block.shift();
-    const qm=first.match(/^\d{1,4}[.)]\s+(.*)$/);
-    if(!qm) continue;
-    const q=qm[1].trim();
-    const optionLines=[];
-    let rationale=[];
+  for(const rawBlock of blocks){
+    const block=[...rawBlock];
+    const first=block.shift()||"";
+    if(!isQuestionStart(first)) continue;
+
+    const questionParts=[cleanQuestionStart(first)];
+    const options=[];
     let answer=-1;
-    let inRationale=false;
-    for(const line of block){
-      const am=line.match(/^([A-D])[.)]\s*(.*)$/i);
-      const ans=line.match(/^(?:answer|correct\s+answer)\s*[:\-]?\s*([A-D])\b/i);
-      if(ans){answer=ans[1].toUpperCase().charCodeAt(0)-65;inRationale=true;continue;}
-      if(inRationale){
-        rationale.push(line.replace(/^rationale\s*[:\-]?\s*/i,""));
+    const rationale=[];
+    let state="question";
+
+    for(const rawLine of block){
+      const line=rawLine.trim();
+      if(!line) continue;
+
+      const am=line.match(/^([A-D])[.)\-:]\s*(.*)$/i);
+      const ans=line.match(/^(?:Correct\s+Answer|Answer)\s*[:\-]?\s*([A-D])\b(.*)$/i);
+      const rat=isRationaleStart(line);
+
+      if(rat){
+        const firstRationale=cleanRationaleStart(line);
+        if(firstRationale) rationale.push(firstRationale);
+        state="rationale";
         continue;
       }
-      if(am) optionLines.push(am[2].trim());
-      else if(optionLines.length) optionLines[optionLines.length-1]+=" "+line;
+
+      if(ans){
+        answer=ans[1].toUpperCase().charCodeAt(0)-65;
+        const trailing=ans[2].trim().replace(/^[.\-:]+\s*/,"");
+        if(trailing) rationale.push(trailing);
+        state="answer";
+        continue;
+      }
+
+      if(state==="rationale"){
+        rationale.push(line);
+        continue;
+      }
+
+      if(am){
+        let optionText=am[2].trim();
+        // Protect against PDFs that put "Rationale:" directly after choice D.
+        const rm=optionText.search(rationaleMarker);
+        if(rm>=0){
+          const choicePart=optionText.slice(0,rm).trim();
+          const rationalePart=optionText.slice(rm).trim();
+          options.push(choicePart);
+          rationale.push(cleanRationaleStart(rationalePart));
+          state="rationale";
+          continue;
+        }
+        options.push(optionText);
+        state="options";
+        continue;
+      }
+
+      if(state==="question"){
+        // Wrapped question continuation — preserve every line until A-D begins.
+        questionParts.push(line);
+      }else if(state==="options" && options.length){
+        const rm=line.search(rationaleMarker);
+        if(rm>=0){
+          const choiceContinuation=line.slice(0,rm).trim();
+          const rationalePart=line.slice(rm).trim();
+          if(choiceContinuation) options[options.length-1]=(options[options.length-1]+" "+choiceContinuation).trim();
+          rationale.push(cleanRationaleStart(rationalePart));
+          state="rationale";
+        }else{
+          options[options.length-1]=(options[options.length-1]+" "+line).trim();
+        }
+      }else if(state==="answer"){
+        rationale.push(line);
+      }
     }
-    if(optionLines.length>=2){
-      const options=optionLines.slice(0,4);
-      if(options.length===4) parsed.push({question:q,options,correctAnswer:answer,rationale:rationale.join(" ")});
+
+    const question=questionParts.join(" ").replace(/\s+/g," ").trim();
+    const cleanOptions=options.slice(0,4).map(x=>x.replace(/\s+/g," ").trim());
+    if(question && cleanOptions.length===4){
+      parsed.push({question,options:cleanOptions,correctAnswer:answer,rationale:rationale.join(" ").trim()});
     }
   }
+
   return parsed;
 }
 
@@ -1538,12 +1620,14 @@ function ImportQuestionsModal({deck,existingQuestions=[],close,saveQuestions}) {
         const items=(content.items||[]).filter(x=>String(x.str||"").trim());
         const lines=[];
         for(const item of items){
-          const y=Math.round(Number(item.transform?.[5]||0));
-          let line=lines.find(l=>Math.abs(l.y-y)<=2);
-          if(!line){line={y,text:""};lines.push(line);}
-          line.text+=(line.text?" ":"")+String(item.str||"").trim();
+          const y=Number(item.transform?.[5]||0);
+          const x=Number(item.transform?.[4]||0);
+          let line=lines.find(l=>Math.abs(l.y-y)<=2.5);
+          if(!line){line={y,textParts:[]};lines.push(line);}
+          line.textParts.push({x,text:String(item.str||"").trim()});
         }
         lines.sort((a,b)=>b.y-a.y);
+        lines.forEach(line=>line.text=line.textParts.sort((a,b)=>a.x-b.x).map(part=>part.text).join(" ").replace(/\s+/g," ").trim());
         pages.push(lines.map(x=>x.text).join("\n"));
       }
       const parsed=parseImportedQuestions(pages.join("\n"));
@@ -1566,7 +1650,14 @@ function ImportQuestionsModal({deck,existingQuestions=[],close,saveQuestions}) {
     const now=Date.now();
     saveQuestions(chosen.map((r,i)=>({id:now+i,deckId:deck.id,cat:deck.category,q:r.question.trim(),options:r.options.map(o=>o.trim()),answer:Number(r.correctAnswer),explanation:r.rationale?.trim()||"",topic:"Imported from PDF",sourceMaterial:sourceName,aiGenerated:false,importedFromPdf:true})));
   };
-  return <div className="modal-backdrop"><div className="small-modal import-questions-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">PDF QUESTION IMPORT</span><h2>Import Questions from PDF</h2><span className="muted">No AI is used. TOPNOTCHER only extracts existing text, then lets you review it before adding it to this deck.</span></div><button onClick={close}><X/></button></div><label className="material-upload-box import-question-upload"><input type="file" accept="application/pdf,.pdf" onChange={e=>{const f=e.target.files?.[0];e.target.value="";if(f)readPdf(f);}}/><Upload size={22}/><b>{busy?"Parsing PDF…":"Upload Question PDF"}</b><span>{sourceName||"Select a text-based PDF containing numbered questions and A–D choices."}</span></label>{error&&<div className="ai-error">{error}</div>}{rows.length>0&&<div className="import-preview"><div className="section-head"><div><h3>Preview & Edit</h3><span className="muted">Review extracted questions before importing. Questions with no detected answer need a correct answer selected.</span></div><span className="tag">{rows.filter(r=>r.include).length} selected</span></div>{rows.map((r,idx)=><div className="import-question-row" key={r.id}><div className="import-question-top"><label className="import-check"><input type="checkbox" checked={r.include} onChange={e=>updateRow(r.id,"include",e.target.checked)}/><b>{idx+1}</b></label><textarea value={r.question} onChange={e=>updateRow(r.id,"question",e.target.value)} /></div><div className="import-options">{r.options.map((o,i)=><label key={i}><span>{String.fromCharCode(65+i)}.</span><input value={o} onChange={e=>updateOption(r.id,i,e.target.value)}/></label>)}</div><div className="import-bottom"><label>Correct answer<select value={r.correctAnswer<0?"":r.correctAnswer} onChange={e=>updateRow(r.id,"correctAnswer",e.target.value===""?-1:Number(e.target.value))}><option value="">Not detected — select</option><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></label><label>Rationale (optional)<textarea value={r.rationale||""} onChange={e=>updateRow(r.id,"rationale",e.target.value)} /></label></div></div>)}</div>}{!busy&&!rows.length&&!error&&<div className="import-empty"><FileText size={28}/><b>Upload a question PDF to begin</b><span>The importer works without AI and does not consume AI-generation credits.</span></div>}<div className="modal-foot"><button className="secondary-btn" onClick={close}>Cancel</button>{rows.length>0&&<button className="primary-btn" onClick={importSelected}><Save size={17}/> Import {rows.filter(r=>r.include).length} Questions</button>}</div></div></div>;
+  return <div className="modal-backdrop"><div className="small-modal import-questions-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">PDF QUESTION IMPORT</span><h2>Import Questions from PDF</h2><span className="muted">No AI is used. TOPNOTCHER only extracts existing text, then lets you review it before adding it to this deck.</span></div><button onClick={close}><X/></button></div><label className="material-upload-box import-question-upload"><input type="file" accept="application/pdf,.pdf" onChange={e=>{const f=e.target.files?.[0];e.target.value="";if(f)readPdf(f);}}/><Upload size={22}/><b>{busy?"Parsing PDF…":"Upload Question PDF"}</b><span>{sourceName||"Select a text-based PDF containing numbered questions and A–D choices."}</span></label><div className="import-format-guide"><div className="import-format-head"><FileText size={16}/><div><b>Best PDF format for 100% accurate placement</b><span>Use one question per block and put each field on its own line.</span></div></div><pre>{`1. Question text starts here
+   continuation of the same question is allowed
+A. First choice
+B. Second choice
+C. Third choice
+D. Fourth choice
+Answer: B
+Rationale: Explain why B is correct.`}</pre><div className="import-format-rules"><span><b>Required markers:</b> 1. / 2. / 3. … for questions; A. B. C. D. for choices.</span><span><b>Answer marker:</b> Answer: B or Correct Answer: B.</span><span><b>Rationale marker:</b> Rationale: … (also accepts Explanation:, Reason:, or Solution:).</span><span><b>Important:</b> Do not place rationale text after D. unless it starts with a rationale marker.</span></div></div>{error&&<div className="ai-error">{error}</div>}{rows.length>0&&<div className="import-preview"><div className="section-head"><div><h3>Preview & Edit</h3><span className="muted">Review extracted questions before importing. Questions with no detected answer need a correct answer selected.</span></div><span className="tag">{rows.filter(r=>r.include).length} selected</span></div>{rows.map((r,idx)=><div className="import-question-row" key={r.id}><div className="import-question-top"><label className="import-check"><input type="checkbox" checked={r.include} onChange={e=>updateRow(r.id,"include",e.target.checked)}/><b>{idx+1}</b></label><textarea value={r.question} onChange={e=>updateRow(r.id,"question",e.target.value)} /></div><div className="import-options">{r.options.map((o,i)=><label key={i}><span>{String.fromCharCode(65+i)}.</span><input value={o} onChange={e=>updateOption(r.id,i,e.target.value)}/></label>)}</div><div className="import-bottom"><label>Correct answer<select value={r.correctAnswer<0?"":r.correctAnswer} onChange={e=>updateRow(r.id,"correctAnswer",e.target.value===""?-1:Number(e.target.value))}><option value="">Not detected — select</option><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></label><label>Rationale (optional)<textarea value={r.rationale||""} onChange={e=>updateRow(r.id,"rationale",e.target.value)} /></label></div></div>)}</div>}{!busy&&!rows.length&&!error&&<div className="import-empty"><FileText size={28}/><b>Upload a question PDF to begin</b><span>The importer works without AI and does not consume AI-generation credits.</span></div>}<div className="modal-foot"><button className="secondary-btn" onClick={close}>Cancel</button>{rows.length>0&&<button className="primary-btn" onClick={importSelected}><Save size={17}/> Import {rows.filter(r=>r.include).length} Questions</button>}</div></div></div>;
 }
 
 function QuestionModal({close,save,initial,deckId,duringStudy=false}) {
