@@ -4754,3 +4754,204 @@ body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",san
 @media(max-width:760px){
   .sidebar{width:270px!important;min-width:270px!important}.main{margin-left:0!important;width:100%!important;padding:12px!important}.page-header h1{font-size:19px!important}.page-header p{font-size:9px!important}.progress-header-actions{display:none}.dashboard-context-row{display:none}.metrics.progress-kpis{grid-template-columns:1fr 1fr!important}.readiness-kpi{grid-column:span 2}.progress-visual-grid,.progress-secondary-grid{grid-template-columns:1fr!important}.distribution-wrap{grid-template-columns:1fr!important;justify-items:center}.folder-tile-row{grid-template-columns:repeat(2,1fr)!important}.deck-grid{grid-template-columns:1fr!important}.deck-toolbar{display:grid!important}.search{width:100%!important}.filters{overflow-x:auto;flex-wrap:nowrap!important}.schedule-stats{grid-template-columns:1fr 1fr!important}.calendar-layout{grid-template-columns:1fr!important}.calendar{overflow:auto}.day{min-width:82px!important}.trend-chart{height:130px!important}
 }
+
+/* ==========================================================
+   V83 — BALANCED 100% DESKTOP DENSITY
+   Browser zoom stays at 100%. Increase the V82 visual scale just enough
+   to make text, controls and cards comfortably readable without zooming in.
+   ========================================================== */
+@media (min-width:1101px){
+  .main{padding:30px 34px 58px!important}
+  .page-header{margin-bottom:24px!important}
+  .page-header h1{font-size:30px!important;letter-spacing:-.85px!important}
+  .page-header p{font-size:14px!important}
+  .panel{padding:23px!important}
+  .section-head h2,.chart-card h2{font-size:17px!important}
+  .muted{font-size:12px!important}
+  .primary-btn{padding:11px 17px!important;font-size:13px!important}
+  .primary-btn.big{padding:13px 20px!important;font-size:14px!important}
+  .secondary-btn{padding:11px 14px!important;font-size:12px!important}
+  .tag,.date-badge{padding:5px 9px!important;font-size:10px!important}
+
+  /* Sidebar */
+  .sidebar{width:255px!important;min-width:255px!important;padding:20px 15px 15px!important}
+  .sidebar-brand{padding:3px 8px 19px!important}
+  .sidebar-brand-copy strong{font-size:15px!important}
+  .sidebar-brand-copy span{font-size:10px!important}
+  .sidebar-section-label{font-size:11px!important;padding:20px 10px 8px!important}
+  .sidebar .nav-btn{height:45px!important;min-height:45px!important;padding:0 12px!important;gap:12px!important}
+  .sidebar .nav-btn span{font-size:13px!important}
+  .sidebar .nav-btn svg{width:19px!important;height:19px!important}
+  .profile-nav-btn{min-height:60px!important;padding:9px 10px!important}
+  .profile-nav-copy strong{font-size:12px!important}
+  .profile-nav-copy small{font-size:10px!important}
+
+  /* Progress */
+  .progress-dashboard-page .page-header{margin-bottom:22px!important}
+  .progress-header-actions{gap:10px!important}
+  .exam-date-chip{padding:9px 12px!important;font-size:11px!important}
+  .metrics{gap:12px!important;margin-bottom:16px!important}
+  .metric{min-height:126px!important;padding:16px!important}
+  .metric .metric-icon{width:35px!important;height:35px!important;border-radius:10px!important;margin-bottom:10px!important}
+  .metric span{font-size:10px!important}
+  .metric strong{font-size:26px!important}
+  .metric small{font-size:9px!important}
+  .metric b{font-size:10px!important}
+  .progress-main-grid{gap:16px!important;margin-bottom:16px!important}
+  .readiness-card,.today-plan-card{min-height:300px!important}
+  .readiness-content{grid-template-columns:160px 1fr!important;gap:28px!important;margin-top:20px!important}
+  .readiness-ring{width:150px!important;height:150px!important}
+  .readiness-ring strong{font-size:34px!important}
+  .readiness-ring span{font-size:11px!important}
+  .subject-readiness{gap:14px!important}
+  .subject-readiness span,.subject-readiness b{font-size:12px!important}
+  .subject-readiness small{font-size:9px!important}
+  .today-plan-list{gap:8px!important;margin-top:17px!important}
+  .plan-row,.plan-empty{padding:10px!important;grid-template-columns:28px 1fr!important}
+  .plan-status{width:27px!important;height:27px!important}
+  .plan-row b,.plan-empty b{font-size:11px!important}
+  .plan-row span:not(.plan-status),.plan-empty span,.plan-row small{font-size:9px!important}
+  .progress-secondary-grid{gap:16px!important;margin-bottom:16px!important}
+  .weak-row{grid-template-columns:32px 1fr 48px 16px!important;padding:11px 0!important}
+  .weak-main b,.recent-row b{font-size:11px!important}
+  .weak-main span,.recent-row span,.recent-row small{font-size:9px!important}
+  .weak-row>strong{font-size:10px!important}
+  .recent-row{grid-template-columns:30px 1fr auto 15px!important;padding:10px 0!important}
+  .activity-icon{width:28px!important;height:28px!important}
+  .continue-table-head{font-size:8px!important}
+  .continue-row{padding:11px!important}
+  .continue-row b,.continue-row span,.continue-row small,.continue-row strong{font-size:9px!important}
+  .distribution-wrap{grid-template-columns:155px 1fr!important;gap:17px!important}
+  .distribution-donut{width:140px!important;height:140px!important}
+  .distribution-donut>div{width:92px!important;height:92px!important}
+  .distribution-donut strong{font-size:18px!important}
+  .distribution-donut span{font-size:8px!important}
+  .distribution-legend{gap:9px!important}
+  .distribution-legend>div{font-size:9px!important}
+  .trend-chart{height:165px!important}
+  .trend-y,.trend-labels{font-size:8px!important}
+  .trend-labels{margin-left:36px!important}
+
+  /* Study Decks */
+  .deck-folders-panel{padding:18px!important;margin-bottom:14px!important}
+  .deck-folders-panel .section-head h2{font-size:15px!important}
+  .folder-tile-row{gap:10px!important;margin-top:12px!important}
+  .folder-tile{min-height:88px!important;padding:12px!important;border-radius:11px!important}
+  .folder-tile svg{width:21px!important;height:21px!important}
+  .folder-tile b{font-size:10px!important}
+  .folder-tile span{font-size:8px!important}
+  .deck-toolbar{margin-bottom:14px!important}
+  .search{width:300px!important;border-radius:10px!important}
+  .search input{font-size:12px!important;padding:12px 9px!important}
+  .filters button{font-size:9px!important;padding:7px 10px!important;border-radius:9px!important}
+  .deck-folder-groups{gap:18px!important}
+  .deck-folder-heading{margin-bottom:8px!important}
+  .deck-folder-heading h2{font-size:14px!important}
+  .deck-folder-heading span{font-size:9px!important}
+  .deck-grid{gap:12px!important}
+  .deck-card{padding:16px!important;border-radius:11px!important}
+  .deck-card h3{font-size:15px!important;margin:12px 0 4px!important}
+  .deck-card p{font-size:10px!important;margin-bottom:11px!important}
+  .deck-meta{font-size:8px!important;margin-bottom:10px!important}
+  .deck-card .secondary-btn{font-size:9px!important;padding:8px!important}
+
+  /* Daily Drill */
+  .category-tabs{padding:4px!important;border-radius:10px!important;margin-bottom:13px!important}
+  .category-tabs button{font-size:10px!important;padding:8px 13px!important;border-radius:8px!important}
+  .hero-card{padding:32px 22px 26px!important;border-radius:12px!important}
+  .hero-icon{width:62px!important;height:62px!important;border-radius:16px!important;margin-bottom:13px!important}
+  .hero-card h2{font-size:21px!important}
+  .hero-count{font-size:12px!important;margin-bottom:10px!important}
+  .hero-card p{font-size:11px!important;margin-bottom:15px!important}
+  .primary-btn.big{font-size:12px!important;padding:11px 17px!important}
+  .three-cards{gap:10px!important;margin-top:11px!important}
+  .info-card{padding:14px!important;border-radius:11px!important}
+  .info-card h3{font-size:12px!important;margin:10px 0 4px!important}
+  .info-card p{font-size:9px!important}
+  .streak-banner{font-size:9px!important;padding:10px 12px!important;border-radius:10px!important}
+  .quick-grid{gap:8px!important;margin-top:10px!important}
+  .quick-grid button{font-size:9px!important;padding:10px!important}
+  .drill-count-modal{width:min(470px,calc(100vw - 40px))!important;padding:21px!important}
+  .drill-count-hero{padding:15px!important}
+  .drill-count-hero strong{font-size:40px!important}
+  .drill-count-hero span{font-size:9px!important}
+  .drill-count-available{font-size:9px!important}
+  .drill-count-warning{font-size:9px!important}
+
+  /* Mock Board */
+  .mock-layout{grid-template-columns:minmax(0,1fr) 320px!important;gap:16px!important}
+  .mock-config-panel{padding:19px!important}
+  .mock-section{padding-bottom:14px!important;margin-bottom:14px!important}
+  .subheading{font-size:13px!important}
+  .mock-section>.muted{font-size:9px!important}
+  .mock-cards{gap:9px!important}
+  .mock-card{padding:13px!important;border-radius:10px!important}
+  .mock-card h2{font-size:11px!important;margin:8px 0 4px!important}
+  .mock-card p{font-size:9px!important;min-height:38px!important}
+  .mock-card>div{font-size:8px!important}
+  .item-options button{font-size:9px!important;padding:7px 9px!important}
+  .exam-summary{padding:18px!important}
+  .exam-summary h2{font-size:15px!important}
+  .exam-summary dl,.exam-summary dd{font-size:9px!important}
+  .warning,.bank-ready{font-size:9px!important;padding:9px!important}
+  .recent-scores span{font-size:9px!important}
+  .exam-summary .primary-btn{font-size:10px!important}
+
+  /* Schedule */
+  .schedule-stats{gap:10px!important;margin-bottom:13px!important}
+  .schedule-stats>div{padding:12px!important;border-radius:10px!important}
+  .schedule-stats>div b{font-size:20px!important}
+  .schedule-stats>div span{font-size:8px!important}
+  .calendar-layout{grid-template-columns:minmax(0,1.5fr) minmax(290px,.5fr)!important;gap:16px!important}
+  .calendar{padding:17px!important}
+  .calendar-head h2{font-size:15px!important}
+  .calendar-nav button{width:30px!important;height:30px!important}
+  .weekday b{font-size:8px!important}
+  .day{min-height:74px!important;padding:6px!important}
+  .day>span{font-size:9px!important}
+  .calendar-event{font-size:7px!important}
+  .event-side{padding:17px!important}
+  .schedule-side-head h3{font-size:13px!important}
+  .schedule-side-head span{font-size:8px!important}
+  .schedule-event-card{padding:9px!important}
+  .schedule-event-info strong{font-size:9px!important}
+  .schedule-event-info span{font-size:7px!important}
+  .schedule-event-actions button{width:25px!important;height:25px!important}
+}
+
+/* Tablet: readable without making the interface feel zoomed. */
+@media (min-width:761px) and (max-width:1100px){
+  .page-header h1{font-size:27px!important}
+  .page-header p{font-size:13px!important}
+  .sidebar .nav-btn span{font-size:12px!important}
+  .metric strong{font-size:24px!important}
+  .metric span{font-size:10px!important}
+  .deck-card h3{font-size:14px!important}
+  .deck-card p{font-size:10px!important}
+  .mock-card h2{font-size:11px!important}
+  .mock-card p{font-size:9px!important}
+  .day{min-height:72px!important}
+}
+
+/* Mobile: do not inherit the tiny V81 desktop labels. */
+@media(max-width:760px){
+  .page-header h1{font-size:22px!important}
+  .page-header p{font-size:11px!important}
+  .panel{padding:17px!important}
+  .section-head h2,.chart-card h2{font-size:15px!important}
+  .primary-btn{font-size:12px!important}
+  .metric span{font-size:10px!important}
+  .metric strong{font-size:23px!important}
+  .deck-card h3{font-size:15px!important}
+  .deck-card p{font-size:10px!important}
+  .deck-meta{font-size:8px!important}
+  .category-tabs button{font-size:10px!important}
+  .hero-card h2{font-size:20px!important}
+  .hero-count{font-size:11px!important}
+  .hero-card p{font-size:10px!important}
+  .mock-card h2{font-size:12px!important}
+  .mock-card p{font-size:9px!important}
+  .schedule-stats>div b{font-size:19px!important}
+  .schedule-stats>div span{font-size:8px!important}
+  .day>span{font-size:9px!important}
+}
