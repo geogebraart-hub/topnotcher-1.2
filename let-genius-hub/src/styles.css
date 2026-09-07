@@ -5082,3 +5082,37 @@ body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",san
   .metrics>* , .progress-main-grid>* , .progress-secondary-grid>* , .deck-grid>* , .three-cards>* , .mock-cards>* , .schedule-stats>*{min-width:0!important}
   .metric h3,.metric p,.deck-card h3,.deck-card p,.mock-card h2,.mock-card p,.schedule-event-info strong,.schedule-event-info span{overflow-wrap:anywhere!important}
 }
+
+/* =========================================================
+   V85 — PDF IMPORT FORMAT GUIDE + PARSER PREVIEW
+   ========================================================= */
+.import-format-guide{
+  margin:12px 0 14px;
+  padding:14px 15px;
+  border:1px solid #dfe5ef;
+  border-radius:14px;
+  background:#f8faff;
+}
+.import-format-head{display:flex;align-items:flex-start;gap:9px;color:#43536c}
+.import-format-head svg{color:var(--primary);flex:none;margin-top:1px}
+.import-format-head b,.import-format-head span{display:block}
+.import-format-head b{font-size:12px;color:#34445e}
+.import-format-head span{font-size:11px;color:#8190a7;margin-top:2px;line-height:1.4}
+.import-format-guide pre{
+  margin:11px 0;
+  padding:11px 12px;
+  border:1px solid #e1e6ef;
+  border-radius:10px;
+  background:#fff;
+  color:#4c5d75;
+  font:500 11px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;
+  white-space:pre-wrap;
+  overflow:auto;
+}
+.import-format-rules{display:grid;gap:4px}
+.import-format-rules span{font-size:10.5px;line-height:1.45;color:#72829a}
+.import-format-rules b{color:#53647e}
+@media(max-width:760px){
+  .import-format-guide{padding:12px}
+  .import-format-guide pre{font-size:10px}
+}
