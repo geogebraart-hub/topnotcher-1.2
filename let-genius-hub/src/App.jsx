@@ -1476,177 +1476,175 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions,materialScope,on
 
 
 function parseImportedQuestions(rawText) {
-  // Stateful parser: after Rationale/Explanation starts, all following source text
-  // belongs to that rationale until a genuine next question is confirmed.
-  // This is deliberately loss-tolerant for PDFs containing equations, Unicode
-  // symbols, LaTeX, numbered solution steps, and wrapped lines.
+  // Robust, loss-tolerant importer for numbered multiple-choice questions.
+  // Important design rule: a numbered line is only treated as a NEW QUESTION
+  // when the block that follows it contains a complete A-D option set. This
+  // prevents numbered math/rationale steps from breaking otherwise valid items.
   const text=String(rawText||"")
     .replace(/\r\n?/g,"\n")
     .replace(/[\u00a0\u2007\u202f]/g," ")
     .replace(/[\u2013\u2014]/g,"-");
 
   const prepared=text
-    .replace(/[ \t]+(?=(?:Question\s*)?\d{1,4}[.)\-:]\s+)/gi,"\n")
+    .replace(/[ \t]+(?=(?:Question\s*)?\d{1,4}(?:[.)\-:]\s+|\s+(?=[A-Za-z])))/gi,"\n")
     .replace(/[ \t]+(?=\bQUESTION\s*[:\-]\s*)/gi,"\n")
     .replace(/[ \t]+(?=[A-D][.)\-:]\s+)/g,"\n")
-    .replace(/[ \t]+(?=(?:Correct\s+Answer|(?<!Correct\s)Answer)\s*[:\-]?\s*[A-D]\b)/gi,"\n")
+    .replace(/[ \t]+(?=(?:Correct\s+Answer|Answer)\s*[:\-]?\s*[A-D]\b)/gi,"\n")
     .replace(/[ \t]+(?=(?:Rationale|Explanation|Reason|Solution)\s*[:\-])/gi,"\n")
     .split("\n")
     .map(x=>x.trim())
     .filter(Boolean);
 
-  const isQuestionStart=line=>/^(?:(?:Question\s*)?\d{1,4}[.)\-:]\s+|Question\s*[:\-]\s+)/i.test(line);
+  // Question numbers may be rendered by PDF extraction as `41.`, `41)`,
+  // `41 -`, `Question 41:`, `41 `, or even a number on its own line.
+  // Accept all of these. A candidate is still validated later by requiring
+  // a complete A-D option set, so numbered math steps are not imported.
+  const questionStartPattern=/^(?:Question\s+)?(\d{1,4})(?:(?:[.)\-:]\s*)|(?:\s+.*)?$)/i;
+  const isQuestionStart=line=>questionStartPattern.test(line.trim()) || /^Question\s*[:\-]\s*/i.test(line.trim());
   const questionNumber=line=>{
-    const m=line.match(/^(?:Question\s*)?(\d{1,4})[.)\-:]\s+/i);
+    const m=line.match(/^(?:Question\s+)?(\d{1,4})(?:(?:[.)\-:]\s*)|(?:\s+.*)?$)/i);
     return m?Number(m[1]):null;
   };
-  const cleanQuestionStart=line=>line.replace(/^(?:(?:Question\s*)?\d{1,4}[.)\-:]\s+|Question\s*[:\-]\s+)/i,"").trim();
+  const cleanQuestionStart=line=>line
+    .replace(/^Question\s*[:\-]\s*/i,"")
+    .replace(/^(?:Question\s+)?\d{1,4}(?:[.)\-:]\s*|\s+)/i,"")
+    .trim();
   const isRationaleStart=line=>/^(?:Rationale|Explanation|Reason|Solution)\s*[:\-]?\s*/i.test(line);
   const cleanRationaleStart=line=>line.replace(/^(?:Rationale|Explanation|Reason|Solution)\s*[:\-]?\s*/i,"").trim();
   const rationaleMarker=/(?:Rationale|Explanation|Reason|Solution)\s*[:\-]?\s*/i;
   const answerMarker=/^(?:Correct\s+Answer|Answer)\s*[:\-]?\s*([A-D])\b(.*)$/i;
   const optionMarker=/^([A-D])[.)\-:]\s*(.*)$/i;
 
+  // Find every plausible numbered-question boundary, then validate boundaries
+  // using the presence and order of A, B, C, D. This is much safer than making
+  // every numbered line immediately start a new question.
+  const candidates=[];
+  prepared.forEach((line,index)=>{
+    if(isQuestionStart(line)) candidates.push({index,line,number:questionNumber(line)});
+  });
+
+  const parseBlock=(block)=>{
+    if(!block.length) return null;
+    let current=null;
+    let state="question";
+    const start=line=>{
+      current={questionParts:[cleanQuestionStart(line)],options:[],answer:-1,rationale:[]};
+      state="question";
+    };
+    const finish=()=>{
+      if(!current) return null;
+      const question=current.questionParts.join(" ").replace(/\s+/g," ").trim();
+      const options=current.options.slice(0,4).map(x=>String(x).replace(/\s+/g," ").trim());
+      const rationale=current.rationale.join(" ").replace(/\s+/g," ").trim();
+      return question&&options.length===4?{question,options,correctAnswer:current.answer,rationale}:null;
+    };
+
+    start(block[0]);
+    for(let i=1;i<block.length;i++){
+      const line=block[i].trim();
+      if(!line) continue;
+      const am=line.match(optionMarker);
+      const ans=line.match(answerMarker);
+      const rat=isRationaleStart(line);
+
+      if(rat){
+        const first=cleanRationaleStart(line);
+        if(first) current.rationale.push(first);
+        state="rationale";
+        continue;
+      }
+      if(ans){
+        current.answer=ans[1].toUpperCase().charCodeAt(0)-65;
+        const trailing=ans[2].trim().replace(/^[.\-:]\s*/,"");
+        if(trailing) current.rationale.push(trailing);
+        state="answer";
+        continue;
+      }
+      if(state==="rationale"||state==="answer"){
+        current.rationale.push(line);
+        state="rationale";
+        continue;
+      }
+      if(am){
+        let optionText=am[2].trim();
+        const rm=optionText.search(rationaleMarker);
+        if(rm>=0){
+          const choicePart=optionText.slice(0,rm).trim();
+          const rationalePart=optionText.slice(rm).trim();
+          if(current.options.length<4) current.options.push(choicePart);
+          const first=cleanRationaleStart(rationalePart);
+          if(first) current.rationale.push(first);
+          state="rationale";
+        }else if(current.options.length<4){
+          current.options.push(optionText);
+          state="options";
+        }
+        continue;
+      }
+      if(state==="question") current.questionParts.push(line);
+      else if(state==="options"&&current.options.length){
+        const rm=line.search(rationaleMarker);
+        if(rm>=0){
+          const choiceContinuation=line.slice(0,rm).trim();
+          const rationalePart=line.slice(rm).trim();
+          if(choiceContinuation) current.options[current.options.length-1]=(current.options[current.options.length-1]+" "+choiceContinuation).trim();
+          const first=cleanRationaleStart(rationalePart);
+          if(first) current.rationale.push(first);
+          state="rationale";
+        }else{
+          current.options[current.options.length-1]=(current.options[current.options.length-1]+" "+line).trim();
+        }
+      }
+    }
+    return finish();
+  };
+
+  // Build accepted blocks. A candidate inside a rationale (for example a
+  // numbered calculation step) is ignored unless it can actually produce a
+  // complete four-choice question. This lets the importer recover all items
+  // even when numbering is inconsistent or PDF extraction inserts line breaks.
   const parsed=[];
-  let current=null;
-  let state="question";
-  let lastQuestionNumber=null;
-  let pendingQuestion=null;
+  let blockStart=0;
+  let candidateCursor=0;
+  const acceptedStarts=[];
 
-  const appendToRationale=line=>{
-    if(!current) return;
-    if(line) current.rationale.push(line);
-  };
-
-  const finish=()=>{
-    if(!current) return;
-    const question=String(current.questionParts.join(" ")).replace(/\s+/g," ").trim();
-    const options=current.options.slice(0,4).map(x=>String(x).replace(/\s+/g," ").trim());
-    const rationale=String(current.rationale.join(" ")).replace(/\s+/g," ").trim();
-    if(question && options.length===4){
-      parsed.push({question,options,correctAnswer:current.answer,rationale});
-    }
-    current=null;
-    state="question";
-  };
-
-  const startQuestion=line=>{
-    current={questionParts:[cleanQuestionStart(line)],options:[],answer:-1,rationale:[]};
-    state="question";
-    const n=questionNumber(line);
-    if(n!==null) lastQuestionNumber=n;
-  };
-
-  for(const rawLine of prepared){
-    const line=rawLine.trim();
-    if(!line) continue;
-
-    // A candidate question encountered inside a rationale is not accepted yet.
-    // It becomes a new question only when its A-D choices actually appear.
-    if(pendingQuestion){
-      const candidateOption=line.match(optionMarker);
-      if(candidateOption){
-        finish();
-        startQuestion(pendingQuestion.line);
-        pendingQuestion=null;
-        // fall through and process this A choice normally
-      }else if(isQuestionStart(line)){
-        // Keep the earlier candidate in the rationale and replace it with the
-        // newer candidate. This protects numbered mathematical solution steps.
-        appendToRationale(pendingQuestion.line);
-        pendingQuestion={line};
-        continue;
-      }else{
-        appendToRationale(pendingQuestion.line);
-        appendToRationale(line);
-        pendingQuestion=null;
-        continue;
+  while(candidateCursor<candidates.length){
+    const c=candidates[candidateCursor];
+    if(c.index<blockStart){candidateCursor++;continue;}
+    let accepted=false;
+    for(let j=candidateCursor+1;j<=candidates.length;j++){
+      const endIndex=j<candidates.length?candidates[j].index:prepared.length;
+      const result=parseBlock(prepared.slice(c.index,endIndex));
+      if(result){
+        // If another accepted question begins after this one, use it as the
+        // next boundary. The result itself determines whether the candidate
+        // was a real question rather than a numbered rationale line.
+        acceptedStarts.push(c.index);
+        parsed.push(result);
+        blockStart=endIndex;
+        candidateCursor=j;
+        accepted=true;
+        break;
       }
     }
-
-    if(!current){
-      if(isQuestionStart(line)) startQuestion(line);
-      continue;
-    }
-
-    const qStart=isQuestionStart(line);
-    const am=line.match(optionMarker);
-    const ans=line.match(answerMarker);
-    const rat=isRationaleStart(line);
-
-    if(qStart){
-      if(state==="rationale"){
-        // Do not immediately split on "2. ..." inside a mathematical explanation.
-        pendingQuestion={line};
-        continue;
-      }
-      finish();
-      startQuestion(line);
-      continue;
-    }
-
-    if(rat){
-      const first=cleanRationaleStart(line);
-      if(first) current.rationale.push(first);
-      state="rationale";
-      continue;
-    }
-
-    if(ans){
-      current.answer=ans[1].toUpperCase().charCodeAt(0)-65;
-      const trailing=ans[2].trim().replace(/^[.\-:]\s*/,"");
-      if(trailing) current.rationale.push(trailing);
-      state="answer";
-      continue;
-    }
-
-    if(state==="rationale"){
-      // Never truncate this state. Mathematical lines, Unicode symbols, LaTeX,
-      // numbered steps, and wrapped paragraphs all remain part of the rationale.
-      current.rationale.push(line);
-      continue;
-    }
-
-    if(am){
-      let optionText=am[2].trim();
-      const rm=optionText.search(rationaleMarker);
-      if(rm>=0){
-        const choicePart=optionText.slice(0,rm).trim();
-        const rationalePart=optionText.slice(rm).trim();
-        if(current.options.length<4) current.options.push(choicePart);
-        const first=cleanRationaleStart(rationalePart);
-        if(first) current.rationale.push(first);
-        state="rationale";
-      }else if(current.options.length<4){
-        current.options.push(optionText);
-        state="options";
-      }
-      continue;
-    }
-
-    if(state==="question"){
-      current.questionParts.push(line);
-    }else if(state==="options" && current.options.length){
-      const rm=line.search(rationaleMarker);
-      if(rm>=0){
-        const choiceContinuation=line.slice(0,rm).trim();
-        const rationalePart=line.slice(rm).trim();
-        if(choiceContinuation) current.options[current.options.length-1]=(current.options[current.options.length-1]+" "+choiceContinuation).trim();
-        const first=cleanRationaleStart(rationalePart);
-        if(first) current.rationale.push(first);
-        state="rationale";
-      }else{
-        current.options[current.options.length-1]=(current.options[current.options.length-1]+" "+line).trim();
-      }
-    }else if(state==="answer"){
-      current.rationale.push(line);
-      state="rationale";
-    }
+    if(!accepted) candidateCursor++;
   }
 
-  if(pendingQuestion) appendToRationale(pendingQuestion.line);
-  finish();
-  return parsed;
+  // Fallback for documents where the first question has no recognizable number:
+  // parse the whole source as one block and let the option markers establish it.
+  if(!parsed.length){
+    const result=parseBlock(prepared);
+    if(result) parsed.push(result);
+  }
+
+  // Defensive cleanup: preserve source order and remove accidental duplicates.
+  const seen=new Set();
+  return parsed.filter(item=>{
+    const key=item.question.toLowerCase().replace(/[^a-z0-9]+/g," ").trim();
+    if(!key||seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function ImportQuestionsModal({deck,existingQuestions=[],close,saveQuestions}) {
