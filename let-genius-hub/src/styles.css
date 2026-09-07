@@ -5116,3 +5116,29 @@ body{font-family:Inter,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",san
   .import-format-guide{padding:12px}
   .import-format-guide pre{font-size:10px}
 }
+
+/* V88 PDF importer: make the deterministic marker guide and parser status easy to scan. */
+.import-parse-status{
+  margin:12px 0;
+  padding:10px 12px;
+  border:1px solid rgba(37,99,235,.18);
+  border-radius:10px;
+  background:rgba(37,99,235,.055);
+  font-size:.88rem;
+  line-height:1.45;
+}
+.import-format-guide pre{
+  white-space:pre-wrap;
+  overflow:auto;
+  max-height:320px;
+  margin:10px 0;
+  padding:14px;
+  border-radius:10px;
+  font-size:.78rem;
+  line-height:1.55;
+}
+.import-format-rules{
+  display:grid;
+  gap:6px;
+}
+.import-format-rules span{line-height:1.4}
