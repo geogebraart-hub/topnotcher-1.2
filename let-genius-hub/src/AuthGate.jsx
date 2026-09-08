@@ -42,9 +42,15 @@ export default function AuthGate() {
       setDeviceError("");
       registerAccountDevice(signedInUser.uid).then(result => {
         if (!active) return;
-        if (result?.ok) setDeviceStatus("allowed");
-        else if (result?.reason === "limit") setDeviceStatus("limit");
-        else { setDeviceStatus("error"); setDeviceError("TOPNOTCHER could not verify this device. Please check your internet connection and try again."); }
+        if (result?.ok) {
+          setDeviceStatus("allowed");
+          if (result?.verificationError) console.warn("TOPNOTCHER restored a previously authorized device while Firestore was unavailable.", result.verificationError);
+        } else if (result?.reason === "limit") {
+          setDeviceStatus("limit");
+        } else {
+          setDeviceStatus("error");
+          setDeviceError("TOPNOTCHER could not verify this new device. Please check your internet connection and try again.");
+        }
       });
     });
     return () => { active = false; unsubscribe(); };
@@ -62,7 +68,7 @@ export default function AuthGate() {
   if (accessDenied) return <AccessDeniedScreen user={accessDenied} onSignOut={() => { deniedRef.current = false; setAccessDenied(null); signOutGoogle().catch(() => {}); }} />;
   if (!user) return <SignInScreen busy={busy} error={error} onLogin={login} />;
   if (deviceStatus === "checking" || deviceStatus === "idle") return <DeviceAccessScreen status="checking" email={user.email} />;
-  if (deviceStatus === "limit" || deviceStatus === "error") return <DeviceAccessScreen status={deviceStatus} error={deviceError} email={user.email} onRetry={() => { setDeviceStatus("checking"); registerAccountDevice(user.uid).then(result => { if (result?.ok) setDeviceStatus("allowed"); else if (result?.reason === "limit") setDeviceStatus("limit"); else { setDeviceStatus("error"); setDeviceError("TOPNOTCHER could not verify this device. Please check your internet connection and try again."); } }); }} onSignOut={async () => { await releaseAccountDevice(user.uid); await signOutGoogle(); }} />;
+  if (deviceStatus === "limit" || deviceStatus === "error") return <DeviceAccessScreen status={deviceStatus} error={deviceError} email={user.email} onRetry={() => { setDeviceStatus("checking"); setDeviceError(""); registerAccountDevice(user.uid).then(result => { if (result?.ok) setDeviceStatus("allowed"); else if (result?.reason === "limit") setDeviceStatus("limit"); else { setDeviceStatus("error"); setDeviceError("TOPNOTCHER could not verify this new device. Please check your internet connection and try again."); } }); }} onSignOut={async () => { await releaseAccountDevice(user.uid); await signOutGoogle(); }} />;
   return <AuthenticatedApp user={user} onSignOut={async () => { await releaseAccountDevice(user.uid); await signOutGoogle(); }} />;
 }
 
