@@ -10,6 +10,7 @@ import {
   onAuthStateChanged,
   signOut
 } from "firebase/auth";
+import { getFirestore, doc, setDoc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
 
 const required = [
   "VITE_FIREBASE_API_KEY",
@@ -49,6 +50,7 @@ export function authorizedAccountDescription() {
 
 let auth = null;
 let provider = null;
+let db = null;
 
 if (firebaseConfigured) {
   const app = initializeApp({
@@ -60,6 +62,7 @@ if (firebaseConfigured) {
     appId: firebaseConfig.VITE_FIREBASE_APP_ID
   });
   auth = getAuth(app);
+  db = getFirestore(app);
   provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
   setPersistence(auth, browserLocalPersistence).catch(console.error);
@@ -93,3 +96,83 @@ export async function signOutGoogle() {
   if (!auth) return;
   await signOut(auth);
 }
+
+
+const DEVICE_ID_KEY = "topnotcher-device-id-v1";
+function getDeviceId() {
+  try {
+    let id = localStorage.getItem(DEVICE_ID_KEY);
+    if (!id) {
+      id = (crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      localStorage.setItem(DEVICE_ID_KEY, id);
+    }
+    return id;
+  } catch {
+    return `device-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+}
+
+export async function registerAccountDevice(uid) {
+  if (!db || !uid) return { ok: true, deviceId: getDeviceId(), disabled: true };
+  const deviceId = getDeviceId();
+  const ref = doc(db, "accounts", uid);
+  try {
+    const result = await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      const data = snap.exists() ? snap.data() : {};
+      const devices = { ...(data.devices || {}) };
+      const now = Date.now();
+      const entries = Object.entries(devices).filter(([id, value]) => value && typeof value === "object");
+      if (devices[deviceId]) {
+        devices[deviceId] = { ...devices[deviceId], lastSeen: now };
+        transaction.set(ref, { devices, updatedAt: serverTimestamp() }, { merge: true });
+        return { ok: true, deviceId, existing: true };
+      }
+      // A device slot is an authenticated browser/device. Signing out frees it.
+      if (entries.length >= 2) return { ok: false, deviceId, reason: "limit" };
+      devices[deviceId] = {
+        createdAt: now,
+        lastSeen: now,
+        label: `${navigator?.platform || "Browser"} · ${navigator?.userAgent?.match(/(Chrome|Safari|Firefox|Edge)/i)?.[1] || "Browser"}`
+      };
+      transaction.set(ref, { devices, updatedAt: serverTimestamp() }, { merge: true });
+      return { ok: true, deviceId, existing: false };
+    });
+    return result;
+  } catch (error) {
+    return { ok: false, deviceId, reason: "error", error };
+  }
+}
+
+export async function releaseAccountDevice(uid) {
+  if (!db || !uid) return;
+  const deviceId = getDeviceId();
+  const ref = doc(db, "accounts", uid);
+  try {
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      if (!snap.exists()) return;
+      const devices = { ...(snap.data().devices || {}) };
+      delete devices[deviceId];
+      transaction.set(ref, { devices, updatedAt: serverTimestamp() }, { merge: true });
+    });
+  } catch (error) {
+    console.warn("Could not release TOPNOTCHER device slot", error);
+  }
+}
+
+export function subscribeAccountState(uid, key, onValue, onError) {
+  if (!db || !uid) return () => {};
+  const ref = doc(db, "accounts", uid, "appState", key);
+  return onSnapshot(ref, snap => {
+    onValue(snap.exists() ? snap.data()?.value : undefined, snap.exists());
+  }, onError);
+}
+
+export async function saveAccountState(uid, key, value) {
+  if (!db || !uid) return;
+  const ref = doc(db, "accounts", uid, "appState", key);
+  await setDoc(ref, { value, updatedAt: serverTimestamp() }, { merge: true });
+}
+
+export const firestoreConfigured = Boolean(db);
