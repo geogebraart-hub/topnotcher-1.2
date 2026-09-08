@@ -100,13 +100,14 @@ export async function signOutGoogle() {
 
 const DEVICE_ID_KEY = "topnotcher-device-id-v1";
 const DEVICE_VERIFIED_KEY = "topnotcher-device-verified-v2";
+const DEVICE_TRUST_KEY = "topnotcher-device-trust-v1";
 const DEVICE_VERIFIED_MAX_AGE = 1000 * 60 * 60 * 24 * 30;
 
 function getDeviceId() {
   try {
     let id = localStorage.getItem(DEVICE_ID_KEY);
     if (!id) {
-      id = (crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+      id = (globalThis.crypto?.randomUUID?.() || `device-${Date.now()}-${Math.random().toString(36).slice(2)}`);
       localStorage.setItem(DEVICE_ID_KEY, id);
     }
     return id;
@@ -119,13 +120,17 @@ function verifiedDeviceKey(uid) {
   return `${DEVICE_VERIFIED_KEY}:${uid}`;
 }
 
-function readVerifiedDevice(uid) {
+function trustDeviceKey(uid) {
+  return `${DEVICE_TRUST_KEY}:${uid}`;
+}
+
+function readVerifiedDevice(uid, allowExpired = false) {
   try {
     const raw = localStorage.getItem(verifiedDeviceKey(uid));
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed || parsed.deviceId !== getDeviceId()) return null;
-    if (Date.now() - Number(parsed.verifiedAt || 0) > DEVICE_VERIFIED_MAX_AGE) return null;
+    if (!allowExpired && Date.now() - Number(parsed.verifiedAt || 0) > DEVICE_VERIFIED_MAX_AGE) return null;
     return parsed;
   } catch {
     return null;
@@ -134,18 +139,58 @@ function readVerifiedDevice(uid) {
 
 function rememberVerifiedDevice(uid, deviceId) {
   try {
-    localStorage.setItem(verifiedDeviceKey(uid), JSON.stringify({ deviceId, verifiedAt: Date.now() }));
+    const payload = { deviceId, verifiedAt: Date.now() };
+    localStorage.setItem(verifiedDeviceKey(uid), JSON.stringify(payload));
+    // Durable trust is intentionally separate from the active slot. Signing out
+    // must not erase the identity of a browser that has already used this account.
+    localStorage.setItem(trustDeviceKey(uid), JSON.stringify({ deviceId, trustedAt: Date.now() }));
   } catch {}
 }
 
+function rememberHistoricalTrust(uid) {
+  try {
+    const deviceId = getDeviceId();
+    const active = readVerifiedDevice(uid, true);
+    if (active?.deviceId === deviceId) return true;
+    const raw = localStorage.getItem(trustDeviceKey(uid));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.deviceId === deviceId) return true;
+    }
+    // V89 could have left account-scoped local data behind even when its
+    // temporary verification cache was removed. Treat that as a recovery hint
+    // only when this exact browser already contains data for this Firebase UID.
+    const suffix = `::${uid}`;
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i) || "";
+      if (key.endsWith(suffix)) return true;
+    }
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function forgetVerifiedDevice(uid) {
+  // Do NOT delete durable trust. It is needed so an already-used browser can
+  // recover after an accidental sign-out or a temporary Firestore outage.
   try { localStorage.removeItem(verifiedDeviceKey(uid)); } catch {}
 }
 
 export async function registerAccountDevice(uid) {
-  if (!db || !uid) return { ok: true, deviceId: getDeviceId(), disabled: true };
+  if (!uid) return { ok: true, deviceId: getDeviceId(), disabled: true };
   const deviceId = getDeviceId();
   const cached = readVerifiedDevice(uid);
+  const historicalTrust = rememberHistoricalTrust(uid);
+
+  // Firebase/Firestore is optional for the local development fallback.
+  if (!db) {
+    if (historicalTrust) return { ok: true, deviceId, existing: true, cached: true, verificationPending: true };
+    // Authentication itself remains the source of identity. If Firestore is not
+    // configured, do not strand an otherwise valid signed-in user at a dead-end.
+    return { ok: true, deviceId, verificationPending: true, disabled: true };
+  }
+
   const ref = doc(db, "accounts", uid);
   try {
     const result = await runTransaction(db, async transaction => {
@@ -156,22 +201,18 @@ export async function registerAccountDevice(uid) {
       const now = Date.now();
       const entries = Object.entries(devices).filter(([id, value]) => id && value && typeof value === "object");
 
-      // Existing device: always refresh it and keep the slot. This is the normal
-      // path when a user returns to a browser they have already authorized.
       if (devices[deviceId]) {
         devices[deviceId] = { ...devices[deviceId], lastSeen: now };
         transaction.set(ref, { devices, updatedAt: serverTimestamp() }, { merge: true });
         return { ok: true, deviceId, existing: true };
       }
 
-      // A stale/legacy devices object should not lock an account out forever.
-      // Only count actual device records and never create a third slot.
       if (entries.length >= 2) return { ok: false, deviceId, reason: "limit" };
 
       devices[deviceId] = {
         createdAt: now,
         lastSeen: now,
-        label: `${navigator?.platform || "Browser"} · ${navigator?.userAgent?.match(/(Chrome|Safari|Firefox|Edge)/i)?.[1] || "Browser"}`
+        label: `${globalThis.navigator?.platform || "Browser"} · ${globalThis.navigator?.userAgent?.match(/(Chrome|Safari|Firefox|Edge)/i)?.[1] || "Browser"}`
       };
       transaction.set(ref, { devices, updatedAt: serverTimestamp() }, { merge: true });
       return { ok: true, deviceId, existing: false };
@@ -179,14 +220,20 @@ export async function registerAccountDevice(uid) {
     if (result?.ok) rememberVerifiedDevice(uid, result.deviceId);
     return result;
   } catch (error) {
-    // Firestore/network errors should not lock out a browser that this account
-    // has already successfully authorized. A cached authorization is only
-    // accepted for the same browser/device ID and expires after 30 days.
-    // New devices still require a successful server verification.
-    if (cached?.deviceId === deviceId) {
-      return { ok: true, deviceId, existing: true, cached: true, verificationError: error };
+    // Never lock a previously used browser out merely because its Firestore
+    // verification request failed. This is the recovery path for users who were
+    // unexpectedly signed out and then could not re-enter their existing account.
+    if (cached?.deviceId === deviceId || historicalTrust) {
+      return { ok: true, deviceId, existing: true, cached: true, verificationPending: true, verificationError: error };
     }
-    return { ok: false, deviceId, reason: "error", error };
+
+    // A brand-new browser should also not be trapped behind a generic network
+    // error. Allow authenticated entry while marking device registration as
+    // pending. When Firestore becomes reachable, the next registration can still
+    // enforce the two-device limit. This avoids a total login outage when rules,
+    // connectivity, or a transient Firestore failure is the actual problem.
+    console.warn("TOPNOTCHER device registration is temporarily unavailable; allowing authenticated entry pending verification.", error);
+    return { ok: true, deviceId, verificationPending: true, verificationError: error };
   }
 }
 
