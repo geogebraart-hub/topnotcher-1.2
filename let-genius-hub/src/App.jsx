@@ -8,6 +8,7 @@ import {
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
   ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, Clock3, Copy, ExternalLink, Video, FileArchive, Download
 } from "lucide-react";
+import { subscribeAccountState, saveAccountState, firestoreConfigured } from "./firebase";
 
 let mathJaxPromise=null;
 function ensureMathJax(){
@@ -110,11 +111,43 @@ function accountStorageKey(authUser, key) {
   return `${key}::${accountId}`;
 }
 
-function usePersistedState(key, initial) {
+function usePersistedState(key, initial, authUser=null) {
   const [value, setValue] = useState(() => {
     try { return JSON.parse(localStorage.getItem(key)) ?? initial; } catch { return initial; }
   });
-  useEffect(() => { localStorage.setItem(key, JSON.stringify(value)); }, [key, value]);
+  const cloudKey = String(key).split("::")[0];
+  const uid = authUser?.uid || "";
+  const cloudReadyRef = useRef(false);
+  const remoteUpdateRef = useRef(false);
+
+  useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  }, [key, value]);
+
+  useEffect(() => {
+    cloudReadyRef.current = false;
+    if (!uid || !firestoreConfigured) return () => {};
+    let alive = true;
+    const unsubscribe = subscribeAccountState(uid, cloudKey, (remoteValue, exists) => {
+      if (!alive) return;
+      if (exists && remoteValue !== undefined) {
+        remoteUpdateRef.current = true;
+        setValue(remoteValue);
+        cloudReadyRef.current = true;
+        queueMicrotask(() => { remoteUpdateRef.current = false; });
+      } else {
+        cloudReadyRef.current = true;
+        saveAccountState(uid, cloudKey, value).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
+      }
+    }, err => console.warn("TOPNOTCHER cloud sync failed", err));
+    return () => { alive = false; unsubscribe?.(); cloudReadyRef.current = false; };
+  }, [uid, cloudKey]);
+
+  useEffect(() => {
+    if (!uid || !firestoreConfigured || !cloudReadyRef.current || remoteUpdateRef.current) return;
+    saveAccountState(uid, cloudKey, value).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
+  }, [uid, cloudKey, value]);
+
   return [value, setValue];
 }
 
@@ -245,22 +278,22 @@ function clearShareHash() {
 
 function App({ authUser, onSignOut }) {
   const [page, setPage] = useState("progress");
-  const [theme, setTheme] = usePersistedState(accountStorageKey(authUser, "lgh-theme"), "light");
-  const [palette, setPalette] = usePersistedState(accountStorageKey(authUser, "lgh-palette"), "violet");
-  const [profile, setProfile] = usePersistedState(accountStorageKey(authUser, "lgh-profile"), {name:authUser?.displayName||"Genius Learner", email:authUser?.email||"", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60, avatar:"⭐"});
+  const [theme, setTheme] = usePersistedState(accountStorageKey(authUser, "lgh-theme"), "light", authUser);
+  const [palette, setPalette] = usePersistedState(accountStorageKey(authUser, "lgh-palette"), "violet", authUser);
+  const [profile, setProfile] = usePersistedState(accountStorageKey(authUser, "lgh-profile"), {name:authUser?.displayName||"Genius Learner", email:authUser?.email||"", goal:"Pass the LET", examDate:"2026-09-28", dailyGoal:60, avatar:"⭐"}, authUser);
   useEffect(() => { if (authUser?.email && profile?.email !== authUser.email) setProfile(p => ({...p, email: authUser.email, name: p?.name || authUser.displayName || "Genius Learner"})); }, [authUser?.email]);
-  const [category, setCategory] = usePersistedState(accountStorageKey(authUser, "lgh-category"), "gened");
-  const [dailyDrillCount, setDailyDrillCount] = usePersistedState(accountStorageKey(authUser, "lgh-daily-drill-count"), 20);
-  const [streak, setStreak] = usePersistedState(accountStorageKey(authUser, "lgh-streak"), 0);
-  const [lastActiveDate, setLastActiveDate] = usePersistedState(accountStorageKey(authUser, "lgh-last-active-date"), null);
-  const [questions, setQuestions] = usePersistedState(accountStorageKey(authUser, "lgh-questions"), seedQuestions);
-  const [decks, setDecks] = usePersistedState(accountStorageKey(authUser, "lgh-decks"), seedDecks);
-  const [folders, setFolders] = usePersistedState(accountStorageKey(authUser, "lgh-deck-folders"), []);
-  const [sessions, setSessions] = usePersistedState(accountStorageKey(authUser, "lgh-sessions"), []);
-  const [mockScores, setMockScores] = usePersistedState(accountStorageKey(authUser, "lgh-mock-scores"), []);
-  const [mockHistory, setMockHistory] = usePersistedState(accountStorageKey(authUser, "lgh-mock-history"), []);
-  const [questionStats, setQuestionStats] = usePersistedState(accountStorageKey(authUser, "lgh-question-stats"), {});
-  const [flashcards, setFlashcards] = usePersistedState(accountStorageKey(authUser, "lgh-flashcards"), []);
+  const [category, setCategory] = usePersistedState(accountStorageKey(authUser, "lgh-category"), "gened", authUser);
+  const [dailyDrillCount, setDailyDrillCount] = usePersistedState(accountStorageKey(authUser, "lgh-daily-drill-count"), 20, authUser);
+  const [streak, setStreak] = usePersistedState(accountStorageKey(authUser, "lgh-streak"), 0, authUser);
+  const [lastActiveDate, setLastActiveDate] = usePersistedState(accountStorageKey(authUser, "lgh-last-active-date"), null, authUser);
+  const [questions, setQuestions] = usePersistedState(accountStorageKey(authUser, "lgh-questions"), seedQuestions, authUser);
+  const [decks, setDecks] = usePersistedState(accountStorageKey(authUser, "lgh-decks"), seedDecks, authUser);
+  const [folders, setFolders] = usePersistedState(accountStorageKey(authUser, "lgh-deck-folders"), [], authUser);
+  const [sessions, setSessions] = usePersistedState(accountStorageKey(authUser, "lgh-sessions"), [], authUser);
+  const [mockScores, setMockScores] = usePersistedState(accountStorageKey(authUser, "lgh-mock-scores"), [], authUser);
+  const [mockHistory, setMockHistory] = usePersistedState(accountStorageKey(authUser, "lgh-mock-history"), [], authUser);
+  const [questionStats, setQuestionStats] = usePersistedState(accountStorageKey(authUser, "lgh-question-stats"), {}, authUser);
+  const [flashcards, setFlashcards] = usePersistedState(accountStorageKey(authUser, "lgh-flashcards"), [], authUser);
   const [selectedDeckId, setSelectedDeckId] = useState(null);
   const [studyPool, setStudyPool] = useState(null);
   const [flashcardStudyPool, setFlashcardStudyPool] = useState(null);
@@ -279,7 +312,7 @@ function App({ authUser, onSignOut }) {
   const [showSettings, setShowSettings] = useState(false);
   const [mobileNav, setMobileNav] = useState(false);
   const [drillSetup, setDrillSetup] = useState(null);
-  const [examSession, setExamSession] = usePersistedState(accountStorageKey(authUser, "lgh-active-exam"), null);
+  const [examSession, setExamSession] = usePersistedState(accountStorageKey(authUser, "lgh-active-exam"), null, authUser);
   const [shareDeck, setShareDeck] = useState(null);
   const [shareToken, setShareToken] = useState(null);
   const [shareOpen, setShareOpen] = useState(false);
