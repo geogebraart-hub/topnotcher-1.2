@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Chrome, Loader2, ShieldCheck } from "lucide-react";
-import { firebaseConfigured, finishGoogleRedirect, signInWithGoogle, signOutGoogle, watchAuth, isAuthorizedGoogleUser, authorizedAccountDescription } from "./firebase";
+import { firebaseConfigured, finishGoogleRedirect, signInWithGoogle, signOutGoogle, watchAuth, isAuthorizedGoogleUser, authorizedAccountDescription, registerAccountDevice, releaseAccountDevice } from "./firebase";
 import App, { TopnotcherBrand } from "./App";
 
 export default function AuthGate() {
@@ -8,6 +8,8 @@ export default function AuthGate() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [accessDenied, setAccessDenied] = useState(null);
+  const [deviceStatus, setDeviceStatus] = useState("idle");
+  const [deviceError, setDeviceError] = useState("");
   const deniedRef = useRef(false);
 
   useEffect(() => {
@@ -26,11 +28,24 @@ export default function AuthGate() {
       }
       if (!signedInUser && deniedRef.current) {
         setUser(null);
+        setDeviceStatus("idle");
         return;
       }
       deniedRef.current = false;
       setAccessDenied(null);
       setUser(signedInUser);
+      if (!signedInUser) {
+        setDeviceStatus("idle");
+        return;
+      }
+      setDeviceStatus("checking");
+      setDeviceError("");
+      registerAccountDevice(signedInUser.uid).then(result => {
+        if (!active) return;
+        if (result?.ok) setDeviceStatus("allowed");
+        else if (result?.reason === "limit") setDeviceStatus("limit");
+        else { setDeviceStatus("error"); setDeviceError("TOPNOTCHER could not verify this device. Please check your internet connection and try again."); }
+      });
     });
     return () => { active = false; unsubscribe(); };
   }, []);
@@ -46,12 +61,20 @@ export default function AuthGate() {
   if (!firebaseConfigured) return <AuthConfigMissing />;
   if (accessDenied) return <AccessDeniedScreen user={accessDenied} onSignOut={() => { deniedRef.current = false; setAccessDenied(null); signOutGoogle().catch(() => {}); }} />;
   if (!user) return <SignInScreen busy={busy} error={error} onLogin={login} />;
-  return <AuthenticatedApp user={user} onSignOut={signOutGoogle} />;
+  if (deviceStatus === "checking" || deviceStatus === "idle") return <DeviceAccessScreen status="checking" email={user.email} />;
+  if (deviceStatus === "limit" || deviceStatus === "error") return <DeviceAccessScreen status={deviceStatus} error={deviceError} email={user.email} onRetry={() => { setDeviceStatus("checking"); registerAccountDevice(user.uid).then(result => { if (result?.ok) setDeviceStatus("allowed"); else if (result?.reason === "limit") setDeviceStatus("limit"); else { setDeviceStatus("error"); setDeviceError("TOPNOTCHER could not verify this device. Please check your internet connection and try again."); } }); }} onSignOut={async () => { await releaseAccountDevice(user.uid); await signOutGoogle(); }} />;
+  return <AuthenticatedApp user={user} onSignOut={async () => { await releaseAccountDevice(user.uid); await signOutGoogle(); }} />;
 }
 
 function AuthenticatedApp({ user, onSignOut }) {
   // App is rendered only after Firebase has confirmed an authenticated user.
   return <App authUser={user} onSignOut={onSignOut} />;
+}
+
+function DeviceAccessScreen({ status, error, email, onRetry, onSignOut }) {
+  const checking = status === "checking";
+  const limit = status === "limit";
+  return <div className="device-access-screen"><div className="device-access-card"><TopnotcherBrand/><div className={"device-access-icon "+(limit?"limit":"")}><ShieldCheck size={28}/></div><h1>{checking ? "Checking this device…" : limit ? "2-device limit reached" : "Device verification failed"}</h1><p>{checking ? "Please wait while TOPNOTCHER verifies your account and prepares your synchronized study data." : limit ? `This account is already signed in on 2 devices. ${email ? "Sign out of TOPNOTCHER on one of those devices, then try again here." : "Sign out of one device, then try again here."}` : (error || "Please try again.")}</p>{limit&&<p className="device-access-small">Your structured account data is synchronized through your TOPNOTCHER account and is available on the two authorized devices.</p>}<div className="device-access-actions">{!checking&&<button className="primary-btn" onClick={onRetry}>Try Again</button>}{onSignOut&&<button className="secondary-btn" onClick={onSignOut}>Sign out</button>}</div></div></div>;
 }
 
 function AuthLoading() {
