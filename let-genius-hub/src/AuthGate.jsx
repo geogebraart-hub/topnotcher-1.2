@@ -44,7 +44,7 @@ export default function AuthGate() {
         if (!active) return;
         if (result?.ok) {
           setDeviceStatus("allowed");
-          if (result?.verificationError) console.warn("TOPNOTCHER restored a previously authorized device while Firestore was unavailable.", result.verificationError);
+          if (result?.verificationPending) console.warn("TOPNOTCHER entered with device registration pending.", result.verificationError);
         } else if (result?.reason === "limit") {
           setDeviceStatus("limit");
         } else {
