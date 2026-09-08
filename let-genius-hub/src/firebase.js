@@ -99,6 +99,9 @@ export async function signOutGoogle() {
 
 
 const DEVICE_ID_KEY = "topnotcher-device-id-v1";
+const DEVICE_VERIFIED_KEY = "topnotcher-device-verified-v2";
+const DEVICE_VERIFIED_MAX_AGE = 1000 * 60 * 60 * 24 * 30;
+
 function getDeviceId() {
   try {
     let id = localStorage.getItem(DEVICE_ID_KEY);
@@ -112,24 +115,59 @@ function getDeviceId() {
   }
 }
 
+function verifiedDeviceKey(uid) {
+  return `${DEVICE_VERIFIED_KEY}:${uid}`;
+}
+
+function readVerifiedDevice(uid) {
+  try {
+    const raw = localStorage.getItem(verifiedDeviceKey(uid));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed || parsed.deviceId !== getDeviceId()) return null;
+    if (Date.now() - Number(parsed.verifiedAt || 0) > DEVICE_VERIFIED_MAX_AGE) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function rememberVerifiedDevice(uid, deviceId) {
+  try {
+    localStorage.setItem(verifiedDeviceKey(uid), JSON.stringify({ deviceId, verifiedAt: Date.now() }));
+  } catch {}
+}
+
+function forgetVerifiedDevice(uid) {
+  try { localStorage.removeItem(verifiedDeviceKey(uid)); } catch {}
+}
+
 export async function registerAccountDevice(uid) {
   if (!db || !uid) return { ok: true, deviceId: getDeviceId(), disabled: true };
   const deviceId = getDeviceId();
+  const cached = readVerifiedDevice(uid);
   const ref = doc(db, "accounts", uid);
   try {
     const result = await runTransaction(db, async transaction => {
       const snap = await transaction.get(ref);
       const data = snap.exists() ? snap.data() : {};
-      const devices = { ...(data.devices || {}) };
+      const rawDevices = data.devices && typeof data.devices === "object" ? data.devices : {};
+      const devices = { ...rawDevices };
       const now = Date.now();
-      const entries = Object.entries(devices).filter(([id, value]) => value && typeof value === "object");
+      const entries = Object.entries(devices).filter(([id, value]) => id && value && typeof value === "object");
+
+      // Existing device: always refresh it and keep the slot. This is the normal
+      // path when a user returns to a browser they have already authorized.
       if (devices[deviceId]) {
         devices[deviceId] = { ...devices[deviceId], lastSeen: now };
         transaction.set(ref, { devices, updatedAt: serverTimestamp() }, { merge: true });
         return { ok: true, deviceId, existing: true };
       }
-      // A device slot is an authenticated browser/device. Signing out frees it.
+
+      // A stale/legacy devices object should not lock an account out forever.
+      // Only count actual device records and never create a third slot.
       if (entries.length >= 2) return { ok: false, deviceId, reason: "limit" };
+
       devices[deviceId] = {
         createdAt: now,
         lastSeen: now,
@@ -138,8 +176,16 @@ export async function registerAccountDevice(uid) {
       transaction.set(ref, { devices, updatedAt: serverTimestamp() }, { merge: true });
       return { ok: true, deviceId, existing: false };
     });
+    if (result?.ok) rememberVerifiedDevice(uid, result.deviceId);
     return result;
   } catch (error) {
+    // Firestore/network errors should not lock out a browser that this account
+    // has already successfully authorized. A cached authorization is only
+    // accepted for the same browser/device ID and expires after 30 days.
+    // New devices still require a successful server verification.
+    if (cached?.deviceId === deviceId) {
+      return { ok: true, deviceId, existing: true, cached: true, verificationError: error };
+    }
     return { ok: false, deviceId, reason: "error", error };
   }
 }
@@ -156,7 +202,10 @@ export async function releaseAccountDevice(uid) {
       delete devices[deviceId];
       transaction.set(ref, { devices, updatedAt: serverTimestamp() }, { merge: true });
     });
+    forgetVerifiedDevice(uid);
   } catch (error) {
+    // Keep the local authorization if the network is unavailable. This avoids
+    // turning an ordinary offline sign-out into an unusable account state.
     console.warn("Could not release TOPNOTCHER device slot", error);
   }
 }
