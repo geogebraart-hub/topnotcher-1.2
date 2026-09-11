@@ -168,6 +168,12 @@ async function saveDeckMaterial({scope,deckId,type,file}){
   db.close();
   return item;
 }
+async function listAllMaterials(scope){
+  const db=await openMaterialDB();
+  const rows=await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readonly");const req=tx.objectStore("materials").getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
+  db.close();
+  return rows.filter(x=>x.scope===scope).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+}
 async function listDeckMaterials(scope,deckId,type){
   const db=await openMaterialDB();
   const rows=await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readonly");const req=tx.objectStore("materials").getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
@@ -191,7 +197,8 @@ function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpe
     ["decks", LibraryBig, "Study Decks"],
     ["dashboard", Flame, "Daily Drill"],
     ["mock", ClipboardCheck, "Mock Board Exam"],
-    ["schedule", CalendarDays, "Study Schedule"]
+    ["schedule", CalendarDays, "Study Schedule"],
+    ["materials", FileArchive, "Materials"]
   ];
   return <aside className={"sidebar unified-sidebar "+(mobileOpen?"mobile-open ":"")+(studyMode?"study-app-sidebar":"")}>
     <TopnotcherBrand compact={studyMode} />
@@ -203,7 +210,13 @@ function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpe
     </nav>
     <div className="sidebar-section-label planning-label">PLANNING</div>
     <nav className="sidebar-nav">
-      {nav.slice(4).map(([id,Icon,label])=><button key={id} className={"nav-btn "+(page===id?"active":"")} title={label} onClick={()=>onNavigate(id)}>
+      {nav.slice(4,5).map(([id,Icon,label])=><button key={id} className={"nav-btn "+(page===id?"active":"")} title={label} onClick={()=>onNavigate(id)}>
+        <Icon size={20}/><span>{label}</span>
+      </button>)}
+    </nav>
+    <div className="sidebar-section-label materials-label">LIBRARY</div>
+    <nav className="sidebar-nav">
+      {nav.slice(5).map(([id,Icon,label])=><button key={id} className={"nav-btn "+(page===id?"active":"")} title={label} onClick={()=>onNavigate(id)}>
         <Icon size={20}/><span>{label}</span>
       </button>)}
     </nav>
@@ -598,6 +611,8 @@ function App({ authUser, onSignOut }) {
         }
         return updated;
       })}/>} 
+
+      {page==="materials" && <MaterialsDashboard scope={accountStorageKey(authUser,"lgh-materials")} decks={decks} onBackToDecks={()=>setPage("decks")}/>}
 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck} folders={folders}/>}
       {showFolderModal && <FolderModal close={()=>{setShowFolderModal(false);setEditingFolder(null)}} save={saveFolder} initial={editingFolder}/>} 
@@ -1284,6 +1299,93 @@ function SharedStudyAccessModal({token,onClose,onOpen}) {
   return <div className="modal-backdrop"><div className="small-modal share-access-modal"><div className="modal-head"><div><span className="question-label">SHARED STUDY QUESTIONS</span><h2>Password required</h2><span className="muted">Enter the password provided by the person who shared this Study Questions Now link.</span></div><button onClick={onClose}><X/></button></div><div className="share-access-icon"><LockKeyhole size={30}/></div><label>Share password<input type="password" autoFocus value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password" autoComplete="off"/></label>{error&&<div className="ai-error">{error}</div>}<div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Opening…</>:<><Play size={17}/> Study Questions Now</>}</button></div></div></div>;
 }
 
+
+function formatBytes(value){
+  const n=Number(value)||0;
+  if(n<1024) return `${n} B`;
+  if(n<1024*1024) return `${(n/1024).toFixed(1)} KB`;
+  if(n<1024*1024*1024) return `${(n/(1024*1024)).toFixed(1)} MB`;
+  return `${(n/(1024*1024*1024)).toFixed(1)} GB`;
+}
+
+function MaterialsDashboard({scope,decks,onBackToDecks}) {
+  const [items,setItems]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [filter,setFilter]=useState("all");
+  const [category,setCategory]=useState("all");
+  const [search,setSearch]=useState("");
+
+  const load=async()=>{
+    setLoading(true);
+    try{ setItems(await listAllMaterials(scope)); }
+    catch(err){ console.error("Could not load material library",err); setItems([]); }
+    finally{ setLoading(false); }
+  };
+  useEffect(()=>{load();},[scope]);
+
+  const deckById=useMemo(()=>new Map((decks||[]).map(d=>[String(d.id),d])),[decks]);
+  const getCategory=(item)=>{
+    const deck=deckById.get(String(item.deckId));
+    return deck?.category || "other";
+  };
+  const kind=(item)=>{
+    const mime=String(item.mime||"").toLowerCase();
+    const name=String(item.name||"").toLowerCase();
+    if(mime.startsWith("video/") || /\.(mp4|webm|mov|m4v|avi|mkv)$/i.test(name) || item.type==="video") return "video";
+    if(mime==="application/pdf" || /\.pdf$/i.test(name)) return "pdf";
+    return "document";
+  };
+  const categoryLabel={gened:"GenEd",profed:"ProfEd",majorship:"Majorship",other:"Other"};
+  const filtered=items.filter(item=>{
+    const k=kind(item), c=getCategory(item), q=search.trim().toLowerCase();
+    return (filter==="all"||k===filter) && (category==="all"||c===category) && (!q||String(item.name).toLowerCase().includes(q));
+  });
+  const counts={pdf:items.filter(x=>kind(x)==="pdf").length,video:items.filter(x=>kind(x)==="video").length,document:items.filter(x=>kind(x)==="document").length};
+  const openItem=(item)=>{
+    if(!item?.blob) return;
+    const url=URL.createObjectURL(item.blob);
+    if(kind(item)==="video") window.open(url,"_blank","noopener,noreferrer");
+    else { const a=document.createElement("a"); a.href=url; a.download=item.name||"material"; document.body.appendChild(a); a.click(); a.remove(); }
+    setTimeout(()=>URL.revokeObjectURL(url),30000);
+  };
+  const remove=async(item)=>{
+    if(!confirm(`Delete ${item.name||"this material"}?`)) return;
+    try{ await deleteDeckMaterial(item.id); await load(); }
+    catch(err){ alert("The material could not be deleted."); }
+  };
+  const folderGroups=["gened","profed","majorship"].map(cat=>({cat,label:categoryLabel[cat],items:filtered.filter(x=>getCategory(x)===cat)}));
+
+  return <div className="materials-page">
+    <PageHeader title="Materials Library" subtitle="Keep your uploaded PDF and video study materials organized by LET subject area." action={<button className="secondary-btn compact" onClick={onBackToDecks}><ArrowLeft size={17}/> Study Decks</button>}/>
+    <section className="materials-overview">
+      <button className={`materials-stat ${filter==="pdf"?"selected":""}`} onClick={()=>setFilter(filter==="pdf"?"all":"pdf")}><span className="materials-stat-icon pdf"><FileText size={20}/></span><div><b>{counts.pdf}</b><small>PDF Materials</small></div></button>
+      <button className={`materials-stat ${filter==="video"?"selected":""}`} onClick={()=>setFilter(filter==="video"?"all":"video")}><span className="materials-stat-icon video"><Video size={20}/></span><div><b>{counts.video}</b><small>Video Materials</small></div></button>
+      <button className={`materials-stat ${filter==="document"?"selected":""}`} onClick={()=>setFilter(filter==="document"?"all":"document")}><span className="materials-stat-icon doc"><FileArchive size={20}/></span><div><b>{counts.document}</b><small>Other Study Files</small></div></button>
+      <div className="materials-stat total"><span className="materials-stat-icon total"><Library size={20}/></span><div><b>{items.length}</b><small>Total Uploaded</small></div></div>
+    </section>
+    <section className="panel materials-library-panel">
+      <div className="materials-toolbar">
+        <div><h2>Uploaded Materials</h2><p className="muted">Files remain connected to the deck where they were uploaded.</p></div>
+        <div className="materials-filters">
+          <label className="materials-search"><Search size={17}/><input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search files..."/></label>
+          <select value={category} onChange={e=>setCategory(e.target.value)} aria-label="Filter by subject"><option value="all">All subjects</option><option value="gened">GenEd</option><option value="profed">ProfEd</option><option value="majorship">Majorship</option><option value="other">Other</option></select>
+        </div>
+      </div>
+      {loading ? <div className="materials-empty"><Loader2 className="spin"/><b>Loading your materials...</b></div> : !filtered.length ? <div className="materials-empty"><FileArchive size={34}/><b>No uploaded materials found</b><span>Upload a PDF or video from a Study Deck and it will appear here automatically.</span></div> : <div className="materials-folder-list">
+        {folderGroups.map(group=><section className="materials-folder" key={group.cat}>
+          <div className="materials-folder-head"><div className="materials-folder-title"><span><Folder size={19}/></span><div><h3>{group.label}</h3><small>{group.items.length} material{group.items.length===1?"":"s"}</small></div></div></div>
+          {group.items.length ? <div className="materials-file-grid">{group.items.map(item=>{const k=kind(item);const deck=deckById.get(String(item.deckId));return <article className="material-file-card" key={item.id}>
+            <div className={`material-file-icon ${k}`} >{k==="video"?<Video size={22}/>:k==="pdf"?<FileText size={22}/>:<FileArchive size={22}/>}</div>
+            <div className="material-file-main"><h4 title={item.name}>{item.name}</h4><p>{deck?.name||"Study material"}</p><small>{formatBytes(item.size)} · {new Date(item.createdAt).toLocaleDateString()}</small></div>
+            <div className="material-file-actions"><button className="icon-btn" title="Open / download" onClick={()=>openItem(item)}><ExternalLink size={16}/></button><button className="icon-btn danger" title="Delete" onClick={()=>remove(item)}><Trash2 size={16}/></button></div>
+          </article>})}</div> : <div className="materials-folder-empty">No files in this subject folder for the selected filter.</div>}
+        </section>)}
+      </div>}
+    </section>
+    <div className="materials-note"><FileArchive size={17}/><span><b>Storage note:</b> This library displays the files already stored by TOPNOTCHER's material uploader. The current uploader stores the actual file in this browser's local material storage; question/deck data can sync through your account, but the file blob itself is not yet cross-device cloud storage.</span></div>
+  </div>;
+}
+
 function DeckMaterialsModal({scope,deckId,type,onClose}) {
   const [items,setItems]=useState([]);
   const [busy,setBusy]=useState(false);
@@ -1787,7 +1889,7 @@ function QuestionModal({close,save,initial,deckId,duringStudy=false}) {
 
 function SettingsModal({close,theme,setTheme,palette,setPalette,profile,openProfile}) {
   const palettes=[{id:"red",label:"Red",primary:"#dc2626"},{id:"orange",label:"Orange",primary:"#ea580c"},{id:"yellow",label:"Yellow",primary:"#ca8a04"},{id:"blue",label:"Blue",primary:"#2563eb"},{id:"indigo",label:"Indigo",primary:"#4f46e5"},{id:"violet",label:"Violet",primary:"#7c3aed"},{id:"green",label:"Green",primary:"#16a34a"},{id:"sunset",label:"Sunset Gradient",primary:"linear-gradient(135deg,#f97316,#dc2626)"},{id:"ocean",label:"Ocean Gradient",primary:"linear-gradient(135deg,#2563eb,#06b6d4)"},{id:"aurora",label:"Aurora Gradient",primary:"linear-gradient(135deg,#16a34a,#7c3aed)"}];
-  return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your TOPNOTCHER! experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-choice-grid"><button className={theme==="light"?"selected":""} onClick={()=>setTheme("light")}><span className="theme-swatch light-swatch">☀</span><div><b>Light</b><small>Clean off-white workspace</small></div></button><button className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")}><span className="theme-swatch dark-swatch">☾</span><div><b>Dark</b><small>Lower-light study workspace</small></div></button></div></div><div className="settings-section palette-section"><b>Website Color Palette</b><span>Change buttons, sidebar highlights, active navigation states, progress bars, and accent colors.</span><div className="palette-grid">{palettes.map(p=><button type="button" key={p.id} className={palette===p.id?"selected":""} onClick={()=>setPalette(p.id)}><span className="palette-swatch" style={{background:p.primary}}/><b>{p.label}</b></button>)}</div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, palette, theme, and study data are stored separately for your signed-in Google account in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
+  return <div className="modal-backdrop"><div className="small-modal settings-modal"><div className="modal-head"><div><h2>Settings</h2><span className="muted">Customize your TOPNOTCHER! experience.</span></div><button onClick={close}><X/></button></div><div className="settings-section"><b>Appearance</b><span>Choose how the app looks across your devices.</span><div className="theme-switch-wrap"><div className="theme-switch-label"><span>Appearance</span><b>{theme==="dark"?"Dark mode":"Light mode"}</b></div><div className={`theme-switch ${theme==="dark"?"is-dark":""}`} role="group" aria-label="Appearance"><button type="button" className={theme==="light"?"selected":""} onClick={()=>setTheme("light")} aria-pressed={theme==="light"}><span className="theme-switch-icon">☀</span><span>Light</span></button><button type="button" className={theme==="dark"?"selected":""} onClick={()=>setTheme("dark")} aria-pressed={theme==="dark"}><span className="theme-switch-icon">☾</span><span>Dark</span></button></div><p className="theme-switch-hint">The entire workspace, cards, controls, text, and study screens follow this setting.</p></div></div><div className="settings-section palette-section"><b>Website Color Palette</b><span>Change buttons, sidebar highlights, active navigation states, progress bars, and accent colors.</span><div className="palette-grid">{palettes.map(p=><button type="button" key={p.id} className={palette===p.id?"selected":""} onClick={()=>setPalette(p.id)}><span className="palette-swatch" style={{background:p.primary}}/><b>{p.label}</b></button>)}</div></div><div className="settings-section profile-setting"><div><b>Profile</b><span>{profile.name} · {profile.goal}</span></div><button className="secondary-btn compact" onClick={openProfile}><UserCircle size={17}/> Open Profile</button></div><div className="settings-note"><Settings size={18}/><span>Your profile, palette, theme, and study data are stored separately for your signed-in Google account in this browser.</span></div><button className="primary-btn wide" onClick={close}>Done</button></div></div>; }
 
 function Profile({profile,setProfile,setPage,theme,authUser}) {
   const [draft,setDraft]=useState({...profile, email: profile?.email || authUser?.email || ""});
