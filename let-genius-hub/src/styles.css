@@ -5373,3 +5373,39 @@ html,body{overflow-x:hidden!important}
 .public-share-screen{min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--bg,#f8f9fb);background-image:radial-gradient(#dfe5ed 1px,transparent 1px);background-size:18px 18px}.public-share-card{width:min(500px,100%);background:#fff;border:1px solid var(--line,#e4e8ef);border-radius:22px;padding:30px;box-shadow:0 18px 50px rgba(30,41,59,.12)}.public-share-card>.topnotcher-brand{margin-bottom:24px}.public-share-icon{width:64px;height:64px;border-radius:18px;display:grid;place-items:center;background:#f0edff;color:var(--primary,#635bff);margin:4px auto 18px}.public-share-card .question-label{display:block;text-align:center}.public-share-card h1{text-align:center;margin:7px 0 8px}.public-share-card>p{text-align:center;color:var(--muted,#718096);font-size:12px;line-height:1.6;margin:0 0 20px}.public-share-card label{display:grid;gap:7px;font-size:11px;font-weight:700}.public-share-card input{width:100%;box-sizing:border-box}.public-share-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.public-share-study{min-height:100vh;background:var(--bg,#f8f9fb);color:var(--ink,#18233a);background-image:radial-gradient(#dfe5ed 1px,transparent 1px);background-size:18px 18px}.public-share-header{height:74px;background:#fff;border-bottom:1px solid var(--line,#e4e8ef);display:grid;grid-template-columns:minmax(220px,1fr) minmax(260px,1fr) auto auto;align-items:center;gap:20px;padding:0 28px;position:sticky;top:0;z-index:10}.public-share-brand{display:flex;align-items:center;gap:10px}.public-share-brand>div{display:grid}.public-share-brand b{font-size:15px}.public-share-brand span{font-size:9px;color:var(--muted,#718096)}.public-share-title{text-align:center;display:grid;gap:3px}.public-share-title span{font-size:13px;font-weight:800}.public-share-title small{font-size:9px;color:var(--muted,#718096)}.public-share-timer{display:grid;text-align:right}.public-share-timer span{font-size:8px;color:var(--muted,#718096);font-weight:700}.public-share-timer b{font-size:15px}.public-share-progress{width:min(1100px,calc(100% - 48px));margin:20px auto 0}.public-share-progress>div:first-child{display:flex;justify-content:space-between;font-size:10px;font-weight:700;margin-bottom:7px}.public-share-body{width:min(1100px,calc(100% - 48px));margin:14px auto 32px;display:grid;grid-template-columns:minmax(0,1fr) 260px;gap:18px;align-items:start}.public-share-question,.public-share-navigator{background:#fff;border:1px solid var(--line,#e4e8ef);border-radius:18px;box-shadow:0 8px 25px rgba(30,41,59,.05)}.public-share-question{padding:28px}.public-share-question h1{font-size:22px;line-height:1.5;margin:12px 0 22px}.public-share-options{display:grid;gap:10px}.public-share-options button{display:grid;grid-template-columns:34px 1fr;align-items:start;text-align:left;gap:10px;padding:14px 16px;border:1px solid var(--line,#e4e8ef);border-radius:12px;background:#fff;color:inherit;font:inherit;line-height:1.5}.public-share-options button strong{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;background:#f0edff;color:var(--primary,#635bff)}.public-share-options button.correct{border-color:#54b67b;background:#eefaf3}.public-share-options button.correct strong{background:#54b67b;color:#fff}.public-share-options button.wrong{border-color:#e36d79;background:#fff1f2}.public-share-options button.wrong strong{background:#e36d79;color:#fff}.public-share-question .explanation{margin-top:16px}.public-share-nav{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:20px}.public-share-nav>span{font-size:10px;color:var(--muted,#718096);text-align:center}.public-share-navigator{padding:20px;position:sticky;top:94px}.public-share-navigator>div:first-child{display:grid;gap:4px}.public-share-navigator>div:first-child b{font-size:13px}.public-share-navigator>div:first-child span{font-size:9px;color:var(--muted,#718096)}.public-share-jump{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;margin-top:16px;max-height:430px;overflow:auto}.public-share-jump button{height:34px;border:1px solid var(--line,#e4e8ef);border-radius:9px;background:#fff;font-weight:700;color:#64748b}.public-share-jump button.answered{background:#eaf8f0;border-color:#68bf8b;color:#187548}.public-share-jump button.current{outline:2px solid var(--primary,#635bff);outline-offset:1px}.public-share-note{display:flex;gap:8px;margin-top:18px;padding:11px;border-radius:11px;background:#f7f8fc;color:var(--muted,#718096);font-size:9px;line-height:1.5}.public-share-note svg{flex:none;color:var(--primary,#635bff)}
 .app-shell.theme-dark + .public-share-study,.public-share-study:has(*){ } /* kept neutral; public screen uses its own light surface for recipients */
 @media(max-width:800px){.public-share-header{height:auto;min-height:68px;grid-template-columns:1fr auto;padding:12px 16px}.public-share-title,.public-share-timer{display:none}.public-share-body{grid-template-columns:1fr;width:calc(100% - 24px)}.public-share-progress{width:calc(100% - 24px)}.public-share-question{padding:18px}.public-share-question h1{font-size:18px}.public-share-navigator{position:static}.public-share-jump{max-height:190px}.public-share-nav{flex-wrap:wrap}.public-share-nav>span{order:3;width:100%}}
+
+/* V95 targeted fixes: keep the Edit Study Deck form inside the viewport and make the shared study screen cleaner. */
+.deck-modal-enhanced{
+  max-height:calc(100vh - 40px);
+  overflow-y:auto;
+  overflow-x:hidden;
+  box-sizing:border-box;
+  overscroll-behavior:contain;
+}
+.deck-modal-enhanced .modal-head{position:sticky;top:-28px;background:#fff;padding-top:2px;padding-bottom:12px;z-index:2}
+.app-shell.theme-dark .deck-modal-enhanced .modal-head{background:#171c25!important}
+
+/* Remove any accidental text/brace artifact from calendar cells while preserving the event controls. */
+.calendar-grid .day{position:relative}
+
+/* Cleaner public shared-question layout. */
+.public-share-header{
+  grid-template-columns:minmax(210px,1fr) minmax(280px,1.15fr) auto auto;
+  min-height:78px;
+  height:auto;
+}
+.public-share-progress{margin-top:16px}
+.public-share-body{margin-top:12px;grid-template-columns:minmax(0,1fr) 250px;gap:16px}
+.public-share-question{padding:24px}
+.public-share-question h1{font-size:21px;line-height:1.55;margin:10px 0 18px;max-width:900px}
+.public-share-options{gap:8px}
+.public-share-options button{grid-template-columns:36px minmax(0,1fr);padding:12px 14px;min-height:56px}
+.public-share-nav{border-top:1px solid var(--line,#e4e8ef);padding-top:16px;margin-top:18px}
+.public-share-navigator{padding:18px}
+.public-share-jump{grid-template-columns:repeat(5,minmax(0,1fr));max-height:390px;margin-top:13px}
+.public-share-note{margin-top:14px}
+@media(max-width:900px){
+  .public-share-header{grid-template-columns:1fr auto}
+  .public-share-body{grid-template-columns:1fr;width:calc(100% - 24px)}
+  .public-share-navigator{position:static}
+}
