@@ -233,7 +233,20 @@ function AppSidebar({page, profile, onNavigate, onSettings, onSignOut, mobileOpe
 }
 
 
-const SHARE_EXPIRY_MS = 5 * 60 * 60 * 1000;
+const SHARE_EXPIRY_MS = 90 * 60 * 1000;
+async function hashDeckPassword(password, saltBytes) {
+  const salt = saltBytes || crypto.getRandomValues(new Uint8Array(16));
+  const data = new TextEncoder().encode(`${bytesToBase64Url(salt)}:${password}`);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return { salt: bytesToBase64Url(salt), hash: bytesToBase64Url(new Uint8Array(digest)) };
+}
+async function verifyDeckPassword(password, stored) {
+  if (!stored?.hash || !stored?.salt) return false;
+  const salt = base64UrlToBytes(stored.salt);
+  const result = await hashDeckPassword(password, salt);
+  return result.hash === stored.hash;
+}
+
 
 function bytesToBase64Url(bytes) {
   let binary = "";
@@ -266,7 +279,7 @@ async function createStudyShareToken(deck, questions, password) {
   const encrypted = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(JSON.stringify(payload)));
   return `${bytesToBase64Url(salt)}.${bytesToBase64Url(iv)}.${bytesToBase64Url(new Uint8Array(encrypted))}`;
 }
-async function openStudyShareToken(token, password) {
+async export async function openStudyShareToken(token, password) {
   if (!crypto?.subtle) throw new Error("Secure browser decryption is unavailable on this device.");
   const parts = String(token || "").split(".");
   if (parts.length !== 3) throw new Error("Invalid or incomplete share link.");
@@ -281,12 +294,43 @@ async function openStudyShareToken(token, password) {
     throw new Error("Incorrect password or invalid share link.");
   }
   const payload = JSON.parse(new TextDecoder().decode(plain));
-  if (!payload?.exp || Date.now() >= payload.exp) throw new Error("This study link has expired. Share links are valid for 5 hours.");
+  if (!payload?.exp || Date.now() >= payload.exp) throw new Error("This study link has expired. Share links are valid for 1 hour 30 minutes.");
   if (!Array.isArray(payload.questions) || !payload.questions.length) throw new Error("This share link contains no study questions.");
   return payload;
 }
 function clearShareHash() {
   if (window.location.hash.startsWith("#share=")) window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+}
+
+export function PublicSharedStudy({token}) {
+  const [password,setPassword]=useState("");
+  const [payload,setPayload]=useState(null);
+  const [error,setError]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [index,setIndex]=useState(0);
+  const [answers,setAnswers]=useState({});
+  const [checked,setChecked]=useState({});
+  const [startedAt]=useState(Date.now());
+  const [elapsed,setElapsed]=useState(0);
+  useEffect(()=>{if(!payload)return;const id=setInterval(()=>setElapsed(Math.floor((Date.now()-startedAt)/1000)),1000);return()=>clearInterval(id)},[payload,startedAt]);
+  const unlock=async()=>{
+    if(!password.trim())return;
+    setBusy(true);setError("");
+    try{const data=await openStudyShareToken(token,password.trim());setPayload(data);setIndex(0);setAnswers({});setChecked({});}
+    catch(err){setError(err?.message||"Unable to open this shared study set.");}
+    finally{setBusy(false);}
+  };
+  const exit=()=>{window.history.replaceState(null,"",`${window.location.pathname}${window.location.search}`);window.location.reload();};
+  if(!payload) return <div className="public-share-screen"><div className="public-share-card"><TopnotcherBrand/><div className="public-share-icon"><LockKeyhole size={30}/></div><span className="question-label">SHARED STUDY QUESTIONS</span><h1>Password required</h1><p>Enter the password provided by the person who shared this question set. This link expires after 1 hour 30 minutes.</p><label>Share password<input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password" autoComplete="off"/></label>{error&&<div className="ai-error">{error}</div>}<div className="public-share-actions"><button className="secondary-btn" onClick={exit}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Opening…</>:<><Play size={17}/> Open Question Set</>}</button></div></div></div>;
+  const questions=payload.questions||[];
+  const q=questions[index];
+  const selected=answers[q.id];
+  const isChecked=Boolean(checked[q.id]);
+  const answeredCount=Object.keys(answers).length;
+  const pct=questions.length?Math.round((index+1)/questions.length*100):0;
+  const hh=String(Math.floor(elapsed/3600)).padStart(2,"0"),mm=String(Math.floor((elapsed%3600)/60)).padStart(2,"0"),ss=String(elapsed%60).padStart(2,"0");
+  const choose=i=>{if(isChecked)return;setAnswers(a=>({...a,[q.id]:i}));setChecked(c=>({...c,[q.id]:true}));};
+  return <div className="public-share-study"><header className="public-share-header"><div className="public-share-brand"><TopnotcherMedal size={30}/><div><b>TOPNOTCHER!</b><span>Shared Study Questions</span></div></div><div className="public-share-title"><span>{payload.deckName||"Shared Question Set"}</span><small>{questions.length} questions · {answeredCount} answered</small></div><div className="public-share-timer"><span>TIME ELAPSED</span><b>{hh}:{mm}:{ss}</b></div><button className="icon-close" onClick={exit} aria-label="Close shared study"><X/></button></header><div className="public-share-progress"><div><span>Question {index+1} of {questions.length}</span><b>{pct}%</b></div><div className="progress-track"><i style={{width:`${pct}%`}}/></div></div><main className="public-share-body"><section className="public-share-question"><span className="question-label">QUESTION {index+1}</span><h1><MathText text={q.q}/></h1><div className="public-share-options">{(q.options||[]).map((o,i)=><button key={i} className={`${isChecked&&i===q.answer?"correct ":""}${isChecked&&i===selected&&i!==q.answer?"wrong":""}`} disabled={isChecked} onClick={()=>choose(i)}><strong>{String.fromCharCode(65+i)}</strong><MathText text={o}/></button>)}</div>{isChecked&&<div className={`explanation ${selected===q.answer?"good":"bad"}`}><b>{selected===q.answer?"Correct!":"Not quite."}</b><p><MathText text={q.explanation||""}/></p></div>}<div className="public-share-nav"><button className="secondary-btn" disabled={index===0} onClick={()=>setIndex(i=>Math.max(0,i-1))}><ChevronLeft/> Previous</button><span>{isChecked?"Review the rationale, then continue.":"Select an answer to continue."}</span><button className="primary-btn" disabled={!isChecked} onClick={()=>{if(index<questions.length-1)setIndex(i=>i+1)}}>{index===questions.length-1?"Finished":"Next Question"} <ChevronRight/></button></div></section><aside className="public-share-navigator"><div><b>Question Navigator</b><span>{answeredCount} of {questions.length} answered</span></div><div className="public-share-jump">{questions.map((item,i)=><button key={item.id||i} className={`${checked[item.id]?"answered":"unanswered"}${i===index?" current":""}`} onClick={()=>setIndex(i)}>{i+1}</button>)}</div><div className="public-share-note"><LockKeyhole size={16}/><span>Only this shared question set is available through this link. Your TOPNOTCHER account and private study data are not exposed.</span></div></aside></main></div>;
 }
 
 function App({ authUser, onSignOut }) {
@@ -331,6 +375,8 @@ function App({ authUser, onSignOut }) {
   const [shareOpen, setShareOpen] = useState(false);
   const [materialViewer, setMaterialViewer] = useState(null);
   const [importQuestionsDeckId, setImportQuestionsDeckId] = useState(null);
+  const [deckUnlockRequest, setDeckUnlockRequest] = useState(null);
+  const [unlockedDeckIds, setUnlockedDeckIds] = useState({});
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
@@ -386,7 +432,40 @@ function App({ authUser, onSignOut }) {
     mockAverage: mockScores.length ? mockScores.reduce((a,b)=>a+b,0)/mockScores.length : 0
   }), [sessions,mockScores]);
 
-  const openDeck = id => { setSelectedDeckId(id); setPage("deck-detail"); };
+  const openDeck = id => {
+    const deck = decks.find(d => String(d.id) === String(id));
+    if (!deck) return;
+    if (!deck.passwordHash) { setSelectedDeckId(id); setPage("deck-detail"); return; }
+    if (unlockedDeckIds[String(id)]) { setSelectedDeckId(id); setPage("deck-detail"); return; }
+    setDeckUnlockRequest({deck, action:"open"});
+  };
+  const requestMaterialAccess = (deck, type, item=null) => {
+    if (!deck) return;
+    if (!deck.passwordHash || unlockedDeckIds[String(deck.id)]) {
+      if (item) {
+        const url=URL.createObjectURL(item.blob);
+        if (String(item.mime||"").startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(item.name||"")) window.open(url,"_blank","noopener,noreferrer");
+        else { const a=document.createElement("a"); a.href=url; a.download=item.name||"material"; document.body.appendChild(a); a.click(); a.remove(); }
+        setTimeout(()=>URL.revokeObjectURL(url),30000);
+      } else setMaterialViewer({deckId:deck.id,type});
+      return;
+    }
+    setDeckUnlockRequest({deck, action:item?"material-file":"materials", type, item});
+  };
+  const handleDeckUnlocked = () => {
+    const req = deckUnlockRequest;
+    if (!req?.deck) return;
+    setUnlockedDeckIds(prev => ({...prev, [String(req.deck.id)]: true}));
+    if (req.action === "open") { setSelectedDeckId(req.deck.id); setPage("deck-detail"); }
+    if (req.action === "materials") setMaterialViewer({deckId:req.deck.id,type:req.type});
+    if (req.action === "material-file" && req.item?.blob) {
+      const item=req.item; const url=URL.createObjectURL(item.blob);
+      if (String(item.mime||"").startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(item.name||"")) window.open(url,"_blank","noopener,noreferrer");
+      else { const a=document.createElement("a"); a.href=url; a.download=item.name||"material"; document.body.appendChild(a); a.click(); a.remove(); }
+      setTimeout(()=>URL.revokeObjectURL(url),30000);
+    }
+    setDeckUnlockRequest(null);
+  };
 
   function startStudy(pool, label="Study Session") {
     if (!pool.length) {
@@ -466,9 +545,17 @@ function App({ authUser, onSignOut }) {
     });
   }
 
-  function saveDeck(data) {
-    if (data.id) setDecks(ds => ds.map(d => d.id===data.id ? {...d,...data, folderId:data.folderId||null, deckColor:data.deckColor||"default"} : d));
-    else setDecks(ds => [...ds, {id:Date.now(), name:data.name, category:data.category, description:data.description, folderId:data.folderId||null, deckColor:data.deckColor||"default", flashcards:0}]);
+  async function saveDeck(data) {
+    let passwordHash = data.passwordHash ?? null;
+    if (data.removePassword) passwordHash = null;
+    else if (data.passwordPlain?.trim()) {
+      passwordHash = await hashDeckPassword(data.passwordPlain.trim());
+    }
+    if (data.id) {
+      setDecks(ds => ds.map(d => d.id===data.id ? {...d,...data, passwordHash, passwordPlain:undefined, removePassword:undefined, folderId:data.folderId||null, deckColor:data.deckColor||"default"} : d));
+    } else {
+      setDecks(ds => [...ds, {id:Date.now(), name:data.name, category:data.category, description:data.description, folderId:data.folderId||null, deckColor:data.deckColor||"default", passwordHash, flashcards:0}]);
+    }
     setShowDeckModal(false); setEditingDeck(null);
   }
 
@@ -583,6 +670,7 @@ function App({ authUser, onSignOut }) {
   return <>
     {shareOpen && shareToken && <SharedStudyAccessModal token={shareToken} onClose={()=>{setShareOpen(false);setShareToken(null);clearShareHash();}} onOpen={startSharedStudy} />}
     {shareDeck && <ShareStudyQuestionsModal deck={shareDeck} questions={questions.filter(q=>q.deckId===shareDeck.id)} onClose={()=>setShareDeck(null)} />}
+    {deckUnlockRequest && <DeckPasswordModal deck={deckUnlockRequest.deck} onCancel={()=>setDeckUnlockRequest(null)} onUnlocked={handleDeckUnlocked} />}
     {studyPool && <StudyModal onSignOut={onSignOut} study={studyPool} onEditQuestion={editQuestionDuringStudy} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile} theme={theme}/>}
     {flashcardStudyPool && <FlashcardStudyModal cards={flashcardStudyPool} close={()=>setFlashcardStudyPool(null)} onFinish={({minutes,answered,correct,percentage})=>setSessions(ss=>[...ss,{id:Date.now(),type:"flashcard",answered,correct,minutes,percentage,wrongQuestions:[],finishedAt:new Date().toISOString()}])} />}
     {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats} theme={theme}/>}
@@ -596,7 +684,7 @@ function App({ authUser, onSignOut }) {
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme} authUser={authUser}/>}
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} sessions={sessions} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
       {page==="decks" && <Decks decks={decks} folders={folders} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} setShowFolderModal={setShowFolderModal} setEditingFolder={setEditingFolder} deleteFolder={deleteFolder} deleteDeck={deleteDeck}/>} 
-      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onImportQuestions={()=>setImportQuestionsDeckId(selectedDeckId)} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>{setQuestions(qs=>qs.filter(q=>String(q.id)!==String(id)));setFlashcards(cards=>cards.filter(card=>String(card.questionId)!==String(id)));}} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))} onOpenMaterials={type=>setMaterialViewer({deckId:selectedDeckId,type})}/>} 
+      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onImportQuestions={()=>setImportQuestionsDeckId(selectedDeckId)} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>{setQuestions(qs=>qs.filter(q=>String(q.id)!==String(id)));setFlashcards(cards=>cards.filter(card=>String(card.questionId)!==String(id)));}} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))} onOpenMaterials={type=>requestMaterialAccess(decks.find(d=>String(d.id)===String(selectedDeckId)),type)}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id && s.scheduleLogId!==id))} onToggleDone={id=>setSessions(ss=>{
         const target=ss.find(s=>s.id===id);
@@ -612,7 +700,7 @@ function App({ authUser, onSignOut }) {
         return updated;
       })}/>} 
 
-      {page==="materials" && <MaterialsDashboard scope={accountStorageKey(authUser,"lgh-materials")} decks={decks} onBackToDecks={()=>setPage("decks")}/>}
+      {page==="materials" && <MaterialsDashboard scope={accountStorageKey(authUser,"lgh-materials")} decks={decks} onBackToDecks={()=>setPage("decks")} onRequestAccess={requestMaterialAccess}/>}
 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck} folders={folders}/>}
       {showFolderModal && <FolderModal close={()=>{setShowFolderModal(false);setEditingFolder(null)}} save={saveFolder} initial={editingFolder}/>} 
@@ -750,7 +838,7 @@ function Decks({decks,folders,questions,questionStats,flashcards,setPage,openDec
   </div>;
 }
 
-function DeckCard({deck,folder,questions,questionStats,flashcardCount,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; const categoryLabel=deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"); const deckColors={default:"#ffffff",blue:"#eaf3ff",violet:"#f1edff",green:"#eaf8f1",navy:"#eaf0fa",warm:"#fff5e8","blue-gradient":"linear-gradient(135deg,#eef6ff 0%,#dcecff 100%)","violet-gradient":"linear-gradient(135deg,#f5f0ff 0%,#e5ddff 100%)"}; return <div className="deck-card" style={{background:deckColors[deck.deckColor||"default"]||deckColors.default}}><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{categoryLabel}</span>{folder&&<span className="tag folder-tag"><Folder size={12}/> {folder.name}</span>}<div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {flashcardCount||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}><Play size={17}/> Open Deck</button></div>; }
+function DeckCard({deck,folder,questions,questionStats,flashcardCount,openDeck,edit,deleteDeck}) { const qs=questions.filter(q=>q.deckId===deck.id); const answered=qs.filter(q=>questionStats[q.id]?.attempts).length; const pct=qs.length?Math.round(answered/qs.length*100):0; const categoryLabel=deck.category==="mixed"?"Mixed":(CATEGORIES.find(c=>c.id===deck.category)?.label||"Mixed"); const deckColors={default:"#ffffff",blue:"#eaf3ff",violet:"#f1edff",green:"#eaf8f1",navy:"#eaf0fa",warm:"#fff5e8","blue-gradient":"linear-gradient(135deg,#eef6ff 0%,#dcecff 100%)","violet-gradient":"linear-gradient(135deg,#f5f0ff 0%,#e5ddff 100%)"}; return <div className="deck-card" style={{background:deckColors[deck.deckColor||"default"]||deckColors.default}}><div className="deck-top"><div className="mini-icon purple"><Layers3/></div><span className="tag">{categoryLabel}</span>{deck.passwordHash&&<span className="tag deck-locked-tag"><LockKeyhole size={12}/> Protected</span>}{folder&&<span className="tag folder-tag"><Folder size={12}/> {folder.name}</span>}<div className="deck-actions"><button title="Edit" onClick={edit}><Pencil size={17}/></button><button title="Delete" onClick={()=>deleteDeck(deck.id)}><Trash2 size={17}/></button></div></div><h3>{deck.name}</h3><p>{deck.description||"Review deck"}</p><div className="deck-meta"><span><FileText/> {qs.length} Q</span><span><Layers3/> {flashcardCount||0} FC</span></div><div className="progress-track"><i style={{width:pct+"%"}}/></div><div className="deck-percent">{pct}%</div><button className="secondary-btn" onClick={()=>openDeck(deck.id)}>{deck.passwordHash?<LockKeyhole size={17}/>:<Play size={17}/>} {deck.passwordHash?"Unlock & Open":"Open Deck"}</button></div>; }
 
 
 function pdfEscape(text){
@@ -1143,7 +1231,7 @@ function Schedule({sessions,onAdd,onEdit,onDelete,onToggleDone}) {
       <section className="panel calendar">
         <div className="calendar-head"><h2>{month.toLocaleString("en-US",{month:"long"})} {year}</h2><div className="calendar-nav"><button aria-label="Previous month" onClick={()=>setMonth(new Date(year,mon-1,1))}><ChevronLeft/></button><button aria-label="Next month" onClick={()=>setMonth(new Date(year,mon+1,1))}><ChevronRight/></button></div></div>
         <div className="weekday">{["SUN","MON","TUE","WED","THU","FRI","SAT"].map(x=><b key={x}>{x}</b>)}</div>
-        <div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span>{monthSessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getDate()===d}).map(s=><button type="button" className={`calendar-event category-${s.studyCategory||"gened"} ${s.completed?"done":""}`} key={s.id} title={`${s.title} — ${categoryLabel(s.studyCategory)} · ${typeLabel(s.type)} · ${s.hours||1} hr${Number(s.hours||1)===1?"":"s"}`} onClick={()=>onEdit(s)}><span>{s.title}</span>{s.completed&&<CheckCircle2 size={11}/>}</button>)}</>}</div>)}</div>
+        <div className="calendar-grid">{cells.map((d,i)=><div className={"day "+(d===today&&mon===currentMonth&&year===currentYear?"today":"")} key={i}>{d&&<><span>{d}</span><div className="day-events">{monthSessions.filter(s=>{const dt=new Date(s.date+"T00:00:00");return dt.getDate()===d}).map(s=><button type="button" className={`calendar-event category-${s.studyCategory||"gened"} ${s.completed?"done":""}`} key={s.id} title={`${s.title} — ${categoryLabel(s.studyCategory)} · ${typeLabel(s.type)} · ${s.hours||1} hr${Number(s.hours||1)===1?"":"s"}`} onClick={()=>onEdit(s)}><span>{s.title}</span>{s.completed&&<CheckCircle2 size={11}/>}</button>)}</div></>}}</div>)}</div>
       </section>
       <aside className="panel event-side schedule-list-panel">
         <div className="schedule-side-head"><div><h3>Schedules</h3><span>{monthSessions.length} this month</span></div><button className="secondary-btn compact" onClick={onAdd}><Plus size={16}/> Add</button></div>
@@ -1288,7 +1376,7 @@ function ShareStudyQuestionsModal({deck,questions,onClose}) {
     finally{setBusy(false);}
   };
   const copy=async()=>{try{await navigator.clipboard.writeText(link);setCopied(true);setTimeout(()=>setCopied(false),1800);}catch{setError("Copy failed. Select and copy the link manually.");}};
-  return <div className="modal-backdrop"><div className="small-modal share-study-modal"><div className="modal-head"><div><span className="question-label">SHARE STUDY QUESTIONS</span><h2>Share this deck's questions</h2><span className="muted">Recipients can open the Study Questions Now experience only. The link expires automatically after 5 hours.</span></div><button onClick={onClose}><X/></button></div><div className="share-info-grid"><div><Link2 size={18}/><span><b>{questions.length} questions</b><small>Shared study set</small></span></div><div><Clock3 size={18}/><span><b>5 hours</b><small>Automatic expiry</small></span></div><div><LockKeyhole size={18}/><span><b>Password protected</b><small>Never stored in the link</small></span></div></div><label>Share password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete="new-password"/></label><label>Confirm password<input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Re-enter password" autoComplete="new-password"/></label>{error&&<div className="ai-error">{error}</div>}{link&&<div className="share-link-box"><div><b>Share link</b><span>The encrypted link expires 5 hours after it was generated.</span></div><input readOnly value={link} onFocus={e=>e.currentTarget.select()}/><div className="share-link-actions"><button className="secondary-btn" onClick={copy}><Copy size={16}/>{copied?"Copied":"Copy Link"}</button><button className="secondary-btn" onClick={()=>window.open(link,"_blank","noopener,noreferrer")}><ExternalLink size={16}/> Open Link</button></div></div>}<div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button><button className="primary-btn" onClick={generate} disabled={busy}>{busy?<><Loader2 className="spin" size={17}/> Creating…</>:<><Link2 size={17}/> {link?"Regenerate 5-Hour Link":"Create 5-Hour Link"}</>}</button></div></div></div>;
+  return <div className="modal-backdrop"><div className="small-modal share-study-modal"><div className="modal-head"><div><span className="question-label">SHARE STUDY QUESTIONS</span><h2>Share this deck's questions</h2><span className="muted">Recipients can open only the shared Study Questions screen for this set. The link expires automatically after 1 hour 30 minutes.</span></div><button onClick={onClose}><X/></button></div><div className="share-info-grid"><div><Link2 size={18}/><span><b>{questions.length} questions</b><small>Shared study set</small></span></div><div><Clock3 size={18}/><span><b>1 hour 30 minutes</b><small>Automatic expiry</small></span></div><div><LockKeyhole size={18}/><span><b>Password protected</b><small>Never stored in the link</small></span></div></div><label>Share password<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="At least 6 characters" autoComplete="new-password"/></label><label>Confirm password<input type="password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} placeholder="Re-enter password" autoComplete="new-password"/></label>{error&&<div className="ai-error">{error}</div>}{link&&<div className="share-link-box"><div><b>Share link</b><span>The encrypted link expires 1 hour 30 minutes after it was generated.</span></div><input readOnly value={link} onFocus={e=>e.currentTarget.select()}/><div className="share-link-actions"><button className="secondary-btn" onClick={copy}><Copy size={16}/>{copied?"Copied":"Copy Link"}</button><button className="secondary-btn" onClick={()=>window.open(link,"_blank","noopener,noreferrer")}><ExternalLink size={16}/> Open Link</button></div></div>}<div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button><button className="primary-btn" onClick={generate} disabled={busy}>{busy?<><Loader2 className="spin" size={17}/> Creating…</>:<><Link2 size={17}/> {link?"Regenerate 1h 30m Link":"Create 1h 30m Link"}</>}</button></div></div></div>;
 }
 
 function SharedStudyAccessModal({token,onClose,onOpen}) {
@@ -1308,7 +1396,7 @@ function formatBytes(value){
   return `${(n/(1024*1024*1024)).toFixed(1)} GB`;
 }
 
-function MaterialsDashboard({scope,decks,onBackToDecks}) {
+function MaterialsDashboard({scope,decks,onBackToDecks,onRequestAccess}) {
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
   const [filter,setFilter]=useState("all");
@@ -1377,7 +1465,7 @@ function MaterialsDashboard({scope,decks,onBackToDecks}) {
           {group.items.length ? <div className="materials-file-grid">{group.items.map(item=>{const k=kind(item);const deck=deckById.get(String(item.deckId));return <article className="material-file-card" key={item.id}>
             <div className={`material-file-icon ${k}`} >{k==="video"?<Video size={22}/>:k==="pdf"?<FileText size={22}/>:<FileArchive size={22}/>}</div>
             <div className="material-file-main"><h4 title={item.name}>{item.name}</h4><p>{deck?.name||"Study material"}</p><small>{formatBytes(item.size)} · {new Date(item.createdAt).toLocaleDateString()}</small></div>
-            <div className="material-file-actions"><button className="icon-btn" title="Open / download" onClick={()=>openItem(item)}><ExternalLink size={16}/></button><button className="icon-btn danger" title="Delete" onClick={()=>remove(item)}><Trash2 size={16}/></button></div>
+            <div className="material-file-actions"><button className="icon-btn" title="Open / download" onClick={()=>{if(deck?.passwordHash){onRequestAccess?.(deck,"library",item);}else openItem(item)}}><ExternalLink size={16}/></button><button className="icon-btn danger" title="Delete" onClick={()=>remove(item)}><Trash2 size={16}/></button></div>
           </article>})}</div> : <div className="materials-folder-empty">No files in this subject folder for the selected filter.</div>}
         </section>)}
       </div>}
@@ -1410,7 +1498,59 @@ function DeckMaterialsModal({scope,deckId,type,onClose}) {
   return <div className="modal-backdrop"><div className="small-modal deck-materials-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">DECK MATERIALS</span><h2>{title}</h2><span className="muted">{subtitle}</span></div><button onClick={onClose}><X/></button></div><label className="material-upload-box"><input type="file" multiple accept={isVideo?"video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v":"application/pdf,.pdf"} onChange={upload}/><Upload size={22}/><b>{busy?"Saving…":`Upload ${isVideo?"Video":"PDF"}`}</b><span>{isVideo?"MP4, WebM, MOV, or M4V":"PDF files from AI Question Generator"}</span></label><div className="deck-material-list">{items.length?items.map(item=><div className="deck-material-item" key={item.id}><div className="deck-material-icon">{isVideo?<Video size={20}/>:<FileArchive size={20}/>}</div><div className="deck-material-info"><b>{item.name}</b><span>{(item.size/1024/1024).toFixed(2)} MB · {new Date(item.createdAt).toLocaleDateString()}</span>{isVideo&&<video className="deck-material-video" controls preload="metadata" src={URL.createObjectURL(item.blob)} />}</div><div className="deck-material-actions"><button className="secondary-btn compact" type="button" onClick={()=>openFile(item)}><Download size={15}/> Download</button><button className="danger-outline" type="button" onClick={()=>remove(item.id)}><Trash2 size={14}/> Delete</button></div></div>):<div className="empty"><FileArchive/><b>No {isVideo?"video":"study"} materials yet</b><span>{isVideo?"Upload video lessons for this deck.":"Upload a PDF through AI Question Generator and it will appear here automatically."}</span></div>}</div><div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button></div></div></div>;
 }
 
-function DeckModal({close,save,initial,folders=[]}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); const [category,setCategory]=useState(initial?.category||"gened"); const [folderId,setFolderId]=useState(initial?.folderId?String(initial.folderId):""); const [deckColor,setDeckColor]=useState(initial?.deckColor||"default"); return <div className="modal-backdrop"><div className="small-modal"><div className="modal-head"><div><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><span className="muted">Choose a category, folder, and color for this study deck.</span></div><button onClick={close}><X/></button></div><label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label><label>Category<select value={category} onChange={e=>setCategory(e.target.value)}><option value="gened">GenEd</option><option value="profed">ProfEd</option><option value="majorship">Majorship</option><option value="mixed">Mixed — GenEd + ProfEd + Majorship</option></select></label><label>Folder<select value={folderId} onChange={e=>setFolderId(e.target.value)}><option value="">No Folder</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label><label>Deck Color<select value={deckColor} onChange={e=>setDeckColor(e.target.value)}><option value="default">Default</option><option value="blue">Blue</option><option value="violet">Violet</option><option value="green">Green</option><option value="navy">Navy</option><option value="warm">Warm</option><option value="blue-gradient">Blue Gradient</option><option value="violet-gradient">Violet Gradient</option></select></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description,category,folderId:folderId?Number(folderId):null,deckColor})}><Save size={17}/>{initial?"Save Changes":"Create Deck"}</button></div></div>; }
+function DeckPasswordModal({deck,onCancel,onUnlocked}) {
+  const [password,setPassword]=useState("");
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState("");
+  const unlock=async()=>{
+    if(!password) return;
+    setBusy(true); setError("");
+    try {
+      const ok=await verifyDeckPassword(password,deck.passwordHash);
+      if(!ok) throw new Error("Incorrect deck password or PIN.");
+      onUnlocked?.();
+    } catch(err){ setError(err?.message||"Could not verify the deck password."); }
+    finally{setBusy(false);}
+  };
+  return <div className="modal-backdrop"><div className="small-modal deck-password-modal">
+    <div className="modal-head"><div><span className="question-label">PROTECTED STUDY DECK</span><h2>Enter password or PIN</h2><span className="muted">This deck and its stored materials are protected.</span></div><button onClick={onCancel}><X/></button></div>
+    <div className="deck-lock-hero"><LockKeyhole size={30}/><b>{deck?.name||"Study Deck"}</b><span>Questions, flashcards, and deck materials require access verification.</span></div>
+    <label>Deck password / PIN<input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password or PIN" autoComplete="current-password"/></label>
+    {error&&<div className="ai-error">{error}</div>}
+    <div className="modal-foot"><button className="secondary-btn" onClick={onCancel}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Verifying…</>:<><LockKeyhole size={17}/> Unlock</>}</button></div>
+  </div></div>;
+}
+
+function DeckModal({close,save,initial,folders=[]}) {
+  const [name,setName]=useState(initial?.name||"");
+  const [description,setDescription]=useState(initial?.description||"");
+  const [category,setCategory]=useState(initial?.category||"gened");
+  const [folderId,setFolderId]=useState(initial?.folderId?String(initial.folderId):"");
+  const [deckColor,setDeckColor]=useState(initial?.deckColor||"default");
+  const [protect,setProtect]=useState(Boolean(initial?.passwordHash));
+  const [password,setPassword]=useState("");
+  const [saving,setSaving]=useState(false);
+  const submit=async()=>{
+    if(!name.trim()) return;
+    if(protect && !initial?.passwordHash && password.trim().length<4){alert("Use a password with at least 4 characters, or a 4–12 digit PIN.");return;}
+    if(protect && password.trim() && password.trim().length<4){alert("Use a password with at least 4 characters, or a 4–12 digit PIN.");return;}
+    setSaving(true);
+    try{await save({id:initial?.id,name:name.trim(),description,category,folderId:folderId?Number(folderId):null,deckColor,passwordHash:initial?.passwordHash||null,passwordPlain:protect?password.trim():"",removePassword:!protect});}
+    finally{setSaving(false);}
+  };
+  return <div className="modal-backdrop"><div className="small-modal deck-modal-enhanced">
+    <div className="modal-head"><div><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><span className="muted">Choose a category, folder, color, and optional access protection.</span></div><button onClick={close}><X/></button></div>
+    <label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label>
+    <label>Category<select value={category} onChange={e=>setCategory(e.target.value)}><option value="gened">GenEd</option><option value="profed">ProfEd</option><option value="majorship">Majorship</option><option value="mixed">Mixed — GenEd + ProfEd + Majorship</option></select></label>
+    <label>Folder<select value={folderId} onChange={e=>setFolderId(e.target.value)}><option value="">No Folder</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
+    <label>Deck Color<select value={deckColor} onChange={e=>setDeckColor(e.target.value)}><option value="default">Default</option><option value="blue">Blue</option><option value="violet">Violet</option><option value="green">Green</option><option value="navy">Navy</option><option value="warm">Warm</option><option value="blue-gradient">Blue Gradient</option><option value="violet-gradient">Violet Gradient</option></select></label>
+    <label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label>
+    <section className="deck-security-box"><div className="deck-security-head"><div><b><LockKeyhole size={16}/> Deck Access Protection</b><span>{protect?"This deck requires a password or PIN before opening.":"Optional — only this signed-in account can open the deck without a password."}</span></div><button type="button" className={`toggle-switch ${protect?"on":""}`} aria-pressed={protect} onClick={()=>setProtect(v=>!v)}><span/></button></div>
+      {protect&&<div className="deck-password-fields"><label>{initial?.passwordHash?"New password / PIN (leave blank to keep current)":"Set password / PIN"}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password or 4–12 digit PIN" autoComplete="new-password"/></label><small>To change or reset the deck password, enter a new one here. Turning protection off removes the password.</small></div>}
+    </section>
+    <button className="primary-btn wide" disabled={!name.trim()||saving} onClick={submit}>{saving?<><Loader2 className="spin" size={17}/> Saving…</>:<><Save size={17}/>{initial?"Save Changes":"Create Deck"}</>}</button>
+  </div></div>;
+}
 
 function FolderModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); return <div className="modal-backdrop"><div className="small-modal folder-modal"><div className="modal-head"><div><h2>{initial?"Edit Folder":"Create Study Folder"}</h2><span className="muted">Group related study decks together for easier access.</span></div><button onClick={close}><X/></button></div><label>Folder name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. LET 2026 Review"/></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Optional folder description..."/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description:description.trim()})}><Save size={17}/>{initial?"Save Changes":"Create Folder"}</button></div></div>; }
 
