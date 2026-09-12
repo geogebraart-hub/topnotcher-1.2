@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
-  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, Clock3, Copy, ExternalLink, Video, FileArchive, Download
+  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, KeyRound, Clock3, Copy, ExternalLink, Video, FileArchive, Download
 } from "lucide-react";
 import { subscribeAccountState, saveAccountState, firestoreConfigured } from "./firebase";
 
@@ -244,6 +244,14 @@ async function verifyDeckPassword(password, stored) {
   if (!stored?.hash || !stored?.salt) return false;
   const salt = base64UrlToBytes(stored.salt);
   const result = await hashDeckPassword(password, salt);
+  return result.hash === stored.hash;
+}
+async function hashOwnerAuthAnswer(answer, saltBytes) {
+  return hashDeckPassword(String(answer || '').trim().toLowerCase(), saltBytes);
+}
+async function verifyOwnerAuthAnswer(answer, stored) {
+  if (!stored?.hash || !stored?.salt) return false;
+  const result = await hashOwnerAuthAnswer(answer, base64UrlToBytes(stored.salt));
   return result.hash === stored.hash;
 }
 
@@ -548,16 +556,33 @@ function App({ authUser, onSignOut }) {
   async function saveDeck(data) {
     let passwordHash = data.passwordHash ?? null;
     if (data.removePassword) passwordHash = null;
-    else if (data.passwordPlain?.trim()) {
-      passwordHash = await hashDeckPassword(data.passwordPlain.trim());
+    else if (data.passwordPlain?.trim()) passwordHash = await hashDeckPassword(data.passwordPlain.trim());
+
+    let ownerAuth = data.ownerAuth ?? null;
+    if (data.ownerAuthQuestion?.trim() && data.ownerAuthAnswer?.trim()) {
+      ownerAuth = {
+        question: data.ownerAuthQuestion.trim(),
+        ...(await hashOwnerAuthAnswer(data.ownerAuthAnswer))
+      };
     }
+    if (data.removeOwnerAuth) ownerAuth = null;
+
     if (data.id) {
-      setDecks(ds => ds.map(d => d.id===data.id ? {...d,...data, passwordHash, passwordPlain:undefined, removePassword:undefined, folderId:data.folderId||null, deckColor:data.deckColor||"default"} : d));
+      setDecks(ds => ds.map(d => d.id===data.id ? {
+        ...d, ...data, passwordHash, ownerAuth,
+        passwordPlain:undefined, removePassword:undefined,
+        ownerAuthQuestion:undefined, ownerAuthAnswer:undefined, removeOwnerAuth:undefined,
+        folderId:data.folderId||null, deckColor:data.deckColor||"default"
+      } : d));
     } else {
-      setDecks(ds => [...ds, {id:Date.now(), name:data.name, category:data.category, description:data.description, folderId:data.folderId||null, deckColor:data.deckColor||"default", passwordHash, flashcards:0}]);
+      setDecks(ds => [...ds, {
+        id:Date.now(), name:data.name, category:data.category, description:data.description,
+        folderId:data.folderId||null, deckColor:data.deckColor||"default", passwordHash, ownerAuth, flashcards:0
+      }]);
     }
     setShowDeckModal(false); setEditingDeck(null);
   }
+
 
   function saveFolder(data) {
     if (data.id) setFolders(fs => fs.map(f => f.id===data.id ? {...f, name:data.name, description:data.description} : f));
@@ -657,7 +682,10 @@ function App({ authUser, onSignOut }) {
 
   function deleteFlashcard(id) { setFlashcards(cards => cards.filter(card => card.id !== id)); }
 
-  function goTo(nextPage) { setPage(nextPage); setMobileNav(false); setSelectedDeckId(null); }
+  function goTo(nextPage) {
+    setPage(nextPage); setMobileNav(false); setSelectedDeckId(null);
+    if (nextPage !== "deck-detail") setUnlockedDeckIds({});
+  }
 
   function jumpStudy(index) { setStudyPool(d => { if (!d) return d; const item=d.pool[index]; const saved=d.answers?.[item.id]; return {...d,index,selected:saved===undefined?null:saved,checked:saved!==undefined}; }); }
 
@@ -670,7 +698,7 @@ function App({ authUser, onSignOut }) {
   return <>
     {shareOpen && shareToken && <SharedStudyAccessModal token={shareToken} onClose={()=>{setShareOpen(false);setShareToken(null);clearShareHash();}} onOpen={startSharedStudy} />}
     {shareDeck && <ShareStudyQuestionsModal deck={shareDeck} questions={questions.filter(q=>q.deckId===shareDeck.id)} onClose={()=>setShareDeck(null)} />}
-    {deckUnlockRequest && <DeckPasswordModal deck={deckUnlockRequest.deck} onCancel={()=>setDeckUnlockRequest(null)} onUnlocked={handleDeckUnlocked} />}
+    {deckUnlockRequest && <DeckPasswordModal deck={deckUnlockRequest.deck} onCancel={()=>setDeckUnlockRequest(null)} onUnlocked={handleDeckUnlocked} onPasswordReset={async(nextHash)=>{const deckId=deckUnlockRequest.deck.id; setDecks(ds=>ds.map(d=>String(d.id)===String(deckId)?{...d,passwordHash:nextHash}:d)); setDeckUnlockRequest(req=>req?{...req,deck:{...req.deck,passwordHash:nextHash}}:req); }} />}
     {studyPool && <StudyModal onSignOut={onSignOut} study={studyPool} onEditQuestion={editQuestionDuringStudy} answer={answerStudy} next={nextStudy} jump={jumpStudy} close={()=>setStudyPool(null)} goTo={goTo} profile={profile} theme={theme}/>}
     {flashcardStudyPool && <FlashcardStudyModal cards={flashcardStudyPool} close={()=>setFlashcardStudyPool(null)} onFinish={({minutes,answered,correct,percentage})=>setSessions(ss=>[...ss,{id:Date.now(),type:"flashcard",answered,correct,minutes,percentage,wrongQuestions:[],finishedAt:new Date().toISOString()}])} />}
     {examSession && <ExamRunner session={examSession} close={()=>setExamSession(null)} setMockScores={setMockScores} setMockHistory={setMockHistory} setSessions={setSessions} setQuestionStats={setQuestionStats} theme={theme}/>}
@@ -684,7 +712,7 @@ function App({ authUser, onSignOut }) {
       {page==="profile" && <Profile profile={profile} setProfile={setProfile} setPage={setPage} theme={theme} authUser={authUser}/>}
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} sessions={sessions} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
       {page==="decks" && <Decks decks={decks} folders={folders} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} setShowFolderModal={setShowFolderModal} setEditingFolder={setEditingFolder} deleteFolder={deleteFolder} deleteDeck={deleteDeck}/>} 
-      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks")}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onImportQuestions={()=>setImportQuestionsDeckId(selectedDeckId)} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>{setQuestions(qs=>qs.filter(q=>String(q.id)!==String(id)));setFlashcards(cards=>cards.filter(card=>String(card.questionId)!==String(id)));}} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))} onOpenMaterials={type=>requestMaterialAccess(decks.find(d=>String(d.id)===String(selectedDeckId)),type)}/>} 
+      {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks");setUnlockedDeckIds({})}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onImportQuestions={()=>setImportQuestionsDeckId(selectedDeckId)} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>{setQuestions(qs=>qs.filter(q=>String(q.id)!==String(id)));setFlashcards(cards=>cards.filter(card=>String(card.questionId)!==String(id)));}} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))} onOpenMaterials={type=>requestMaterialAccess(decks.find(d=>String(d.id)===String(selectedDeckId)),type)}/>} 
       {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id && s.scheduleLogId!==id))} onToggleDone={id=>setSessions(ss=>{
         const target=ss.find(s=>s.id===id);
@@ -1464,7 +1492,7 @@ function MaterialsDashboard({scope,decks,onBackToDecks,onRequestAccess}) {
           <div className="materials-folder-head"><div className="materials-folder-title"><span><Folder size={19}/></span><div><h3>{group.label}</h3><small>{group.items.length} material{group.items.length===1?"":"s"}</small></div></div></div>
           {group.items.length ? <div className="materials-file-grid">{group.items.map(item=>{const k=kind(item);const deck=deckById.get(String(item.deckId));return <article className="material-file-card" key={item.id}>
             <div className={`material-file-icon ${k}`} >{k==="video"?<Video size={22}/>:k==="pdf"?<FileText size={22}/>:<FileArchive size={22}/>}</div>
-            <div className="material-file-main"><h4 title={item.name}>{item.name}</h4><p>{deck?.name||"Study material"}</p><small>{formatBytes(item.size)} · {new Date(item.createdAt).toLocaleDateString()}</small></div>
+            <div className="material-file-main"><h4 title={item.name}>{item.name}</h4><p>{deck?.name||"Study material"}{deck?.passwordHash&&<span className="material-protected-label"><LockKeyhole size={11}/> Protected</span>}</p><small>{formatBytes(item.size)} · {new Date(item.createdAt).toLocaleDateString()}</small></div>
             <div className="material-file-actions"><button className="icon-btn" title="Open / download" onClick={()=>{if(deck?.passwordHash){onRequestAccess?.(deck,"library",item);}else openItem(item)}}><ExternalLink size={16}/></button><button className="icon-btn danger" title="Delete" onClick={()=>remove(item)}><Trash2 size={16}/></button></div>
           </article>})}</div> : <div className="materials-folder-empty">No files in this subject folder for the selected filter.</div>}
         </section>)}
@@ -1498,8 +1526,11 @@ function DeckMaterialsModal({scope,deckId,type,onClose}) {
   return <div className="modal-backdrop"><div className="small-modal deck-materials-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">DECK MATERIALS</span><h2>{title}</h2><span className="muted">{subtitle}</span></div><button onClick={onClose}><X/></button></div><label className="material-upload-box"><input type="file" multiple accept={isVideo?"video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v":"application/pdf,.pdf"} onChange={upload}/><Upload size={22}/><b>{busy?"Saving…":`Upload ${isVideo?"Video":"PDF"}`}</b><span>{isVideo?"MP4, WebM, MOV, or M4V":"PDF files from AI Question Generator"}</span></label><div className="deck-material-list">{items.length?items.map(item=><div className="deck-material-item" key={item.id}><div className="deck-material-icon">{isVideo?<Video size={20}/>:<FileArchive size={20}/>}</div><div className="deck-material-info"><b>{item.name}</b><span>{(item.size/1024/1024).toFixed(2)} MB · {new Date(item.createdAt).toLocaleDateString()}</span>{isVideo&&<video className="deck-material-video" controls preload="metadata" src={URL.createObjectURL(item.blob)} />}</div><div className="deck-material-actions"><button className="secondary-btn compact" type="button" onClick={()=>openFile(item)}><Download size={15}/> Download</button><button className="danger-outline" type="button" onClick={()=>remove(item.id)}><Trash2 size={14}/> Delete</button></div></div>):<div className="empty"><FileArchive/><b>No {isVideo?"video":"study"} materials yet</b><span>{isVideo?"Upload video lessons for this deck.":"Upload a PDF through AI Question Generator and it will appear here automatically."}</span></div>}</div><div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button></div></div></div>;
 }
 
-function DeckPasswordModal({deck,onCancel,onUnlocked}) {
+function DeckPasswordModal({deck,onCancel,onUnlocked,onPasswordReset}) {
+  const [mode,setMode]=useState("unlock");
   const [password,setPassword]=useState("");
+  const [answer,setAnswer]=useState("");
+  const [newPassword,setNewPassword]=useState("");
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const unlock=async()=>{
@@ -1512,12 +1543,35 @@ function DeckPasswordModal({deck,onCancel,onUnlocked}) {
     } catch(err){ setError(err?.message||"Could not verify the deck password."); }
     finally{setBusy(false);}
   };
+  const resetWithOwnerAuth=async()=>{
+    if(!deck?.ownerAuth || !answer.trim() || !newPassword.trim()) return;
+    if(newPassword.trim().length<4){setError("Use a password with at least 4 characters, or a 4–12 digit PIN.");return;}
+    setBusy(true); setError("");
+    try {
+      const ok=await verifyOwnerAuthAnswer(answer,deck.ownerAuth);
+      if(!ok) throw new Error("That owner authentication answer is not correct.");
+      const nextHash=await hashDeckPassword(newPassword.trim());
+      await onPasswordReset?.(nextHash);
+      setMode("unlock"); setPassword(""); setAnswer(""); setNewPassword("");
+    } catch(err){ setError(err?.message||"Could not reset the deck password."); }
+    finally{setBusy(false);}
+  };
+  const recoveryAvailable=Boolean(deck?.ownerAuth?.question);
   return <div className="modal-backdrop"><div className="small-modal deck-password-modal">
-    <div className="modal-head"><div><span className="question-label">PROTECTED STUDY DECK</span><h2>Enter password or PIN</h2><span className="muted">This deck and its stored materials are protected.</span></div><button onClick={onCancel}><X/></button></div>
+    <div className="modal-head"><div><span className="question-label">PROTECTED STUDY DECK</span><h2>{mode==="unlock"?"Enter password or PIN":"Reset deck password"}</h2><span className="muted">This deck and its stored materials are protected.</span></div><button onClick={onCancel}><X/></button></div>
     <div className="deck-lock-hero"><LockKeyhole size={30}/><b>{deck?.name||"Study Deck"}</b><span>Questions, flashcards, and deck materials require access verification.</span></div>
-    <label>Deck password / PIN<input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password or PIN" autoComplete="current-password"/></label>
-    {error&&<div className="ai-error">{error}</div>}
-    <div className="modal-foot"><button className="secondary-btn" onClick={onCancel}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Verifying…</>:<><LockKeyhole size={17}/> Unlock</>}</button></div>
+    {mode==="unlock" ? <>
+      <label>Deck password / PIN<input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password or PIN" autoComplete="current-password"/></label>
+      {recoveryAvailable&&<button type="button" className="text-btn deck-recovery-link" onClick={()=>{setMode("reset");setError("")}}>Forgot password? Use owner recovery question</button>}
+      {error&&<div className="ai-error">{error}</div>}
+      <div className="modal-foot"><button className="secondary-btn" onClick={onCancel}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Verifying…</>:<><LockKeyhole size={17}/> Unlock</>}</button></div>
+    </> : <>
+      <div className="deck-recovery-box"><b>Owner authentication</b><span>Answer the personal recovery question you set for this deck.</span><strong>{deck.ownerAuth.question}</strong></div>
+      <label>Owner answer<input autoFocus type="text" value={answer} onChange={e=>setAnswer(e.target.value)} autoComplete="off" placeholder="Enter your answer"/></label>
+      <label>New password / PIN<input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="New password or 4–12 digit PIN" autoComplete="new-password"/></label>
+      {error&&<div className="ai-error">{error}</div>}
+      <div className="modal-foot"><button className="secondary-btn" onClick={()=>{setMode("unlock");setError("")}}>Back</button><button className="primary-btn" disabled={!answer.trim()||!newPassword.trim()||busy} onClick={resetWithOwnerAuth}>{busy?<><Loader2 className="spin" size={17}/> Resetting…</>:<><KeyRound size={17}/> Reset Password</>}</button></div>
+    </>}
   </div></div>;
 }
 
@@ -1529,15 +1583,58 @@ function DeckModal({close,save,initial,folders=[]}) {
   const [deckColor,setDeckColor]=useState(initial?.deckColor||"default");
   const [protect,setProtect]=useState(Boolean(initial?.passwordHash));
   const [password,setPassword]=useState("");
+  const [ownerQuestion,setOwnerQuestion]=useState(initial?.ownerAuth?.question||"");
+  const [ownerAnswer,setOwnerAnswer]=useState("");
+  const [securityAction,setSecurityAction]=useState(null);
+  const [securityVerified,setSecurityVerified]=useState(false);
+  const [removeOwnerRecovery,setRemoveOwnerRecovery]=useState(false);
   const [saving,setSaving]=useState(false);
+  const [securityError,setSecurityError]=useState("");
+
+  const verifySecurity=async(value)=>{
+    const method=value.method;
+    if(method==="password") return verifyDeckPassword(value.answer,initial?.passwordHash);
+    return verifyOwnerAuthAnswer(value.answer,initial?.ownerAuth);
+  };
+  const completeSecurityAction=async(answer)=>{
+    setSecurityError("");
+    try{
+      const ok=await verifySecurity({method:securityAction?.method,answer});
+      if(!ok) throw new Error(securityAction?.method==="password"?"Incorrect current deck password or PIN.":"That owner authentication answer is not correct.");
+      if(securityAction?.type==="disable") setProtect(false);
+      if(securityAction?.type==="change") setSecurityVerified(true);
+      setSecurityAction(null);
+    }catch(err){setSecurityError(err?.message||"Could not verify ownership.");}
+  };
   const submit=async()=>{
     if(!name.trim()) return;
     if(protect && !initial?.passwordHash && password.trim().length<4){alert("Use a password with at least 4 characters, or a 4–12 digit PIN.");return;}
     if(protect && password.trim() && password.trim().length<4){alert("Use a password with at least 4 characters, or a 4–12 digit PIN.");return;}
+    if(protect && !initial?.passwordHash && !password.trim()){alert("Set a password or PIN before enabling deck protection.");return;}
+    if(protect && ownerQuestion.trim() && !ownerAnswer.trim() && !initial?.ownerAuth){alert("Enter an owner recovery answer, or leave the recovery question blank.");return;}
+    if(protect && ownerQuestion.trim() && ownerAnswer.trim().length<2){alert("Please enter a valid owner recovery answer.");return;}
+    if(initial?.passwordHash && protect && password.trim() && !securityVerified){
+      // A password change must be explicitly verified before saving.
+      setSecurityAction({type:"change",method:"password",answer:""});
+      return;
+    }
     setSaving(true);
-    try{await save({id:initial?.id,name:name.trim(),description,category,folderId:folderId?Number(folderId):null,deckColor,passwordHash:initial?.passwordHash||null,passwordPlain:protect?password.trim():"",removePassword:!protect});}
+    try{await save({
+      id:initial?.id,name:name.trim(),description,category,folderId:folderId?Number(folderId):null,deckColor,
+      passwordHash:initial?.passwordHash||null,passwordPlain:protect?password.trim():"",removePassword:!protect,
+      ownerAuth:initial?.ownerAuth||null,ownerAuthQuestion:protect?ownerQuestion.trim():"",ownerAuthAnswer:protect?ownerAnswer.trim():"",
+      removeOwnerAuth:removeOwnerRecovery || (!protect&&!ownerQuestion.trim())
+    });}
     finally{setSaving(false);}
   };
+  const openDisable=()=>{
+    if(!initial?.passwordHash){setProtect(false);return;}
+    setSecurityError(""); setSecurityVerified(false);
+    setSecurityAction({type:"disable",method:"password",answer:""});
+  };
+  const securityChoice=<>
+    <button type="button" className={`toggle-switch ${protect?"on":""}`} aria-pressed={protect} onClick={()=>{if(protect)openDisable();else {setProtect(true);setSecurityVerified(false);}}}><span/></button>
+  </>;
   return <div className="modal-backdrop"><div className="small-modal deck-modal-enhanced">
     <div className="modal-head"><div><h2>{initial?"Edit Study Deck":"Create Study Deck"}</h2><span className="muted">Choose a category, folder, color, and optional access protection.</span></div><button onClick={close}><X/></button></div>
     <label>Deck name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. General Science"/></label>
@@ -1545,8 +1642,16 @@ function DeckModal({close,save,initial,folders=[]}) {
     <label>Folder<select value={folderId} onChange={e=>setFolderId(e.target.value)}><option value="">No Folder</option>{folders.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}</select></label>
     <label>Deck Color<select value={deckColor} onChange={e=>setDeckColor(e.target.value)}><option value="default">Default</option><option value="blue">Blue</option><option value="violet">Violet</option><option value="green">Green</option><option value="navy">Navy</option><option value="warm">Warm</option><option value="blue-gradient">Blue Gradient</option><option value="violet-gradient">Violet Gradient</option></select></label>
     <label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="What will you review?"/></label>
-    <section className="deck-security-box"><div className="deck-security-head"><div><b><LockKeyhole size={16}/> Deck Access Protection</b><span>{protect?"This deck requires a password or PIN before opening.":"Optional — only this signed-in account can open the deck without a password."}</span></div><button type="button" className={`toggle-switch ${protect?"on":""}`} aria-pressed={protect} onClick={()=>setProtect(v=>!v)}><span/></button></div>
-      {protect&&<div className="deck-password-fields"><label>{initial?.passwordHash?"New password / PIN (leave blank to keep current)":"Set password / PIN"}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password or 4–12 digit PIN" autoComplete="new-password"/></label><small>To change or reset the deck password, enter a new one here. Turning protection off removes the password.</small></div>}
+    <section className="deck-security-box">
+      <div className="deck-security-head"><div><b><LockKeyhole size={16}/> Deck Access Protection</b><span>{protect?"This deck requires a password or PIN before opening.":"Optional — only this signed-in account can open the deck without a password."}</span></div>{securityChoice}</div>
+      {protect&&<div className="deck-password-fields">
+        <label>{initial?.passwordHash?"New password / PIN (leave blank to keep current)":"Set password / PIN"}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password or 4–12 digit PIN" autoComplete="new-password"/></label>
+        <label>Owner recovery question <span className="muted-inline">(recommended)</span><input type="text" value={ownerQuestion} onChange={e=>{setOwnerQuestion(e.target.value);setRemoveOwnerRecovery(false)}} placeholder="e.g. What is the name of your favorite dog?"/></label>
+        {ownerQuestion.trim()&&<label>Owner recovery answer<input type="text" value={ownerAnswer} onChange={e=>setOwnerAnswer(e.target.value)} placeholder={initial?.ownerAuth?"Enter a new answer to replace the current one":"Enter your answer"} autoComplete="off"/></label>}
+        <small>The recovery question is an additional owner check. It is never shown to other users. A password is still required every time the protected deck is opened again.</small>
+        {initial?.ownerAuth&&<button type="button" className="text-btn" onClick={()=>{setOwnerQuestion("");setOwnerAnswer("");setRemoveOwnerRecovery(true)}}>Remove owner recovery question</button>}
+      </div>}
+      {securityAction&&<div className="deck-security-verify"><div><b>{securityAction.type==="disable"?"Confirm turning off protection":"Verify ownership to change the password"}</b><span>Use the current password or your owner recovery question before making this security change.</span></div><label>{securityAction.method==="password"?"Current password / PIN":"Owner recovery answer"}<input autoFocus type="password" value={securityAction.answer||""} onChange={e=>setSecurityAction(a=>({...a,answer:e.target.value}))} onKeyDown={e=>{if(e.key==="Enter")completeSecurityAction(e.target.value)}} placeholder={securityAction.method==="password"?"Enter current password or PIN":"Enter your owner answer"}/></label>{securityAction.method==="password"&&initial?.ownerAuth&&<button type="button" className="text-btn" onClick={()=>{setSecurityError("");setSecurityAction(a=>({...a,method:"owner",answer:""}))}}>Use owner recovery question instead</button>}{securityAction.method==="owner"&&<div className="deck-recovery-box"><b>{initial?.ownerAuth?.question}</b><span>Enter the answer you set for this deck.</span></div>}{securityError&&<div className="ai-error">{securityError}</div>}<div className="modal-foot"><button type="button" className="secondary-btn" onClick={()=>{setSecurityAction(null);setSecurityError("");setSecurityVerified(false)}}>Cancel</button><button type="button" className="primary-btn" disabled={!securityAction.answer?.trim()} onClick={()=>completeSecurityAction(securityAction.answer)}>Verify</button></div></div>}
     </section>
     <button className="primary-btn wide" disabled={!name.trim()||saving} onClick={submit}>{saving?<><Loader2 className="spin" size={17}/> Saving…</>:<><Save size={17}/>{initial?"Save Changes":"Create Deck"}</>}</button>
   </div></div>;
