@@ -279,7 +279,7 @@ async function createStudyShareToken(deck, questions, password) {
   const encrypted = await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(JSON.stringify(payload)));
   return `${bytesToBase64Url(salt)}.${bytesToBase64Url(iv)}.${bytesToBase64Url(new Uint8Array(encrypted))}`;
 }
-async export async function openStudyShareToken(token, password) {
+export async function openStudyShareToken(token, password) {
   if (!crypto?.subtle) throw new Error("Secure browser decryption is unavailable on this device.");
   const parts = String(token || "").split(".");
   if (parts.length !== 3) throw new Error("Invalid or incomplete share link.");
