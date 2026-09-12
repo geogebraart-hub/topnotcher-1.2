@@ -1,9 +1,10 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Chrome, Loader2, ShieldCheck } from "lucide-react";
 import { firebaseConfigured, finishGoogleRedirect, signInWithGoogle, signOutGoogle, watchAuth, isAuthorizedGoogleUser, authorizedAccountDescription, registerAccountDevice, releaseAccountDevice } from "./firebase";
-import App, { TopnotcherBrand } from "./App";
+import App, { TopnotcherBrand, PublicSharedStudy } from "./App";
 
 export default function AuthGate() {
+  const shareToken = typeof window !== "undefined" && window.location.hash.startsWith("#share=") ? decodeURIComponent(window.location.hash.slice(7)) : "";
   const [user, setUser] = useState(undefined);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -13,6 +14,7 @@ export default function AuthGate() {
   const deniedRef = useRef(false);
 
   useEffect(() => {
+    if (shareToken) return;
     if (!firebaseConfigured) { setUser(null); return; }
     let active = true;
     finishGoogleRedirect().catch((err) => active && setError(authError(err)));
@@ -63,6 +65,7 @@ export default function AuthGate() {
     finally { setBusy(false); }
   };
 
+  if (shareToken) return <PublicSharedStudy token={shareToken} />;
   if (user === undefined) return <AuthLoading />;
   if (!firebaseConfigured) return <AuthConfigMissing />;
   if (accessDenied) return <AccessDeniedScreen user={accessDenied} onSignOut={() => { deniedRef.current = false; setAccessDenied(null); signOutGoogle().catch(() => {}); }} />;
