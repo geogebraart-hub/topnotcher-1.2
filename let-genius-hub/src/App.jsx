@@ -317,28 +317,88 @@ export function PublicSharedStudy({token}) {
   const [busy,setBusy]=useState(false);
   const [index,setIndex]=useState(0);
   const [answers,setAnswers]=useState({});
-  const [checked,setChecked]=useState({});
-  const [startedAt]=useState(Date.now());
+  const [startedAt,setStartedAt]=useState(null);
   const [elapsed,setElapsed]=useState(0);
-  useEffect(()=>{if(!payload)return;const id=setInterval(()=>setElapsed(Math.floor((Date.now()-startedAt)/1000)),1000);return()=>clearInterval(id)},[payload,startedAt]);
+  const [completed,setCompleted]=useState(false);
+  const [result,setResult]=useState(null);
+
+  const exit=()=>{
+    window.history.replaceState(null,"",`${window.location.pathname}${window.location.search}`);
+    window.location.reload();
+  };
+
   const unlock=async()=>{
     if(!password.trim())return;
     setBusy(true);setError("");
-    try{const data=await openStudyShareToken(token,password.trim());setPayload(data);setIndex(0);setAnswers({});setChecked({});}
-    catch(err){setError(err?.message||"Unable to open this shared study set.");}
+    try{
+      const data=await openStudyShareToken(token,password.trim());
+      setPayload(data);setIndex(0);setAnswers({});setCompleted(false);setResult(null);
+      setStartedAt(Date.now());
+    }catch(err){setError(err?.message||"Unable to open this shared study set.");}
     finally{setBusy(false);}
   };
-  const exit=()=>{window.history.replaceState(null,"",`${window.location.pathname}${window.location.search}`);window.location.reload();};
+
+  // Share links have a hard expiry. Once the encrypted payload's expiry is reached,
+  // the active study session is closed automatically even if the user is mid-test.
+  useEffect(()=>{
+    if(!payload?.exp) return;
+    const check=()=>{
+      if(Date.now()>=payload.exp){
+        exit();
+        return true;
+      }
+      return false;
+    };
+    if(check()) return;
+    const id=setInterval(check,1000);
+    return()=>clearInterval(id);
+  },[payload?.exp,completed]);
+
+  useEffect(()=>{
+    if(!payload || !startedAt || completed) return;
+    const tick=()=>setElapsed(Math.max(0,Math.floor((Date.now()-startedAt)/1000)));
+    tick();
+    const id=setInterval(tick,1000);
+    return()=>clearInterval(id);
+  },[payload,startedAt,completed]);
+
   if(!payload) return <div className="public-share-screen"><div className="public-share-card"><TopnotcherBrand/><div className="public-share-icon"><LockKeyhole size={30}/></div><span className="question-label">SHARED STUDY QUESTIONS</span><h1>Password required</h1><p>Enter the password provided by the person who shared this question set. This link expires after 1 hour 30 minutes.</p><label>Share password<input autoFocus type="password" value={password} onChange={e=>setPassword(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")unlock()}} placeholder="Enter password" autoComplete="off"/></label>{error&&<div className="ai-error">{error}</div>}<div className="public-share-actions"><button className="secondary-btn" onClick={exit}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Opening…</>:<><Play size={17}/> Open Question Set</>}</button></div></div></div>;
+
   const questions=payload.questions||[];
   const q=questions[index];
+  if(!q) return null;
   const selected=answers[q.id];
-  const isChecked=Boolean(checked[q.id]);
   const answeredCount=Object.keys(answers).length;
   const pct=questions.length?Math.round((index+1)/questions.length*100):0;
   const hh=String(Math.floor(elapsed/3600)).padStart(2,"0"),mm=String(Math.floor((elapsed%3600)/60)).padStart(2,"0"),ss=String(elapsed%60).padStart(2,"0");
-  const choose=i=>{if(isChecked)return;setAnswers(a=>({...a,[q.id]:i}));setChecked(c=>({...c,[q.id]:true}));};
-  return <div className="public-share-study"><header className="public-share-header"><div className="public-share-brand"><TopnotcherMedal size={30}/><div><b>TOPNOTCHER!</b><span>Shared Study Questions</span></div></div><div className="public-share-title"><span>{payload.deckName||"Shared Question Set"}</span><small>{questions.length} questions · {answeredCount} answered</small></div><div className="public-share-timer"><span>TIME ELAPSED</span><b>{hh}:{mm}:{ss}</b></div><button className="icon-close" onClick={exit} aria-label="Close shared study"><X/></button></header><div className="public-share-progress"><div><span>Question {index+1} of {questions.length}</span><b>{pct}%</b></div><div className="progress-track"><i style={{width:`${pct}%`}}/></div></div><main className="public-share-body"><section className="public-share-question"><span className="question-label">QUESTION {index+1}</span><h1><MathText text={q.q}/></h1><div className="public-share-options">{(q.options||[]).map((o,i)=><button key={i} className={`${isChecked&&i===q.answer?"correct ":""}${isChecked&&i===selected&&i!==q.answer?"wrong":""}`} disabled={isChecked} onClick={()=>choose(i)}><strong>{String.fromCharCode(65+i)}</strong><MathText text={o}/></button>)}</div>{isChecked&&<div className={`explanation ${selected===q.answer?"good":"bad"}`}><b>{selected===q.answer?"Correct!":"Not quite."}</b><p><MathText text={q.explanation||""}/></p></div>}<div className="public-share-nav"><button className="secondary-btn" disabled={index===0} onClick={()=>setIndex(i=>Math.max(0,i-1))}><ChevronLeft/> Previous</button><span>{isChecked?"Review the rationale, then continue.":"Select an answer to continue."}</span><button className="primary-btn" disabled={!isChecked} onClick={()=>{if(index<questions.length-1)setIndex(i=>i+1)}}>{index===questions.length-1?"Finished":"Next Question"} <ChevronRight/></button></div></section><aside className="public-share-navigator"><div><b>Question Navigator</b><span>{answeredCount} of {questions.length} answered</span></div><div className="public-share-jump">{questions.map((item,i)=><button key={item.id||i} className={`${checked[item.id]?"answered":"unanswered"}${i===index?" current":""}`} onClick={()=>setIndex(i)}>{i+1}</button>)}</div><div className="public-share-note"><LockKeyhole size={16}/><span>Only this shared question set is available through this link. Your TOPNOTCHER account and private study data are not exposed.</span></div></aside></main></div>;
+
+  const choose=i=>{
+    if(completed) return;
+    setAnswers(a=>({...a,[q.id]:i}));
+  };
+  const finish=()=>{
+    const finalAnswers={...answers,[q.id]:selected};
+    const answered=Object.keys(finalAnswers).filter(id=>finalAnswers[id]!==undefined).length;
+    const correct=questions.reduce((sum,item)=>sum+(finalAnswers[item.id]===item.answer?1:0),0);
+    const used=Math.max(0,Math.floor((Date.now()-(startedAt||Date.now()))/1000));
+    setElapsed(used);
+    setResult({answered,correct,total:questions.length,percentage:questions.length?Math.round(correct/questions.length*100):0,seconds:used});
+    setAnswers(finalAnswers);
+    setCompleted(true);
+  };
+  const next=()=>{
+    if(selected===undefined) return;
+    if(index===questions.length-1) finish();
+    else setIndex(i=>i+1);
+  };
+  const previous=()=>setIndex(i=>Math.max(0,i-1));
+
+  if(completed && result) {
+    const rh=String(Math.floor(result.seconds/3600)).padStart(2,"0"),rm=String(Math.floor((result.seconds%3600)/60)).padStart(2,"0"),rs=String(result.seconds%60).padStart(2,"0");
+    return <div className="public-share-study public-share-result"><header className="public-share-header"><TopnotcherBrand compact/><div className="public-share-title"><span>{payload.deckName||"Shared Question Set"}</span><small>Study Questions Complete</small></div><div className="public-share-timer"><span>TIME TAKEN</span><b>{rh}:{rm}:{rs}</b></div><button className="icon-close" onClick={exit} aria-label="Close shared study"><X/></button></header><main className="public-share-result-wrap"><section className="public-share-result-card"><CheckCircle2 size={48}/><span className="question-label">SESSION COMPLETE</span><h1>Study session finished</h1><p>Your result has been calculated for this shared question set.</p><div className="public-share-result-grid"><div><b>{rh}:{rm}:{rs}</b><span>Time Taken</span></div><div><b>{result.correct}/{result.total}</b><span>Score</span></div><div><b>{result.percentage}%</b><span>Percentage</span></div><div><b>{result.answered}/{result.total}</b><span>Answered</span></div></div><div className="public-share-result-actions"><button className="primary-btn" onClick={exit}>Close Study</button></div></section></main></div>;
+  }
+
+  return <div className="public-share-study"><header className="public-share-header"><TopnotcherBrand compact/><div className="public-share-title"><span>{payload.deckName||"Shared Question Set"}</span><small>{questions.length} questions · {answeredCount} answered</small></div><div className="public-share-timer"><span>TIME ELAPSED</span><b>{hh}:{mm}:{ss}</b></div><button className="icon-close" onClick={exit} aria-label="Close shared study"><X/></button></header><div className="public-share-progress"><div><span>Question {index+1} of {questions.length}</span><b>{pct}%</b></div><div className="progress-track"><i style={{width:`${pct}%`}}/></div></div><main className="public-share-body public-share-standard-body"><section className="public-share-question"><div className="public-share-question-head"><span className="question-label">QUESTION {index+1}</span><span className="public-share-answered">{answeredCount} answered</span></div><h1><MathText text={q.q}/></h1><div className="public-share-options">{(q.options||[]).map((o,i)=><button type="button" key={i} className={selected===i?"selected":""} onClick={()=>choose(i)}><strong>{String.fromCharCode(65+i)}</strong><MathText text={o}/></button>)}</div><div className="public-share-nav"><button className="secondary-btn" disabled={index===0} onClick={previous}><ChevronLeft/> Previous</button><span>{selected===undefined?"Select an answer to continue.":index===questions.length-1?"Review your answer, then finish.":"Answer saved. Continue when ready."}</span><button className="primary-btn" disabled={selected===undefined} onClick={next}>{index===questions.length-1?"Finish Study Session":"Next Question"}<ChevronRight/></button></div></section></main></div>;
 }
 
 function App({ authUser, onSignOut }) {
@@ -1567,7 +1627,7 @@ function DeckPasswordModal({deck,onCancel,onUnlocked,onPasswordReset}) {
       <div className="modal-foot"><button className="secondary-btn" onClick={onCancel}>Cancel</button><button className="primary-btn" disabled={!password||busy} onClick={unlock}>{busy?<><Loader2 className="spin" size={17}/> Verifying…</>:<><LockKeyhole size={17}/> Unlock</>}</button></div>
     </> : <>
       <div className="deck-recovery-box"><b>Owner authentication</b><span>Answer the personal recovery question you set for this deck.</span><strong>{deck.ownerAuth.question}</strong></div>
-      <label>Owner answer<input autoFocus type="text" value={answer} onChange={e=>setAnswer(e.target.value)} autoComplete="off" placeholder="Enter your answer"/></label>
+      <label>Owner answer<input autoFocus type="password" value={answer} onChange={e=>setAnswer(e.target.value)} autoComplete="off" placeholder="Enter your answer"/></label>
       <label>New password / PIN<input type="password" value={newPassword} onChange={e=>setNewPassword(e.target.value)} placeholder="New password or 4–12 digit PIN" autoComplete="new-password"/></label>
       {error&&<div className="ai-error">{error}</div>}
       <div className="modal-foot"><button className="secondary-btn" onClick={()=>{setMode("unlock");setError("")}}>Back</button><button className="primary-btn" disabled={!answer.trim()||!newPassword.trim()||busy} onClick={resetWithOwnerAuth}>{busy?<><Loader2 className="spin" size={17}/> Resetting…</>:<><KeyRound size={17}/> Reset Password</>}</button></div>
@@ -1647,7 +1707,7 @@ function DeckModal({close,save,initial,folders=[]}) {
       {protect&&<div className="deck-password-fields">
         <label>{initial?.passwordHash?"New password / PIN (leave blank to keep current)":"Set password / PIN"}<input type="password" value={password} onChange={e=>setPassword(e.target.value)} placeholder="Password or 4–12 digit PIN" autoComplete="new-password"/></label>
         <label>Owner recovery question <span className="muted-inline">(recommended)</span><input type="text" value={ownerQuestion} onChange={e=>{setOwnerQuestion(e.target.value);setRemoveOwnerRecovery(false)}} placeholder="e.g. What is the name of your favorite dog?"/></label>
-        {ownerQuestion.trim()&&<label>Owner recovery answer<input type="text" value={ownerAnswer} onChange={e=>setOwnerAnswer(e.target.value)} placeholder={initial?.ownerAuth?"Enter a new answer to replace the current one":"Enter your answer"} autoComplete="off"/></label>}
+        {ownerQuestion.trim()&&<label>Owner recovery answer<input type="password" value={ownerAnswer} onChange={e=>setOwnerAnswer(e.target.value)} placeholder={initial?.ownerAuth?"Enter a new answer to replace the current one":"Enter your answer"} autoComplete="off"/></label>}
         <small>The recovery question is an additional owner check. It is never shown to other users. A password is still required every time the protected deck is opened again.</small>
         {initial?.ownerAuth&&<button type="button" className="text-btn" onClick={()=>{setOwnerQuestion("");setOwnerAnswer("");setRemoveOwnerRecovery(true)}}>Remove owner recovery question</button>}
       </div>}
