@@ -5430,3 +5430,58 @@ html,body{overflow-x:hidden!important}
 .material-protected-label{display:inline-flex;align-items:center;gap:3px;margin-left:6px;color:var(--primary);font-weight:700}
 .app-shell.theme-dark .deck-security-verify,.app-shell.theme-dark .deck-recovery-box{background:#10151d!important;border-color:#303a48!important}
 .app-shell.theme-dark .deck-security-verify>div:first-child b,.app-shell.theme-dark .deck-recovery-box b,.app-shell.theme-dark .deck-recovery-box strong{color:#eef2f8!important}
+
+
+/* V97: unified dirty-white dotted page background. Content cards remain clean white. */
+html,body{
+  background-color:#f6f5f0!important;
+  background-image:radial-gradient(#d8d6cf 1.15px,transparent 1.15px)!important;
+  background-size:14px 14px!important;
+}
+.app-shell:not(.theme-dark){
+  background-color:#f6f5f0!important;
+  background-image:radial-gradient(#d8d6cf 1.15px,transparent 1.15px)!important;
+  background-size:14px 14px!important;
+}
+.study-fullscreen:not(.theme-dark),
+.public-share-screen,
+.public-share-study{
+  background-color:#f6f5f0!important;
+  background-image:radial-gradient(#d8d6cf 1.15px,transparent 1.15px)!important;
+  background-size:14px 14px!important;
+}
+
+/* V97: shared study now follows the normal question-session behavior without the account sidebar. */
+.public-share-header .topnotcher-brand{margin:0}
+.public-share-standard-body{display:block!important;width:min(980px,calc(100% - 48px))!important;margin:12px auto 34px!important}
+.public-share-standard-body .public-share-question{width:100%;box-sizing:border-box;padding:28px 30px}
+.public-share-question-head{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.public-share-answered{font-size:10px;font-weight:700;color:var(--muted,#718096)}
+.public-share-options button.selected{border-color:var(--primary,#4f46e5);background:#f5f3ff;box-shadow:0 0 0 1px rgba(79,70,229,.08)}
+.public-share-options button.selected strong{background:var(--primary,#4f46e5);color:#fff}
+.public-share-result-wrap{width:min(980px,calc(100% - 48px));margin:42px auto 50px;display:grid;place-items:center}
+.public-share-result-card{width:min(760px,100%);box-sizing:border-box;background:#fff;border:1px solid var(--line,#e4e8ef);border-radius:22px;padding:42px;text-align:center;box-shadow:0 12px 34px rgba(30,41,59,.07)}
+.public-share-result-card>svg{color:#16a34a;margin-bottom:10px}
+.public-share-result-card h1{font-size:28px;margin:8px 0}
+.public-share-result-card>p{color:var(--muted,#718096);font-size:12px;margin:0 0 26px}
+.public-share-result-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;text-align:center}
+.public-share-result-grid>div{border:1px solid var(--line,#e4e8ef);border-radius:14px;padding:17px 10px;background:#fafbfc}
+.public-share-result-grid b{display:block;font-size:20px;color:var(--ink,#18233a)}
+.public-share-result-grid span{display:block;margin-top:4px;font-size:9px;color:var(--muted,#718096);font-weight:700}
+.public-share-result-actions{margin-top:24px;display:flex;justify-content:center}
+.public-share-result .public-share-title{display:grid}
+
+/* Protection controls: keep the switch optically centered with its label/control row. */
+.deck-security-head{min-height:42px;display:flex;align-items:center!important;gap:14px}
+.deck-security-head>div:first-child{display:grid;gap:4px;align-content:center}
+.deck-security-head .toggle-switch{width:44px!important;height:24px!important;min-width:44px!important;padding:2px!important;margin:0!important;display:flex!important;align-items:center!important;justify-content:flex-start!important;box-sizing:border-box!important;align-self:center!important}
+.deck-security-head .toggle-switch span{width:20px!important;height:20px!important;margin:0!important;transform:translateX(0)!important}
+.deck-security-head .toggle-switch.on{justify-content:flex-end!important}
+
+@media(max-width:800px){
+  .public-share-standard-body{width:calc(100% - 24px)!important}
+  .public-share-standard-body .public-share-question{padding:20px}
+  .public-share-result-wrap{width:calc(100% - 24px);margin-top:24px}
+  .public-share-result-card{padding:28px 18px}
+  .public-share-result-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
