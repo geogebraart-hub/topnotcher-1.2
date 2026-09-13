@@ -338,19 +338,16 @@ export function PublicSharedStudy({token}) {
     finally{setBusy(false);}
   };
 
-  // Share links have a hard expiry. Once the encrypted payload's expiry is reached,
-  // the active study session is closed automatically even if the user is mid-test.
+  // The share expiry is a hard wall. The test is closed as soon as the
+  // encrypted link reaches its expiration timestamp, even mid-question.
   useEffect(()=>{
-    if(!payload?.exp) return;
+    if(!payload?.exp || completed) return;
     const check=()=>{
-      if(Date.now()>=payload.exp){
-        exit();
-        return true;
-      }
+      if(Date.now()>=payload.exp){ exit(); return true; }
       return false;
     };
     if(check()) return;
-    const id=setInterval(check,1000);
+    const id=setInterval(check,500);
     return()=>clearInterval(id);
   },[payload?.exp,completed]);
 
@@ -369,28 +366,26 @@ export function PublicSharedStudy({token}) {
   if(!q) return null;
   const selected=answers[q.id];
   const answeredCount=Object.keys(answers).length;
-  const pct=questions.length?Math.round((index+1)/questions.length*100):0;
+  const pct=questions.length?Math.round(answeredCount/questions.length*100):0;
+  const positionPct=questions.length?Math.round((index+1)/questions.length*100):0;
+  const checked=selected!==undefined;
+  const isCorrect=checked && Number(selected)===Number(q.answer);
   const hh=String(Math.floor(elapsed/3600)).padStart(2,"0"),mm=String(Math.floor((elapsed%3600)/60)).padStart(2,"0"),ss=String(elapsed%60).padStart(2,"0");
 
   const choose=i=>{
-    if(completed) return;
+    if(completed || checked) return;
     setAnswers(a=>({...a,[q.id]:i}));
   };
   const finish=()=>{
-    const finalAnswers={...answers,[q.id]:selected};
-    const answered=Object.keys(finalAnswers).filter(id=>finalAnswers[id]!==undefined).length;
-    const correct=questions.reduce((sum,item)=>sum+(finalAnswers[item.id]===item.answer?1:0),0);
+    if(!checked) return;
+    const answered=Object.keys(answers).filter(id=>answers[id]!==undefined).length;
+    const correct=questions.reduce((sum,item)=>sum+(Number(answers[item.id])===Number(item.answer)?1:0),0);
     const used=Math.max(0,Math.floor((Date.now()-(startedAt||Date.now()))/1000));
     setElapsed(used);
     setResult({answered,correct,total:questions.length,percentage:questions.length?Math.round(correct/questions.length*100):0,seconds:used});
-    setAnswers(finalAnswers);
     setCompleted(true);
   };
-  const next=()=>{
-    if(selected===undefined) return;
-    if(index===questions.length-1) finish();
-    else setIndex(i=>i+1);
-  };
+  const next=()=>{ if(!checked)return; if(index===questions.length-1)finish(); else setIndex(i=>i+1); };
   const previous=()=>setIndex(i=>Math.max(0,i-1));
 
   if(completed && result) {
@@ -398,7 +393,7 @@ export function PublicSharedStudy({token}) {
     return <div className="public-share-study public-share-result"><header className="public-share-header"><TopnotcherBrand compact/><div className="public-share-title"><span>{payload.deckName||"Shared Question Set"}</span><small>Study Questions Complete</small></div><div className="public-share-timer"><span>TIME TAKEN</span><b>{rh}:{rm}:{rs}</b></div><button className="icon-close" onClick={exit} aria-label="Close shared study"><X/></button></header><main className="public-share-result-wrap"><section className="public-share-result-card"><CheckCircle2 size={48}/><span className="question-label">SESSION COMPLETE</span><h1>Study session finished</h1><p>Your result has been calculated for this shared question set.</p><div className="public-share-result-grid"><div><b>{rh}:{rm}:{rs}</b><span>Time Taken</span></div><div><b>{result.correct}/{result.total}</b><span>Score</span></div><div><b>{result.percentage}%</b><span>Percentage</span></div><div><b>{result.answered}/{result.total}</b><span>Answered</span></div></div><div className="public-share-result-actions"><button className="primary-btn" onClick={exit}>Close Study</button></div></section></main></div>;
   }
 
-  return <div className="public-share-study"><header className="public-share-header"><TopnotcherBrand compact/><div className="public-share-title"><span>{payload.deckName||"Shared Question Set"}</span><small>{questions.length} questions · {answeredCount} answered</small></div><div className="public-share-timer"><span>TIME ELAPSED</span><b>{hh}:{mm}:{ss}</b></div><button className="icon-close" onClick={exit} aria-label="Close shared study"><X/></button></header><div className="public-share-progress"><div><span>Question {index+1} of {questions.length}</span><b>{pct}%</b></div><div className="progress-track"><i style={{width:`${pct}%`}}/></div></div><main className="public-share-body public-share-standard-body"><section className="public-share-question"><div className="public-share-question-head"><span className="question-label">QUESTION {index+1}</span><span className="public-share-answered">{answeredCount} answered</span></div><h1><MathText text={q.q}/></h1><div className="public-share-options">{(q.options||[]).map((o,i)=><button type="button" key={i} className={selected===i?"selected":""} onClick={()=>choose(i)}><strong>{String.fromCharCode(65+i)}</strong><MathText text={o}/></button>)}</div><div className="public-share-nav"><button className="secondary-btn" disabled={index===0} onClick={previous}><ChevronLeft/> Previous</button><span>{selected===undefined?"Select an answer to continue.":index===questions.length-1?"Review your answer, then finish.":"Answer saved. Continue when ready."}</span><button className="primary-btn" disabled={selected===undefined} onClick={next}>{index===questions.length-1?"Finish Study Session":"Next Question"}<ChevronRight/></button></div></section></main></div>;
+  return <div className="public-share-study"><header className="public-share-header"><TopnotcherBrand compact/><div className="public-share-title"><span>{payload.deckName||"Shared Question Set"}</span><small>{questions.length} questions · {answeredCount} answered</small></div><div className="public-share-timer"><span>TIME ELAPSED</span><b>{hh}:{mm}:{ss}</b></div><button className="icon-close" onClick={exit} aria-label="Close shared study"><X/></button></header><div className="public-share-progress"><div><span>Question {index+1} of {questions.length}</span><b>{positionPct}%</b></div><div className="progress-track"><i style={{width:`${positionPct}%`}}/></div></div><main className="public-share-body public-share-standard-body"><section className="public-share-question"><div className="public-share-question-head"><span className="question-label">QUESTION {index+1}</span><span className="public-share-answered">{answeredCount} answered · {pct}% complete</span></div><h1><MathText text={q.q}/></h1><div className="public-share-options">{(q.options||[]).map((o,i)=>{const correctChoice=Number(i)===Number(q.answer);const wrongChoice=checked&&Number(selected)===i&&!correctChoice;return <button type="button" key={i} disabled={checked} className={`${checked&&correctChoice?"correct":checked&&wrongChoice?"wrong":""}${selected===i?" selected":""}`} onClick={()=>choose(i)}><strong>{String.fromCharCode(65+i)}</strong><MathText text={o}/></button>})}</div>{checked&&<div className={`public-share-rationale ${isCorrect?"good":"bad"}`}><div><b>{isCorrect?"Correct!":"Not quite."}</b><span>Correct answer: {String.fromCharCode(65+Number(q.answer))}. <MathText text={q.options?.[q.answer]||""}/></span></div><p><MathText text={q.explanation||""}/></p></div>}<div className="public-share-nav"><button className="secondary-btn" disabled={index===0} onClick={previous}><ChevronLeft/> Previous</button><span>{checked?"Answer checked. Review the rationale before continuing.":"Select an answer to check it."}</span><button className="primary-btn" disabled={!checked} onClick={next}>{index===questions.length-1?"Finish Study Session":"Next Question"}<ChevronRight/></button></div></section><aside className="public-share-navigator panel"><div className="study-side-head"><b>Question Navigator</b><span>{index+1} of {questions.length}</span></div><div className="study-progress"><span>Progress</span><b>{pct}%</b></div><div className="public-share-question-jump">{questions.map((item,i)=>{const answered=answers[item.id]!==undefined;return <button key={item.id} className={`${answered?"answered":"unanswered"}${i===index?" current":""}`} onClick={()=>setIndex(i)}>{i+1}</button>})}</div><div className="public-share-note"><Target size={17}/><span>Answers are checked immediately. The final screen shows only your overall result.</span></div></aside></main></div>;
 }
 
 function App({ authUser, onSignOut }) {
@@ -547,19 +542,22 @@ function App({ authUser, onSignOut }) {
     const available = questions.filter(q => q.cat === cat).length;
     if (!available) { alert("There are no questions available in this category yet."); return; }
     const requested = Math.max(1, Math.min(500, Number(dailyDrillCount) || 20));
-    setDrillSetup({ cat, count: Math.min(requested, 500), available });
+    setDrillSetup({ cat, count: Math.min(requested, 500), mode:"category", selectedDeckIds:[] });
   }
 
-  function beginDrill(cat, requestedCount) {
-    const availableQuestions = questions.filter(q => q.cat === cat);
-    if (!availableQuestions.length) { setDrillSetup(null); alert("There are no questions available in this category yet."); return; }
+  function beginDrill({cat, requestedCount, mode="category", selectedDeckIds=[]}) {
+    const sourceQuestions = mode === "decks"
+      ? questions.filter(q => selectedDeckIds.map(String).includes(String(q.deckId)))
+      : questions.filter(q => q.cat === cat);
+    if (!sourceQuestions.length) { setDrillSetup(null); alert(mode === "decks" ? "The selected study decks do not have any questions yet." : "There are no questions available in this category yet."); return; }
     const requested = Math.max(1, Math.min(500, Number(requestedCount) || 20));
-    const count = Math.min(requested, availableQuestions.length);
+    const count = Math.min(requested, sourceQuestions.length);
     setDailyDrillCount(requested);
     setDrillSetup(null);
-    if (count < requested) alert(`You selected ${requested} questions, but only ${availableQuestions.length} are currently available. The drill will use ${count} questions.`);
-    const pool = [...availableQuestions].sort(()=>Math.random()-0.5).slice(0, count);
-    startStudy(pool, `${CATEGORIES.find(c=>c.id===cat)?.label || "Daily"} Drill`);
+    if (count < requested) alert(`You selected ${requested} questions, but only ${sourceQuestions.length} are currently available. The drill will use ${count} questions.`);
+    const pool = [...sourceQuestions].sort(()=>Math.random()-0.5).slice(0, count);
+    const label = mode === "decks" ? `Daily Drill · ${selectedDeckIds.length} Deck${selectedDeckIds.length===1?"":"s"}` : `${CATEGORIES.find(c=>c.id===cat)?.label || "Daily"} Drill`;
+    startStudy(pool, label);
   }
 
   function answerStudy(choice) {
@@ -773,7 +771,7 @@ function App({ authUser, onSignOut }) {
       {page==="progress" && <Progress stats={stats} streak={streak} decks={decks} mockScores={mockScores} questions={questions} questionStats={questionStats} sessions={sessions} setPage={setPage} setCategory={setCategory} profile={profile}/>} 
       {page==="decks" && <Decks decks={decks} folders={folders} questions={questions} questionStats={questionStats} flashcards={flashcards} setPage={setPage} openDeck={openDeck} setShowDeckModal={setShowDeckModal} setEditingDeck={setEditingDeck} setShowFolderModal={setShowFolderModal} setEditingFolder={setEditingFolder} deleteFolder={deleteFolder} deleteDeck={deleteDeck}/>} 
       {page==="deck-detail" && selectedDeckId && <DeckDetail deck={decks.find(d=>d.id===selectedDeckId)} questions={questions.filter(q=>q.deckId===selectedDeckId)} questionStats={questionStats} flashcards={flashcards.filter(f=>f.deckId===selectedDeckId)} onGenerateFlashcards={()=>{const r=createFlashcardsForDeck(selectedDeckId);alert(`${r.created} flashcard${r.created===1?"":"s"} created${r.skipped?` · ${r.skipped} choice-dependent question${r.skipped===1?"":"s"} skipped`:""}.`);}} onDeleteFlashcard={deleteFlashcard} onBack={()=>{setSelectedDeckId(null);setPage("decks");setUnlockedDeckIds({})}} onAdd={()=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(null);setShowQuestionModal(true)}} onAI={()=>{setAiDeckId(selectedDeckId);setShowAIModal(true)}} onImportQuestions={()=>setImportQuestionsDeckId(selectedDeckId)} onEdit={q=>{setQuestionDeckId(selectedDeckId);setEditingQuestion(q);setShowQuestionModal(true)}} onDelete={id=>{setQuestions(qs=>qs.filter(q=>String(q.id)!==String(id)));setFlashcards(cards=>cards.filter(card=>String(card.questionId)!==String(id)));}} onStudy={()=>startStudy(questions.filter(q=>q.deckId===selectedDeckId), `Study · ${decks.find(d=>d.id===selectedDeckId)?.name||"Deck"}`)} onStudyFlashcards={()=>setFlashcardStudyPool(flashcards.filter(f=>f.deckId===selectedDeckId))} onShare={()=>setShareDeck(decks.find(d=>d.id===selectedDeckId))} onOpenMaterials={type=>requestMaterialAccess(decks.find(d=>String(d.id)===String(selectedDeckId)),type)}/>} 
-      {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions}/>}  
+      {page==="mock" && <MockBoard category={category} setCategory={setCategory} mockScores={mockScores} mockHistory={mockHistory} setExamSession={setExamSession} questions={questions} decks={decks}/>}  
       {page==="schedule" && <Schedule sessions={sessions} onAdd={()=>{setEditingSession(null);setShowSessionModal(true)}} onEdit={s=>{setEditingSession(s);setShowSessionModal(true)}} onDelete={id=>setSessions(ss=>ss.filter(s=>s.id!==id && s.scheduleLogId!==id))} onToggleDone={id=>setSessions(ss=>{
         const target=ss.find(s=>s.id===id);
         if(!target) return ss;
@@ -808,7 +806,7 @@ function App({ authUser, onSignOut }) {
         setShowSessionModal(false);setEditingSession(null);
       }} initial={editingSession}/>} 
       {materialViewer && <DeckMaterialsModal scope={accountStorageKey(authUser,"lgh-materials")} deckId={materialViewer.deckId} type={materialViewer.type} onClose={()=>setMaterialViewer(null)}/>}
-      {drillSetup && <DrillCountModal setup={drillSetup} close={()=>setDrillSetup(null)} begin={beginDrill}/>}
+      {drillSetup && <DrillCountModal setup={drillSetup} close={()=>setDrillSetup(null)} begin={beginDrill} decks={decks} questions={questions}/>}
       {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} palette={palette} setPalette={setPalette} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
     </div>
@@ -817,24 +815,25 @@ function App({ authUser, onSignOut }) {
 
 function PageHeader({title,subtitle,action}) { return <div className="page-header"><div><h1>{title}</h1>{subtitle&&<p>{subtitle}</p>}</div>{action}</div>; }
 
-function DrillCountModal({setup,close,begin}) {
+function DrillCountModal({setup,close,begin,decks=[],questions=[]}) {
+  const [mode,setMode]=useState(setup?.mode||"category");
+  const [cat,setCat]=useState(setup?.cat||"gened");
   const [count,setCount]=useState(Math.max(1,Math.min(500,Number(setup?.count)||20)));
-  const cat=CATEGORIES.find(c=>c.id===setup?.cat)||CATEGORIES[0];
-  const available=Number(setup?.available)||0;
+  const [selectedDeckIds,setSelectedDeckIds]=useState((setup?.selectedDeckIds||[]).map(String));
+  const availableCategory=questions.filter(q=>q.cat===cat).length;
+  const selectedQuestions=questions.filter(q=>selectedDeckIds.includes(String(q.deckId)));
+  const available=mode==="decks"?selectedQuestions.length:availableCategory;
   const effective=Math.min(count,available);
-  return <div className="modal-backdrop drill-count-backdrop">
-    <div className="small-modal drill-count-modal">
-      <div className="modal-head"><div><h2>How many questions?</h2><span className="muted">Set the number of {cat.label} questions for this drill.</span></div><button onClick={close} aria-label="Close"><X/></button></div>
-      <div className="drill-count-hero"><strong>{count}</strong><span>questions selected</span></div>
-      <div className="drill-count-control">
-        <input className="daily-count-slider" type="range" min="1" max="500" step="1" value={count} onChange={e=>setCount(Number(e.target.value))}/>
-        <div className="daily-count-scale"><span>1</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div>
-      </div>
-      <div className="drill-count-available"><span>Available in {cat.label}</span><b>{available}</b></div>
-      {count>available&&<div className="drill-count-warning">Only {available} questions are currently available. The drill will start with {effective} questions.</div>}
-      <button className="primary-btn wide" onClick={()=>begin(setup.cat,count)}><Play size={18} fill="currentColor"/> Start {effective || count}-Question Drill</button>
-    </div>
-  </div>;
+  const toggleDeck=id=>setSelectedDeckIds(v=>v.includes(String(id))?v.filter(x=>x!==String(id)):[...v,String(id)]);
+  const start=()=>begin({cat,requestedCount:count,mode,selectedDeckIds});
+  return <div className="modal-backdrop drill-count-backdrop"><div className="small-modal drill-count-modal drill-source-modal">
+    <div className="modal-head"><div><span className="question-label">DAILY DRILL SETUP</span><h2>Choose your question source</h2><span className="muted">Pick random questions from a LET area or choose specific study decks.</span></div><button onClick={close} aria-label="Close"><X/></button></div>
+    <div className="source-mode-tabs"><button className={mode==="category"?"selected":""} onClick={()=>setMode("category")}>Option 1 · Random by Category</button><button className={mode==="decks"?"selected":""} onClick={()=>setMode("decks")}>Option 2 · Choose Study Decks</button></div>
+    {mode==="category"?<><div className="category-tabs setup-category-tabs">{CATEGORIES.slice(0,3).map(c=><button className={cat===c.id?"selected":""} key={c.id} onClick={()=>setCat(c.id)}><c.icon size={17}/>{c.label}</button>)}</div><div className="drill-count-available"><span>Random questions available in {CATEGORIES.find(c=>c.id===cat)?.label}</span><b>{availableCategory}</b></div></>:<div className="deck-selection-list">{CATEGORIES.slice(0,3).map(c=>{const list=decks.filter(d=>d.category===c.id);return <div className="deck-selection-group" key={c.id}><div className="deck-selection-group-head"><b>{c.label}</b><span>{list.filter(d=>selectedDeckIds.includes(String(d.id))).length} selected</span></div>{list.length?list.map(d=>{const n=questions.filter(q=>String(q.deckId)===String(d.id)).length;const chosen=selectedDeckIds.includes(String(d.id));return <button type="button" key={d.id} className={chosen?"selected":""} onClick={()=>toggleDeck(d.id)}><span className="deck-select-check">{chosen?"✓":""}</span><span><b>{d.name}</b><small>{n} question{n===1?"":"s"}</small></span></button>}):<div className="deck-selection-empty">No {c.label} study decks yet.</div>}</div>})}</div>}
+    <div className="drill-count-hero"><strong>{count}</strong><span>questions selected</span></div><div className="drill-count-control"><input className="daily-count-slider" type="range" min="1" max="500" step="1" value={count} onChange={e=>setCount(Number(e.target.value))}/><div className="daily-count-scale"><span>1</span><span>100</span><span>200</span><span>300</span><span>400</span><span>500</span></div></div>
+    <div className="drill-count-available"><span>Questions available from this source</span><b>{available}</b></div>{count>available&&<div className="drill-count-warning">Only {available} questions are currently available. The drill will start with {effective} questions.</div>}
+    <button className="primary-btn wide" disabled={!available} onClick={start}><Play size={18} fill="currentColor"/> Start {effective||count}-Question Drill</button>
+  </div></div>;
 }
 
 function Dashboard({setPage,streak,category,setCategory,startDrill,stats,decks,questions}) {
@@ -1211,22 +1210,33 @@ function PreviewPaperSheetButton({category,count,questions}){
   return <button className="secondary-btn wide" type="button" onClick={download}><FileDown size={17}/> Download Paper Answer Sheet</button>;
 }
 
-function MockBoard({category,setCategory,mockScores,mockHistory,setExamSession,questions}) {
+function MockBoard({category,setCategory,mockScores,mockHistory,setExamSession,questions,decks=[]}) {
   const selected=CATEGORIES.find(c=>c.id===category)||CATEGORIES[0];
   const [count,setCount]=useState(150);
   const [shuffle,setShuffle]=useState(true);
   const [explain,setExplain]=useState(false);
   const [paperMode,setPaperMode]=useState(false);
-  const available=buildExamPool(category,questions).length;
+  const [sourceMode,setSourceMode]=useState("category");
+  const [selectedDeckIds,setSelectedDeckIds]=useState([]);
+  const sourcePool=sourceMode==="decks" ? questions.filter(q=>selectedDeckIds.map(String).includes(String(q.deckId))) : buildExamPool(category,questions);
+  const available=sourcePool.length;
   const timeLimit=Math.max(5,Math.round(count*.8));
+  const toggleDeck=id=>setSelectedDeckIds(v=>v.map(String).includes(String(id))?v.filter(x=>String(x)!==String(id)):[...v,String(id)]);
   const start=()=>{
-    const pool=buildExamPool(category,questions);
-    if(!pool.length){alert("No questions are available for this category yet. Add questions to a study deck first.");return;}
+    const pool=sourceMode==="decks" ? questions.filter(q=>selectedDeckIds.map(String).includes(String(q.deckId))) : buildExamPool(category,questions);
+    if(!pool.length){alert(sourceMode==="decks"?"Select at least one study deck with questions.":"No questions are available for this category yet. Add questions to a study deck first.");return;}
     const actualCount=Math.min(count,pool.length);
     const ordered=shuffle?[...pool].sort(()=>Math.random()-0.5):[...pool];
-    setExamSession({id:Date.now(), category, requestedCount:count, pool:ordered.slice(0,actualCount), timeLimit, showExplanations:explain, startedAt:Date.now(), paperMode});
+    setExamSession({id:Date.now(), category, sourceMode, selectedDeckIds, requestedCount:count, pool:ordered.slice(0,actualCount), timeLimit, showExplanations:explain, startedAt:Date.now(), paperMode});
   };
-  return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><section className="panel mock-config-panel"><div className="mock-section"><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.id==="full"?QUESTION_BANK_COUNTS.full:QUESTION_BANK_COUNTS[c.id]}+ items</span><span>◷ {c.hours}</span></div></button>)}</div></div><div className="mock-section"><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150,200,250,300,350,400,420].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/><Toggle label="Paper Mode" hint="Answer on a printed pencil-shading sheet; questions still appear on screen." value={paperMode} setValue={setPaperMode}/></div></section><aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Category</dt><dd>{selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Available</dt><dd>{available}</dd><dt>Time limit</dt><dd>{timeLimit} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div>{available>0&&available<count&&<div className="form-hint"><CircleHelp/> Only {available} questions are currently available, so this attempt will use {available} items.</div>}<div className="bank-ready"><CheckCircle2/> <span><b>Question bank ready.</b> Built-in LET-style items are available for long-form practice.</span></div><h4>RECENT SCORES</h4>{mockHistory?.length?<div className="recent-scores">{mockHistory.slice(-5).reverse().map((s,i)=><span key={i}>{s.score}%</span>)}</div>:<p className="muted">No attempts yet</p>}<PreviewPaperSheetButton category={category} count={Math.min(count,available)} questions={questions}/><button className="primary-btn wide" onClick={start}>Start Exam <ChevronRight/></button></aside></div></div>;
+  return <div><PageHeader title="Mock Board Exam" subtitle="Simulate actual LET exam conditions — timed, multiple choice, PRC-standard format"/><div className="mock-layout"><section className="panel mock-config-panel">
+    <div className="mock-section"><h3 className="subheading">Choose Question Source</h3><div className="source-mode-tabs mock-source-tabs"><button className={sourceMode==="category"?"selected":""} onClick={()=>setSourceMode("category")}>Option 1 · Random by Category</button><button className={sourceMode==="decks"?"selected":""} onClick={()=>setSourceMode("decks")}>Option 2 · Choose Study Decks</button></div>
+    {sourceMode==="category"?<><h3 className="subheading">Select Exam Category</h3><div className="mock-cards">{CATEGORIES.map(c=><button key={c.id} className={"mock-card "+(category===c.id?"chosen":"")} onClick={()=>setCategory(c.id)}><span className="tag">{c.short}</span><h2>{c.title}</h2><p>{c.desc}</p><div><span><FileText/> {c.id==="full"?QUESTION_BANK_COUNTS.full:QUESTION_BANK_COUNTS[c.id]}+ items</span><span>◷ {c.hours}</span></div></button>)}</div></>:<div className="deck-selection-list mock-deck-selection">{CATEGORIES.slice(0,3).map(c=>{const list=decksForCategory(c.id,questions,decks);return <div className="deck-selection-group" key={c.id}><div className="deck-selection-group-head"><b>{c.label}</b><span>{list.filter(d=>selectedDeckIds.map(String).includes(String(d.id))).length} selected</span></div>{list.length?list.map(d=><button type="button" key={d.id} className={selectedDeckIds.map(String).includes(String(d.id))?"selected":""} onClick={()=>toggleDeck(d.id)}><span className="deck-select-check">{selectedDeckIds.map(String).includes(String(d.id))?"✓":""}</span><span><b>{d.name}</b><small>{questions.filter(q=>String(q.deckId)===String(d.id)).length} questions</small></span></button>):<div className="deck-selection-empty">No {c.label} study decks yet.</div>}</div>})}</div>}</div>
+    <div className="mock-section"><h3 className="subheading">Number of Items</h3><p className="muted">Time limit adjusts proportionally to item count</p><div className="item-options">{[25,50,75,100,150,200,250,300,350,400,420].map(n=><button className={count===n?"selected":""} key={n} onClick={()=>setCount(n)}>{n}</button>)}</div><Toggle label="Shuffle Questions" hint="Randomize question order each attempt" value={shuffle} setValue={setShuffle}/><Toggle label="Show Explanations After" hint="View answer rationale in results" value={explain} setValue={setExplain}/><Toggle label="Paper Mode" hint="Answer on a printed pencil-shading sheet; questions still appear on screen." value={paperMode} setValue={setPaperMode}/></div></section>
+    <aside className="panel exam-summary"><h2>Exam Summary</h2><dl><dt>Source</dt><dd>{sourceMode==="decks"?(selectedDeckIds.length?`${selectedDeckIds.length} study deck${selectedDeckIds.length===1?"":"s"}`:"No decks selected"):selected.title}</dd><dt>Items</dt><dd>{count} questions</dd><dt>Available</dt><dd>{available}</dd><dt>Time limit</dt><dd>{timeLimit} minutes</dd></dl><div className="warning"><CircleHelp/> <span><b>PRC Passing Threshold.</b> You need 75% correct to pass each sub-test.</span></div>{available>0&&available<count&&<div className="form-hint"><CircleHelp/> Only {available} questions are currently available, so this attempt will use {available} items.</div>}<div className="bank-ready"><CheckCircle2/> <span><b>Question source ready.</b> {sourceMode==="decks"?"Only questions from your selected study decks will be used.":"Random questions are drawn from the selected LET category."}</span></div><h4>RECENT SCORES</h4>{mockHistory?.length?<div className="recent-scores">{mockHistory.slice(-5).reverse().map((s,i)=><span key={i}>{s.score}%</span>)}</div>:<p className="muted">No attempts yet</p>}<PreviewPaperSheetButton category={category} count={Math.min(count,available)} questions={sourcePool}/><button className="primary-btn wide" onClick={start} disabled={!available}>Start Exam <ChevronRight/></button></aside></div></div>;
+}
+function decksForCategory(cat,questions,decks=[]){
+  return decks.filter(d=>d.category===cat);
 }
 
 function ExamRunner({session,close,setMockScores,setMockHistory,setSessions,setQuestionStats,theme="light"}) {
