@@ -5540,3 +5540,23 @@ html,body{
   .public-share-navigator{position:static}
   .source-mode-tabs{grid-template-columns:1fr}
 }
+
+
+/* V99 — stronger LaTeX / mathematical notation reader */
+.math-live-preview{display:grid;gap:10px;margin-top:10px;padding:12px;border:1px solid #dfe5ee;border-radius:12px;background:#fbfcfe;overflow:hidden}
+.math-live-preview-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.math-live-preview-head b{font-size:11px;color:var(--navy)}
+.math-live-preview-head span{font-size:9px;color:var(--muted)}
+.math-live-block{display:grid;gap:5px;min-width:0;padding:9px 10px;border-radius:9px;background:#fff;border:1px solid #edf0f5;overflow:auto}
+.math-live-label{font-size:8px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:#7183a0}
+.math-live-options{display:grid;gap:5px;min-width:0}
+.math-live-options>div{display:grid;grid-template-columns:22px minmax(0,1fr);gap:5px;align-items:start;padding:7px 9px;border-radius:8px;background:#fff;border:1px solid #edf0f5;overflow:auto}
+.math-live-options>div>b{font-size:10px;color:var(--primary)}
+.math-live-preview .math-text{min-width:0;overflow-wrap:anywhere;line-height:1.6}
+.math-live-preview mjx-container{max-width:100%!important;overflow-x:auto!important;overflow-y:hidden!important}
+.math-text mjx-container[jax="SVG"]{max-width:100%!important}
+.math-text mjx-container[jax="SVG"] svg{max-width:100%!important;height:auto!important}
+@media(max-width:760px){.math-live-preview{padding:10px}.math-live-preview-head{display:grid;gap:3px}}
+.app-shell.theme-dark .math-live-preview{background:#10151d!important;border-color:#303a48!important}
+.app-shell.theme-dark .math-live-block,.app-shell.theme-dark .math-live-options>div{background:#171c25!important;border-color:#303a48!important}
+.app-shell.theme-dark .math-live-preview-head b{color:#eef2f8!important}
