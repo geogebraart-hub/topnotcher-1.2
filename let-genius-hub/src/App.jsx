@@ -70,20 +70,65 @@ function hasMathExpression(value){
 function prepareMathSource(value){
   const s=String(value??"");
   if(!hasMathExpression(s)) return s;
-  // Explicit TeX delimiters are already safe and should remain untouched.
+  // Explicit TeX delimiters are already scoped correctly; never alter them.
   if(/\\\(|\\\)|\\\[|\\\]|\$\$|(^|[^\\])\$(?!\s)/.test(s)) return s;
 
-  // Full mathematical expressions/equations are wrapped in inline math mode.
-  // This is especially useful for PDF/OCR output that contains bare LaTeX such
-  // as "\\frac{a}{b}", "x^2 + y^2 = z^2", or "\\begin{aligned}...".
-  const mathHeavy=/(\\begin\s*\{|\\(?:frac|dfrac|tfrac|cfrac|sqrt|sum|prod|int|iint|iiint|oint|lim|binom|mathbf|mathbb|mathrm|overline|underline|vec|hat|bar|tilde)\b)|(?:=|≠|≤|≥|≈|≡|∝|±|∓|×|÷|∑|∏|∫|√|∞)/;
-  const looksLikeMostlyMath=mathHeavy.test(s) || (/^[\s\dA-Za-zα-ωΑ-Ωπθλμνξρστφχψω+\-*/^_={}()[\].,|:;<>≤≥≠≈≡∝±∓×÷√∑∏∫\\]+$/.test(s) && /[0-9A-Za-zα-ωΑ-Ωπθλμνξχψω]/.test(s));
-  if(looksLikeMostlyMath) return `\\(${s}\\)`;
+  // IMPORTANT: keep ordinary prose as ordinary text. Only the actual
+  // mathematical token/equation is wrapped in MathJax delimiters. This avoids
+  // turning a whole rationale sentence into math italics when it contains
+  // something such as "Notice that 100 = 10^2 and 121 = 11^2."
+  let out=s;
 
-  // For ordinary prose containing a short equation, only wrap the equation-like
-  // tail/piece rather than forcing the entire sentence into math italics.
-  const equation=/((?:[A-Za-zα-ωΑ-Ωπθλμνξρστφχψω]\s*(?:\^|_)(?:\{[^{}]+\}|[A-Za-z0-9]+))|(?:[A-Za-z0-9πθλμνξρστφχψω]+\s*(?:=|≠|≤|≥|≈|≡|∝)\s*[A-Za-z0-9πθλμνξρστφχψω+\-*/().]+))/g;
-  return s.replace(equation,match=>`\\(${match}\\)`);
+  // 1) Bare LaTeX commands with their immediate arguments, e.g. \sqrt{100},
+  // \frac{a}{b}, \sum_{i=1}^{n}, \alpha, \leq. Consume only the command's
+  // math expression rather than the surrounding sentence.
+  const latexCommand=/\\(?:dfrac|tfrac|cfrac|frac|sqrt|root|binom|overset|underset|overline|underline|vec|hat|bar|tilde|dot|ddot|mathbf|mathbb|mathrm|operatorname|text|sum|prod|coprod|int|iint|iiint|oint|limsup|liminf|lim|sin|cos|tan|cot|sec|csc|log|ln|exp|det|gcd|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|chi|psi|omega|infty|times|div|cdot|leq|geq|neq|approx|equiv|cong|propto|pm|mp|degree|forall|exists|in|notin|subseteq|subset|supseteq|supset|cup|cap|to|rightarrow|leftarrow|iff|therefore|because)\b/g;
+  const consumeBalanced=(text,from)=>{
+    if(text[from]!=="{") return from;
+    let depth=0;
+    for(let i=from;i<text.length;i++){
+      if(text[i]==="{") depth++;
+      else if(text[i]==="}"){
+        depth--;
+        if(depth===0) return i+1;
+      }
+    }
+    return text.length;
+  };
+  out=out.replace(latexCommand,(match,offset,whole)=>{
+    let end=offset+match.length;
+    while(end<whole.length && /\s/.test(whole[end])) end++;
+    if(whole[end]==="{") end=consumeBalanced(whole,end);
+    // Commands such as \frac{a}{b} and \binom{n}{r} have a second argument.
+    let second=end;
+    while(second<whole.length && /\s/.test(whole[second])) second++;
+    if(whole[second]==="{" && /\\(?:dfrac|tfrac|cfrac|frac|binom|overset|underset|root)\b/.test(match)) end=consumeBalanced(whole,second);
+    // Include a simple subscript/superscript attached to the command.
+    let suffix=end;
+    while(suffix<whole.length && (whole[suffix]==="^"||whole[suffix]==="_")){
+      suffix++;
+      while(suffix<whole.length && /\s/.test(whole[suffix])) suffix++;
+      if(whole[suffix]==="{") suffix=consumeBalanced(whole,suffix);
+      else if(suffix<whole.length) suffix++;
+      end=suffix;
+    }
+    const token=whole.slice(offset,end);
+    return `\\(${token}\\)`;
+  });
+
+  // 2) Wrap Unicode math symbols individually so words remain untouched.
+  // This also covers imported/OCR symbols such as √, ∑, ∞, ≤, ≥, α, β.
+  const unicodeMath=/[∑∏∐∫∬∭∮√∛∜∞≤≥≠≈≡∝±∓×÷·∂∇∈∉⊂⊆⊃⊇∪∩∅∀∃→←↔⇒⇔αβγδεζηθικλμνξοπρστυφχψωπ⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/g;
+  out=out.replace(unicodeMath,m=>`\\(${m}\\)`);
+
+  // 3) Wrap equation-like spans in prose. Keep the span tight around the
+  // mathematical expression so words such as "Therefore" remain normal text.
+  const equation=/\b(?:[A-Za-zα-ωΑ-Ωπθλμνξρστφχψω]\s*(?:\^|_)(?:\{[^{}]*\}|[A-Za-z0-9]+)|[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψωπ]+\s*(?:=|≠|≤|≥|≈|≡|∝)\s*[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψωπ+\-*/().^_{}]+)/g;
+  out=out.replace(equation,(match)=>`\\(${match}\\)`);
+
+  // 4) Protect accidental double wrapping caused by adjacent passes.
+  out=out.replace(/\\\(\s*\\\(([^]*?)\\\)\s*\\\)/g,"\\($1\\)");
+  return out;
 }
 
 function MathText({text,className=""}){
