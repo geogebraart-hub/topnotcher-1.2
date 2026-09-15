@@ -11,14 +11,31 @@ import {
 import { subscribeAccountState, saveAccountState, firestoreConfigured } from "./firebase";
 
 let mathJaxPromise=null;
+
+// V99 — stronger mathematical notation pipeline.
+// MathJax is loaded once and supports both explicit delimiters and common
+// bare LaTeX/Unicode equations that arrive from PDF extraction or manual input.
 function ensureMathJax(){
   if(typeof window === "undefined") return Promise.resolve(null);
   if(window.MathJax?.typesetPromise) return Promise.resolve(window.MathJax);
   if(mathJaxPromise) return mathJaxPromise;
   window.MathJax={
-    tex:{inlineMath:[["\\(","\\)"],["$","$"]],displayMath:[["\\[","\\]"],["$$","$$"]],processEscapes:true},
-    options:{skipHtmlTags:["script","noscript","style","textarea","pre","code"]},
-    svg:{fontCache:"global"}
+    tex:{
+      inlineMath:[["\\(","\\)"],["$","$"]],
+      displayMath:[["\\[","\\]"],["$$","$$"]],
+      processEscapes:true,
+      processEnvironments:true,
+      processRefs:true,
+      tags:"ams",
+      packages:{"[+]" : ["ams","newcommand","textmacros","mhchem"]}
+    },
+    options:{
+      skipHtmlTags:["script","noscript","style","textarea","pre","code"],
+      ignoreHtmlClass:"tex2jax_ignore",
+      processHtmlClass:"tex2jax_process"
+    },
+    loader:{load:["[tex]/ams","[tex]/newcommand","[tex]/textmacros","[tex]/mhchem"]},
+    svg:{fontCache:"global",scale:1,mtextInheritFont:true}
   };
   mathJaxPromise=new Promise((resolve,reject)=>{
     const script=document.createElement("script");
@@ -30,39 +47,63 @@ function ensureMathJax(){
   });
   return mathJaxPromise;
 }
+
 function hasMathExpression(value){
   const s=String(value??"").trim();
   if(!s) return false;
-  // Only invoke MathJax when the content contains explicit mathematical notation.
-  // Ordinary prose, dates, currency, and punctuation stay on the normal UI font.
-  const explicit = [
+  const explicit=[
     /\\\((?:.|\n)+?\\\)/,
     /\\\[(?:.|\n)+?\\\]/,
     /\$\$(?:.|\n)+?\$\$/,
-    /\\(?:frac|dfrac|tfrac|sqrt|sum|int|prod|lim|sin|cos|tan|log|ln|infty|alpha|beta|gamma|delta|theta|lambda|pi|times|div|leq|geq|neq|approx|pm)\b/,
-    /\b[A-Za-z]\s*(?:\^|_)\s*(?:\{[^}]+\}|[A-Za-z0-9]+)/,
-    /\b\d+\s*[+\-*=/]\s*\d+/,
-    /[∑∫√∞≤≥≠≈±×÷]/
+    /(^|[^\\])\$(?!\s)(?:.|\n)+?\$(?!\w)/,
+    /\\begin\s*\{(?:equation|equation\*|align|align\*|aligned|gather|gather\*|multline|multline\*|matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|cases)\}/,
+    /\\(?:frac|dfrac|tfrac|cfrac|sqrt|root|sum|prod|coprod|int|iint|iiint|oint|lim|limsup|liminf|sin|cos|tan|cot|sec|csc|log|ln|exp|det|gcd|binom|mathbf|mathbb|mathrm|text|operatorname|left|right|overline|underline|vec|hat|bar|tilde|dot|ddot|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|sigma|phi|varphi|omega|pi|infty|times|div|cdot|leq|geq|neq|approx|equiv|cong|propto|pm|mp|degree|forall|exists|in|notin|subset|subseteq|cup|cap|to|rightarrow|leftarrow|iff|therefore|because)\b/,
+    /\b[A-Za-z](?:\s*)[\^_](?:\s*(?:\{[^{}]*\}|[A-Za-z0-9]+))/,
+    /(?:[A-Za-z0-9)])\s*(?:=|≠|≤|≥|≈|≡|∝|<|>)\s*(?:[A-Za-z0-9(\\])/,
+    /\b\d+(?:\.\d+)?\s*(?:[+\-*/×÷±])\s*\d+(?:\.\d+)?\b/,
+    /[∑∏∐∫∬∭∮√∛∜∞≤≥≠≈≡∝±∓×÷·∂∇∈∉⊂⊆⊃⊇∪∩∅∀∃→←↔⇒⇔αβγδεζηθικλμνξοπρστυφχψωπ]/,
+    /[⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/
   ];
   return explicit.some(pattern=>pattern.test(s));
+}
+
+function prepareMathSource(value){
+  const s=String(value??"");
+  if(!hasMathExpression(s)) return s;
+  // Explicit TeX delimiters are already safe and should remain untouched.
+  if(/\\\(|\\\)|\\\[|\\\]|\$\$|(^|[^\\])\$(?!\s)/.test(s)) return s;
+
+  // Full mathematical expressions/equations are wrapped in inline math mode.
+  // This is especially useful for PDF/OCR output that contains bare LaTeX such
+  // as "\\frac{a}{b}", "x^2 + y^2 = z^2", or "\\begin{aligned}...".
+  const mathHeavy=/(\\begin\s*\{|\\(?:frac|dfrac|tfrac|cfrac|sqrt|sum|prod|int|iint|iiint|oint|lim|binom|mathbf|mathbb|mathrm|overline|underline|vec|hat|bar|tilde)\b)|(?:=|≠|≤|≥|≈|≡|∝|±|∓|×|÷|∑|∏|∫|√|∞)/;
+  const looksLikeMostlyMath=mathHeavy.test(s) || (/^[\s\dA-Za-zα-ωΑ-Ωπθλμνξρστφχψω+\-*/^_={}()[\].,|:;<>≤≥≠≈≡∝±∓×÷√∑∏∫\\]+$/.test(s) && /[0-9A-Za-zα-ωΑ-Ωπθλμνξχψω]/.test(s));
+  if(looksLikeMostlyMath) return `\\(${s}\\)`;
+
+  // For ordinary prose containing a short equation, only wrap the equation-like
+  // tail/piece rather than forcing the entire sentence into math italics.
+  const equation=/((?:[A-Za-zα-ωΑ-Ωπθλμνξρστφχψω]\s*(?:\^|_)(?:\{[^{}]+\}|[A-Za-z0-9]+))|(?:[A-Za-z0-9πθλμνξρστφχψω]+\s*(?:=|≠|≤|≥|≈|≡|∝)\s*[A-Za-z0-9πθλμνξρστφχψω+\-*/().]+))/g;
+  return s.replace(equation,match=>`\\(${match}\\)`);
 }
 
 function MathText({text,className=""}){
   const ref=useRef(null);
   const value=String(text??"");
-  const shouldRender=hasMathExpression(value);
+  const source=prepareMathSource(value);
+  const shouldRender=source!==value || hasMathExpression(value);
   useEffect(()=>{
     let alive=true;
     if(!ref.current) return;
-    ref.current.textContent=value;
+    // textContent prevents imported/manual material from becoming HTML.
+    ref.current.textContent=source;
     if(shouldRender){
       ensureMathJax().then(m=>{
         if(alive&&m?.typesetPromise&&ref.current) m.typesetPromise([ref.current]).catch(()=>{});
       }).catch(()=>{});
     }
     return ()=>{alive=false;};
-  },[value,shouldRender]);
-  return <span ref={ref} className={`${shouldRender?"math-text ":""}${className}`.trim()}>{value}</span>;
+  },[source,shouldRender]);
+  return <span ref={ref} className={`${shouldRender?"math-text ":""}${className}`.trim()}>{source}</span>;
 }
 
 export function TopnotcherBrand({ compact = false }) {
@@ -2191,7 +2232,13 @@ function QuestionModal({close,save,initial,deckId,duringStudy=false}) {
           <textarea value={explanation} onChange={e=>setExplanation(e.target.value)} placeholder="Explain the answer. Mathematical equations and symbols are supported."/>
         </label>
         <div className="form-hint"><CheckCircle2 size={17}/> Select the letter beside the correct answer.</div>
-        <div className="math-support-hint"><b>Math:</b> Unicode (√, ≤, ≥, π, ∑, ∫, ±, ×, ÷) and LaTeX delimiters \\(…\\) / \\[…\\] are supported.</div>
+        <div className="math-support-hint"><b>Math:</b> Unicode symbols, fractions, roots, exponents, subscripts, Greek letters, equations, matrices, aligned equations, and LaTeX commands are supported. You can use \\(…\\), \\[…\\], $…$, $$…$$, or enter common LaTeX without delimiters.</div>
+        {(question.trim()||options.some(Boolean)||explanation.trim())&&<div className="math-live-preview">
+          <div className="math-live-preview-head"><b>Live Math Preview</b><span>What you enter here is rendered with MathJax.</span></div>
+          {question.trim()&&<div className="math-live-block"><span className="math-live-label">Question</span><MathText text={question}/></div>}
+          {options.some(Boolean)&&<div className="math-live-options">{options.map((o,i)=>o.trim()?<div key={i}><b>{String.fromCharCode(65+i)}.</b><MathText text={o}/></div>:null)}</div>}
+          {explanation.trim()&&<div className="math-live-block"><span className="math-live-label">Rationale / solution</span><MathText text={explanation}/></div>}
+        </div>}
         <div className="modal-foot question-editor-actions">
           <button type="button" className="secondary-btn" onClick={close}>Cancel</button>
           <button type="button" className="primary-btn" disabled={!question.trim()||options.some(o=>!o.trim())||!explanation.trim()} onClick={submit}><Save size={17}/>{duringStudy?"Save & Continue":(initial?"Save Question":"Add Question")}</button>
