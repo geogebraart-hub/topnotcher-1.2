@@ -48,6 +48,22 @@ function ensureMathJax(){
   return mathJaxPromise;
 }
 
+function normalizeLegacyMathNotation(value){
+  let s=String(value??"");
+  // Common OCR/PDF-export forms for combinations and fractions. These are
+  // normalized before MathJax parsing so legacy text such as _6C_4 and
+  // {6 svg 5}{2 svg 1} becomes real mathematical notation.
+  s=s.replace(/_\s*([A-Za-z0-9]+)\s*C\s*_\s*([A-Za-z0-9]+)/g,"\\binom{$1}{$2}");
+  s=s.replace(/\b([A-Za-z0-9]+)\s*C\s*([A-Za-z0-9]+)\b/g,(m,a,b)=>/^[0-9]+$/.test(a)&&/^[0-9]+$/.test(b)?`\\binom{${a}}{${b}}`:m);
+  s=s.replace(/(?<=\d)\s+svg\s+(?=\d)/gi," \\times ");
+  // Adjacent brace groups in a mathematical context are frequently an OCR
+  // representation of a fraction: {numerator}{denominator}.
+  if(/\\binom|[=≠≤≥≈≡∝]|\b\d+\s*[+\-*/×÷]\s*\d+/.test(s)){
+    s=s.replace(/\{([^{}]+)\}\s*\{([^{}]+)\}/g,"\\frac{$1}{$2}");
+  }
+  return s;
+}
+
 function hasMathExpression(value){
   const s=String(value??"").trim();
   if(!s) return false;
@@ -58,6 +74,8 @@ function hasMathExpression(value){
     /(^|[^\\])\$(?!\s)(?:.|\n)+?\$(?!\w)/,
     /\\begin\s*\{(?:equation|equation\*|align|align\*|aligned|gather|gather\*|multline|multline\*|matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|cases)\}/,
     /\\(?:frac|dfrac|tfrac|cfrac|sqrt|root|sum|prod|coprod|int|iint|iiint|oint|lim|limsup|liminf|sin|cos|tan|cot|sec|csc|log|ln|exp|det|gcd|binom|mathbf|mathbb|mathrm|text|operatorname|left|right|overline|underline|vec|hat|bar|tilde|dot|ddot|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|sigma|phi|varphi|omega|pi|infty|times|div|cdot|leq|geq|neq|approx|equiv|cong|propto|pm|mp|degree|forall|exists|in|notin|subset|subseteq|cup|cap|to|rightarrow|leftarrow|iff|therefore|because)\b/,
+    /_\s*[A-Za-z0-9]+\s*C\s*_\s*[A-Za-z0-9]+/,
+    /\\binom\s*\{[^{}]+\}\s*\{[^{}]+\}/,
     /\b[A-Za-z](?:\s*)[\^_](?:\s*(?:\{[^{}]*\}|[A-Za-z0-9]+))/,
     /(?:[A-Za-z0-9)])\s*(?:=|≠|≤|≥|≈|≡|∝|<|>)\s*(?:[A-Za-z0-9(\\])/,
     /\b\d+(?:\.\d+)?\s*(?:[+\-*/×÷±])\s*\d+(?:\.\d+)?\b/,
@@ -68,7 +86,7 @@ function hasMathExpression(value){
 }
 
 function prepareMathSource(value){
-  const s=String(value??"");
+  const s=normalizeLegacyMathNotation(value);
   if(!hasMathExpression(s)) return s;
   // Explicit TeX delimiters are already scoped correctly; never alter them.
   if(/\\\(|\\\)|\\\[|\\\]|\$\$|(^|[^\\])\$(?!\s)/.test(s)) return s;
