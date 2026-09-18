@@ -215,11 +215,20 @@ function accountStorageKey(authUser, key) {
   return `${key}::${accountId}`;
 }
 
-function mergeDurableState(localValue, remoteValue){
+function mergeDurableState(localValue, remoteValue, deletedIds=[]) {
+  const deleted = new Set((Array.isArray(deletedIds) ? deletedIds : []).map(String));
   if(Array.isArray(localValue) && Array.isArray(remoteValue)){
     const byId=new Map();
-    for(const item of remoteValue){const id=item&&item.id!==undefined?String(item.id):null;if(id===null)byId.set(Symbol(),item);else byId.set(id,item);}
-    for(const item of localValue){const id=item&&item.id!==undefined?String(item.id):null;if(id===null)byId.set(Symbol(),item);else if(!byId.has(id))byId.set(id,item);}
+    for(const item of remoteValue){
+      const id=item&&item.id!==undefined&&item.id!==null?String(item.id):null;
+      if(id===null) byId.set(Symbol(),item);
+      else if(!deleted.has(id)) byId.set(id,item);
+    }
+    for(const item of localValue){
+      const id=item&&item.id!==undefined&&item.id!==null?String(item.id):null;
+      if(id===null) byId.set(Symbol(),item);
+      else if(!deleted.has(id)) byId.set(id,item);
+    }
     return [...byId.values()];
   }
   if(localValue && remoteValue && typeof localValue==="object" && typeof remoteValue==="object") return {...remoteValue,...localValue};
@@ -239,6 +248,7 @@ function usePersistedState(key, initial, authUser=null) {
   const cloudReadyRef = useRef(false);
   const remoteUpdateRef = useRef(false);
   const dirtyRef = useRef(false);
+  const deletedIdsRef = useRef([]);
   const localUpdatedAtRef = useRef(Number(readLocalMeta().updatedAt || 0));
   const saveTimerRef = useRef(null);
   const valueRef = useRef(value);
@@ -247,27 +257,56 @@ function usePersistedState(key, initial, authUser=null) {
   const persistLocal = (next, updatedAt = Date.now()) => {
     try {
       localStorage.setItem(key, JSON.stringify(next));
-      localStorage.setItem(metaKey, JSON.stringify({updatedAt}));
+      localStorage.setItem(metaKey, JSON.stringify({updatedAt, deletedIds:deletedIdsRef.current.slice(-5000)}));
     } catch {}
+  };
+
+  const queueCloudSave = (forceNow=false) => {
+    if (!uid || !firestoreConfigured || !cloudReadyRef.current) return Promise.resolve();
+    const updatedAt = localUpdatedAtRef.current || Date.now();
+    const run = () => saveAccountState(uid, cloudKey, valueRef.current, updatedAt, deletedIdsRef.current.slice(-5000));
+    if(forceNow) return run();
+    clearTimeout(saveTimerRef.current);
+    return new Promise(resolve => {
+      saveTimerRef.current = setTimeout(() => {
+        run().then(resolve).catch(resolve);
+      }, 120);
+    });
   };
 
   const setValue = (next) => {
     const updatedAt = Date.now();
     localUpdatedAtRef.current = updatedAt;
     dirtyRef.current = true;
-    setValueState(prev => typeof next === "function" ? next(prev) : next);
+    setValueState(prev => {
+      const resolved = typeof next === "function" ? next(prev) : next;
+      // Detect intentional removals locally and persist them as tombstones.
+      // This is what lets us make the stronger guarantee: a stale tab/device
+      // cannot later bring a deliberately deleted question/deck/file back.
+      if(Array.isArray(prev) && Array.isArray(resolved)) {
+        const nextIds = new Set(resolved.filter(x=>x&&x.id!==undefined).map(x=>String(x.id)));
+        for(const item of prev) {
+          if(item&&item.id!==undefined && !nextIds.has(String(item.id))) {
+            const id=String(item.id);
+            if(!deletedIdsRef.current.includes(id)) deletedIdsRef.current.push(id);
+          }
+        }
+      }
+      persistLocal(resolved, updatedAt);
+      return resolved;
+    });
   };
 
   useEffect(() => {
-    // Local cache is always updated immediately. Cloud persistence is handled
-    // separately so a temporary Firestore outage never destroys the local copy.
     persistLocal(value, localUpdatedAtRef.current || Date.now());
   }, [key, value]);
 
   useEffect(() => {
     cloudReadyRef.current = false;
     dirtyRef.current = false;
-    localUpdatedAtRef.current = Number(readLocalMeta().updatedAt || 0);
+    const meta = readLocalMeta();
+    localUpdatedAtRef.current = Number(meta.updatedAt || 0);
+    deletedIdsRef.current = Array.isArray(meta.deletedIds) ? meta.deletedIds.map(String) : [];
     if (!uid || !firestoreConfigured) return () => {};
     let alive = true;
     const unsubscribe = subscribeAccountState(uid, cloudKey, (remoteValue, exists, remoteMeta={}) => {
@@ -275,21 +314,21 @@ function usePersistedState(key, initial, authUser=null) {
       const localMeta = readLocalMeta();
       const localTs = Math.max(localUpdatedAtRef.current, Number(localMeta.updatedAt || 0));
       const remoteTs = Number(remoteMeta?.clientUpdatedAt || 0);
+      const remoteDeleted = Array.isArray(remoteMeta?.deletedIds) ? remoteMeta.deletedIds.map(String) : [];
+      const combinedDeleted = [...new Set([...deletedIdsRef.current, ...remoteDeleted])];
+      deletedIdsRef.current = combinedDeleted.slice(-5000);
 
       if (exists && remoteValue !== undefined) {
-        // A write made locally before the first cloud snapshot must NEVER be
-        // overwritten by a stale snapshot. This was the main source of users
-        // seeing newly imported/generated questions disappear after reload.
         const remoteIsEmpty = Array.isArray(remoteValue) && remoteValue.length === 0;
         const localIsNonEmpty = Array.isArray(valueRef.current) && valueRef.current.length > 0;
         const localIsNewer = localTs > 0 && (remoteTs === 0 || localTs > remoteTs);
-        if (dirtyRef.current || (localIsNonEmpty && remoteIsEmpty) || localIsNewer) {
+        if (dirtyRef.current || (localIsNonEmpty && remoteIsEmpty && combinedDeleted.length===0) || localIsNewer) {
           cloudReadyRef.current = true;
-          const merged = mergeDurableState(valueRef.current, remoteValue);
+          const merged = mergeDurableState(valueRef.current, remoteValue, combinedDeleted);
           localUpdatedAtRef.current = Math.max(Date.now(), localTs, remoteTs);
           persistLocal(merged, localUpdatedAtRef.current);
           setValueState(merged);
-          saveAccountState(uid, cloudKey, merged, localUpdatedAtRef.current).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
+          saveAccountState(uid, cloudKey, merged, localUpdatedAtRef.current, combinedDeleted).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
           return;
         }
         remoteUpdateRef.current = true;
@@ -299,18 +338,15 @@ function usePersistedState(key, initial, authUser=null) {
         cloudReadyRef.current = true;
         queueMicrotask(() => { remoteUpdateRef.current = false; });
       } else {
-        // First-time account: promote the existing local cache to the cloud.
-        // This also protects users upgrading from older browser-only versions.
         cloudReadyRef.current = true;
         const promotedTs = Math.max(Date.now(), localTs);
-        saveAccountState(uid, cloudKey, valueRef.current, promotedTs).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
+        saveAccountState(uid, cloudKey, valueRef.current, promotedTs, combinedDeleted).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
       }
     }, err => {
-      // Keep local state alive during transient Firestore/network errors.
       console.warn("TOPNOTCHER cloud sync failed", err);
       cloudReadyRef.current = true;
     });
-    return () => { alive = false; unsubscribe?.(); cloudReadyRef.current = false; };
+    return () => { alive = false; unsubscribe?.(); cloudReadyRef.current = false; clearTimeout(saveTimerRef.current); };
   }, [uid, cloudKey]);
 
   useEffect(() => {
@@ -318,18 +354,16 @@ function usePersistedState(key, initial, authUser=null) {
     const updatedAt = localUpdatedAtRef.current || Date.now();
     clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(() => {
-      saveAccountState(uid, cloudKey, valueRef.current, updatedAt).then(() => {
+      saveAccountState(uid, cloudKey, valueRef.current, updatedAt, deletedIdsRef.current.slice(-5000)).then(() => {
         dirtyRef.current = false;
         try{localStorage.removeItem(`${key}::__pending`)}catch{}
       }).catch(err => {
-        try{localStorage.setItem(`${key}::__pending`,JSON.stringify({value:valueRef.current,updatedAt:updatedAt}))}catch{}
-        // Retry automatically while the user remains on the page. The local
-        // cache remains intact even if the browser goes offline.
-        console.warn("TOPNOTCHER cloud save failed; will retry", err);
+        try{localStorage.setItem(`${key}::__pending`,JSON.stringify({value:valueRef.current,updatedAt,deletedIds:deletedIdsRef.current.slice(-5000)}))}catch{}
+        console.warn("TOPNOTCHER cloud save failed; local copy retained and retry will continue.", err);
         dirtyRef.current = true;
         clearTimeout(saveTimerRef.current);
         saveTimerRef.current = setTimeout(() => {
-          saveAccountState(uid, cloudKey, valueRef.current, Date.now()).then(() => { dirtyRef.current = false; try{localStorage.removeItem(`${key}::__pending`)}catch{} }).catch(()=>{});
+          saveAccountState(uid, cloudKey, valueRef.current, Date.now(), deletedIdsRef.current.slice(-5000)).then(() => { dirtyRef.current = false; }).catch(()=>{});
         }, 5000);
       });
     }, 150);
@@ -339,7 +373,7 @@ function usePersistedState(key, initial, authUser=null) {
   useEffect(() => {
     const retry = () => {
       if (!uid || !firestoreConfigured || !cloudReadyRef.current) return;
-      saveAccountState(uid, cloudKey, valueRef.current, localUpdatedAtRef.current || Date.now()).then(() => { dirtyRef.current = false; }).catch(()=>{});
+      saveAccountState(uid, cloudKey, valueRef.current, localUpdatedAtRef.current || Date.now(), deletedIdsRef.current.slice(-5000)).then(() => { dirtyRef.current = false; }).catch(()=>{});
     };
     window.addEventListener("online", retry);
     return () => window.removeEventListener("online", retry);
