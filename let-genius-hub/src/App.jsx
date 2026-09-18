@@ -8,6 +8,7 @@ import {
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
   ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, KeyRound, Clock3, Copy, ExternalLink, Video, FileArchive, Download
 } from "lucide-react";
+import { subscribeAccountState, saveAccountState, firestoreConfigured } from "./firebase";
 
 let mathJaxPromise=null;
 
@@ -214,120 +215,51 @@ function accountStorageKey(authUser, key) {
   return `${key}::${accountId}`;
 }
 
-const APP_STATE_DB_NAME = "topnotcher-local-state-v2";
-const APP_STATE_DB_VERSION = 1;
-let appStateDbPromise = null;
-const appStateWriteQueues = new Map();
-
-function openAppStateDB(){
-  if(appStateDbPromise) return appStateDbPromise;
-  appStateDbPromise=new Promise((resolve,reject)=>{
-    if(typeof indexedDB === "undefined") return reject(new Error("IndexedDB is not available in this browser."));
-    const req=indexedDB.open(APP_STATE_DB_NAME,APP_STATE_DB_VERSION);
-    req.onupgradeneeded=()=>{
-      const db=req.result;
-      if(!db.objectStoreNames.contains("state")) db.createObjectStore("state",{keyPath:"key"});
-    };
-    req.onsuccess=()=>resolve(req.result);
-    req.onerror=()=>reject(req.error||new Error("Could not open local state storage."));
-  }).catch(err=>{appStateDbPromise=null;throw err;});
-  return appStateDbPromise;
-}
-
-async function readLocalState(key){
-  const db=await openAppStateDB();
-  try{
-    return await new Promise((resolve,reject)=>{
-      const tx=db.transaction("state","readonly");
-      const req=tx.objectStore("state").get(key);
-      req.onsuccess=()=>resolve(req.result?.value);
-      req.onerror=()=>reject(req.error||new Error("Could not read local state."));
-    });
-  }finally{ db.close(); appStateDbPromise=null; }
-}
-
-function writeLocalState(key,value){
-  const previous=appStateWriteQueues.get(key)||Promise.resolve();
-  const next=previous.catch(()=>{}).then(async()=>{
-    const db=await openAppStateDB();
-    try{
-      await new Promise((resolve,reject)=>{
-        const tx=db.transaction("state","readwrite");
-        tx.objectStore("state").put({key,value,savedAt:new Date().toISOString()});
-        tx.oncomplete=resolve;
-        tx.onerror=()=>reject(tx.error||new Error("Could not save local state."));
-        tx.onabort=()=>reject(tx.error||new Error("Local state save was aborted."));
-      });
-    }finally{ db.close(); appStateDbPromise=null; }
-  });
-  appStateWriteQueues.set(key,next);
-  return next.finally(()=>{ if(appStateWriteQueues.get(key)===next) appStateWriteQueues.delete(key); });
-}
-
-function safeLocalStorageRead(key,initial){
-  try{
-    const raw=localStorage.getItem(key);
-    return raw==null ? initial : (JSON.parse(raw) ?? initial);
-  }catch{return initial;}
-}
-
-function safeLocalStorageWrite(key,value){
-  try{ localStorage.setItem(key,JSON.stringify(value)); return true; }
-  catch{return false;}
-}
-
-function requestPersistentLocalStorage(){
-  try{
-    if(navigator.storage?.persist) navigator.storage.persist().catch(()=>{});
-  }catch{}
-}
-
 function usePersistedState(key, initial, authUser=null) {
-  const [value,setValue]=useState(()=>safeLocalStorageRead(key,initial));
-  const hydratedKeyRef=useRef("");
-  const writeVersionRef=useRef(0);
+  const [value, setValue] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(key)) ?? initial; } catch { return initial; }
+  });
+  const cloudKey = String(key).split("::")[0];
+  const uid = authUser?.uid || "";
+  const cloudReadyRef = useRef(false);
+  const remoteUpdateRef = useRef(false);
 
-  useEffect(()=>{
-    requestPersistentLocalStorage();
-    let alive=true;
-    hydratedKeyRef.current="";
-    (async()=>{
-      try{
-        const stored=await readLocalState(key);
-        if(!alive) return;
-        if(stored!==undefined){
-          hydratedKeyRef.current=key;
-          setValue(stored);
-          safeLocalStorageWrite(key,stored);
-        }else{
-          hydratedKeyRef.current=key;
-          await writeLocalState(key,value);
-        }
-      }catch(err){
-        hydratedKeyRef.current=key;
-        console.warn("TOPNOTCHER local state read failed",err);
+  useEffect(() => {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+  }, [key, value]);
+
+  useEffect(() => {
+    cloudReadyRef.current = false;
+    if (!uid || !firestoreConfigured) return () => {};
+    let alive = true;
+    const unsubscribe = subscribeAccountState(uid, cloudKey, (remoteValue, exists) => {
+      if (!alive) return;
+      if (exists && remoteValue !== undefined) {
+        remoteUpdateRef.current = true;
+        setValue(remoteValue);
+        cloudReadyRef.current = true;
+        queueMicrotask(() => { remoteUpdateRef.current = false; });
+      } else {
+        cloudReadyRef.current = true;
+        saveAccountState(uid, cloudKey, value).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
       }
-    })();
-    return()=>{alive=false;};
-  },[key]);
+    }, err => console.warn("TOPNOTCHER cloud sync failed", err));
+    return () => { alive = false; unsubscribe?.(); cloudReadyRef.current = false; };
+  }, [uid, cloudKey]);
 
-  useEffect(()=>{
-    if(hydratedKeyRef.current!==key) return;
-    const version=++writeVersionRef.current;
-    safeLocalStorageWrite(key,value);
-    writeLocalState(key,value).catch(err=>console.error("TOPNOTCHER local save failed",err));
-    return()=>{void version;};
-  },[key,value]);
+  useEffect(() => {
+    if (!uid || !firestoreConfigured || !cloudReadyRef.current || remoteUpdateRef.current) return;
+    saveAccountState(uid, cloudKey, value).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
+  }, [uid, cloudKey, value]);
 
-  return [value,setValue];
+  return [value, setValue];
 }
 
-const MATERIAL_DB_NAME = "topnotcher-materials-v2";
-const MATERIAL_DB_VERSION = 1;
+const MATERIAL_DB_NAME = "topnotcher-materials-v1";
 function openMaterialDB(){
   return new Promise((resolve,reject)=>{
     if(typeof indexedDB === "undefined") return reject(new Error("IndexedDB is not available in this browser."));
-    const req=indexedDB.open(MATERIAL_DB_NAME,MATERIAL_DB_VERSION);
+    const req=indexedDB.open(MATERIAL_DB_NAME,1);
     req.onupgradeneeded=()=>{ const db=req.result; if(!db.objectStoreNames.contains("materials")) db.createObjectStore("materials",{keyPath:"id"}); };
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error||new Error("Could not open material storage."));
@@ -336,24 +268,8 @@ function openMaterialDB(){
 async function saveDeckMaterial({scope,deckId,type,file}){
   const db=await openMaterialDB();
   const item={id:`${scope}::${deckId}::${type}::${Date.now()}::${Math.random().toString(36).slice(2)}`,scope,deckId,type,name:file.name,size:file.size,mime:file.type||"application/octet-stream",createdAt:new Date().toISOString(),blob:file};
-  await new Promise((resolve,reject)=>{
-    const tx=db.transaction("materials","readwrite");
-    tx.objectStore("materials").put(item);
-    tx.oncomplete=resolve;
-    tx.onerror=()=>reject(tx.error||new Error("Could not save material. Your browser may be out of local storage space."));
-    tx.onabort=()=>reject(tx.error||new Error("The material save was aborted. Please try again."));
-  });
-  // Verify the write before reporting success to the UI. This prevents a file
-  // from appearing saved when the browser rejected or interrupted the write.
-  const saved=await new Promise((resolve,reject)=>{
-    const tx=db.transaction("materials","readonly");
-    const req=tx.objectStore("materials").get(item.id);
-    req.onsuccess=()=>resolve(req.result);
-    req.onerror=()=>reject(req.error||new Error("Could not verify material storage."));
-  });
+  await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");tx.objectStore("materials").put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not save material."));});
   db.close();
-  if(!saved?.blob) throw new Error("The material could not be verified in local storage. Please try uploading it again.");
-  requestPersistentLocalStorage();
   return item;
 }
 async function listAllMaterials(scope){
@@ -1756,7 +1672,7 @@ function MaterialsDashboard({scope,decks,onBackToDecks,onRequestAccess}) {
         </section>)}
       </div>}
     </section>
-    <div className="materials-note"><FileArchive size={17}/><span><b>Storage note:</b> This library displays the files already stored by TOPNOTCHER's material uploader. The current version stores questions, decks, progress, schedules, and uploaded file blobs in this browser's persistent local storage. No Firestore or cloud file storage is used. Data remains on this browser until the user explicitly deletes it or the browser/site data is cleared.</span></div>
+    <div className="materials-note"><FileArchive size={17}/><span><b>Storage note:</b> This library displays the files already stored by TOPNOTCHER's material uploader. The current uploader stores the actual file in this browser's local material storage; question/deck data can sync through your account, but the file blob itself is not yet cross-device cloud storage.</span></div>
   </div>;
 }
 
