@@ -8,7 +8,6 @@ import {
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
   ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, KeyRound, Clock3, Copy, ExternalLink, Video, FileArchive, Download
 } from "lucide-react";
-import { subscribeAccountState, saveAccountState, firestoreConfigured } from "./firebase";
 
 let mathJaxPromise=null;
 
@@ -50,51 +49,17 @@ function ensureMathJax(){
 
 function normalizeLegacyMathNotation(value){
   let s=String(value??"");
-
-  // Normalize common OCR/PDF-export math corruption BEFORE MathJax sees it.
-  // These inputs frequently contain braces that were meant to be TeX groups,
-  // but were exported without the required command (for example
-  // {3x^3}{4y^2} instead of \\frac{3x^3}{4y^2}).
-
-  // Combination notation: _nC_r / _6C_4 / n C r.
+  // Common OCR/PDF-export forms for combinations and fractions. These are
+  // normalized before MathJax parsing so legacy text such as _6C_4 and
+  // {6 svg 5}{2 svg 1} becomes real mathematical notation.
   s=s.replace(/_\s*([A-Za-z0-9]+)\s*C\s*_\s*([A-Za-z0-9]+)/g,"\\binom{$1}{$2}");
-  s=s.replace(/\b([A-Za-z0-9]+)\s*C\s*([A-Za-z0-9]+)\b/g,(m,a,b)=>
-    /^[0-9]+$/.test(a)&&/^[0-9]+$/.test(b)?`\\binom{${a}}{${b}}`:m
-  );
-
-  // OCR often turns a multiplication sign into the literal word "svg".
-  // Handle it in mathematical-looking contexts, including svg{a}{b} and
-  // {a} svg {b}; ordinary prose is left untouched.
-  const looksMath=/\\(?:left|right|frac|dfrac|tfrac|cfrac|binom)\b|[=≠≤≥≈≡∝]|\b\d+(?:\.\d+)?\s*[+\-*/×÷]\s*\d+(?:\.\d+)?|\^|_\s*[A-Za-z0-9{]/.test(s);
-  if(looksMath){
-    s=s.replace(/\bsvg\b/gi,"\\times");
-    s=s.replace(/(?<=\d)\s+svg\s+(?=\d)/gi," \\times ");
+  s=s.replace(/\b([A-Za-z0-9]+)\s*C\s*([A-Za-z0-9]+)\b/g,(m,a,b)=>/^[0-9]+$/.test(a)&&/^[0-9]+$/.test(b)?`\\binom{${a}}{${b}}`:m);
+  s=s.replace(/(?<=\d)\s+svg\s+(?=\d)/gi," \\times ");
+  // Adjacent brace groups in a mathematical context are frequently an OCR
+  // representation of a fraction: {numerator}{denominator}.
+  if(/\\binom|[=≠≤≥≈≡∝]|\b\d+\s*[+\-*/×÷]\s*\d+/.test(s)){
+    s=s.replace(/\{([^{}]+)\}\s*\{([^{}]+)\}/g,"\\frac{$1}{$2}");
   }
-
-  // Adjacent brace groups are a common OCR representation of a fraction:
-  // {numerator}{denominator}. Apply this when the surrounding string is
-  // clearly mathematical, including expressions wrapped by \\left(...\\right).
-  if(looksMath || /\\left\s*\(/.test(s)){
-    let previous="";
-    while(previous!==s){
-      previous=s;
-      s=s.replace(/(?<!\\frac)(?<!\\dfrac)(?<!\\tfrac)(?<!\\cfrac)(?<!\\binom)\{([^{}]+)\}\s*\{([^{}]+)\}/g,"\\frac{$1}{$2}");
-    }
-  }
-
-  // A few OCR exports place the multiplication token immediately before a
-  // brace group, e.g. svg{3}{4}. After the fraction conversion above, make
-  // sure the operator is retained as multiplication rather than plain text.
-  if(looksMath){
-    s=s.replace(/\\times\s*(?=\\frac\b)/g,"\\times ");
-  }
-
-  // PDF/OCR extraction can duplicate a unit inside braces, e.g.
-  // "hour{ hour}" or "min{ min}". These braces are not mathematical
-  // grouping and should never reach MathJax.
-  s=s.replace(/(\d)\s*(hour|hours|hr|hrs|minute|minutes|min|mins)\s*\{\s*\2\s*\}/gi,"$1$2");
-  s=s.replace(/\b(hour|hours|hr|hrs|minute|minutes|min|mins)\s*\{\s*\1\s*\}/gi,"$1");
-
   return s;
 }
 
@@ -122,112 +87,63 @@ function hasMathExpression(value){
 function prepareMathSource(value){
   const s=normalizeLegacyMathNotation(value);
   if(!hasMathExpression(s)) return s;
-  // Explicit TeX delimiters are already scoped correctly.
+  // Explicit TeX delimiters are already scoped correctly; never alter them.
   if(/\\\(|\\\)|\\\[|\\\]|\$\$|(^|[^\\])\$(?!\s)/.test(s)) return s;
 
-  let out="";
-  let i=0;
-  const commandNames=new Set([
-    "frac","dfrac","tfrac","cfrac","binom","sqrt","root","overset","underset",
-    "overline","underline","vec","hat","bar","tilde","dot","ddot","mathbf","mathbb",
-    "mathrm","operatorname","text","sum","prod","coprod","int","iint","iiint","oint",
-    "limsup","liminf","lim","sin","cos","tan","cot","sec","csc","log","ln","exp",
-    "det","gcd","alpha","beta","gamma","delta","epsilon","varepsilon","theta","vartheta",
-    "lambda","mu","nu","xi","pi","rho","sigma","tau","phi","varphi","chi","psi","omega",
-    "infty","times","div","cdot","leq","geq","neq","approx","equiv","cong","propto","pm","mp",
-    "degree","forall","exists","in","notin","subseteq","subset","supseteq","supset","cup","cap",
-    "to","rightarrow","leftarrow","iff","therefore","because"
-  ]);
+  // IMPORTANT: keep ordinary prose as ordinary text. Only the actual
+  // mathematical token/equation is wrapped in MathJax delimiters. This avoids
+  // turning a whole rationale sentence into math italics when it contains
+  // something such as "Notice that 100 = 10^2 and 121 = 11^2."
+  let out=s;
 
+  // 1) Bare LaTeX commands with their immediate arguments, e.g. \sqrt{100},
+  // \frac{a}{b}, \sum_{i=1}^{n}, \alpha, \leq. Consume only the command's
+  // math expression rather than the surrounding sentence.
+  const latexCommand=/\\(?:dfrac|tfrac|cfrac|frac|sqrt|root|binom|overset|underset|overline|underline|vec|hat|bar|tilde|dot|ddot|mathbf|mathbb|mathrm|operatorname|text|sum|prod|coprod|int|iint|iiint|oint|limsup|liminf|lim|sin|cos|tan|cot|sec|csc|log|ln|exp|det|gcd|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|chi|psi|omega|infty|times|div|cdot|leq|geq|neq|approx|equiv|cong|propto|pm|mp|degree|forall|exists|in|notin|subseteq|subset|supseteq|supset|cup|cap|to|rightarrow|leftarrow|iff|therefore|because)\b/g;
   const consumeBalanced=(text,from)=>{
     if(text[from]!=="{") return from;
     let depth=0;
-    for(let j=from;j<text.length;j++){
-      if(text[j]==="{") depth++;
-      else if(text[j]==="}"){
+    for(let i=from;i<text.length;i++){
+      if(text[i]==="{") depth++;
+      else if(text[i]==="}"){
         depth--;
-        if(depth===0) return j+1;
+        if(depth===0) return i+1;
       }
     }
     return text.length;
   };
-
-  const consumeCommand=(text,from)=>{
-    let j=from+1;
-    while(j<text.length && /[A-Za-z]/.test(text[j])) j++;
-    const name=text.slice(from+1,j);
-    if(!commandNames.has(name)) return null;
-    let end=j;
-    while(end<text.length && /\s/.test(text[end])) end++;
-
-    // Consume required braced arguments. Commands with two arguments need
-    // both; single-argument commands consume one. Sub/superscripts attached
-    // to a command are also included.
-    const twoArg=new Set(["frac","dfrac","tfrac","cfrac","binom","overset","underset","root"]);
-    const first=consumeBalanced(text,end);
-    if(first!==end) {
-      end=first;
-      if(twoArg.has(name)){
-        while(end<text.length && /\s/.test(text[end])) end++;
-        const second=consumeBalanced(text,end);
-        if(second!==end) end=second;
-      }
+  out=out.replace(latexCommand,(match,offset,whole)=>{
+    let end=offset+match.length;
+    while(end<whole.length && /\s/.test(whole[end])) end++;
+    if(whole[end]==="{") end=consumeBalanced(whole,end);
+    // Commands such as \frac{a}{b} and \binom{n}{r} have a second argument.
+    let second=end;
+    while(second<whole.length && /\s/.test(whole[second])) second++;
+    if(whole[second]==="{" && /\\(?:dfrac|tfrac|cfrac|frac|binom|overset|underset|root)\b/.test(match)) end=consumeBalanced(whole,second);
+    // Include a simple subscript/superscript attached to the command.
+    let suffix=end;
+    while(suffix<whole.length && (whole[suffix]==="^"||whole[suffix]==="_")){
+      suffix++;
+      while(suffix<whole.length && /\s/.test(whole[suffix])) suffix++;
+      if(whole[suffix]==="{") suffix=consumeBalanced(whole,suffix);
+      else if(suffix<whole.length) suffix++;
+      end=suffix;
     }
-    while(end<text.length && (text[end]==="^"||text[end]==="_")){
-      end++;
-      while(end<text.length && /\s/.test(text[end])) end++;
-      const next=consumeBalanced(text,end);
-      if(next!==end) end=next;
-      else if(end<text.length) end++;
-    }
-    return {end,token:text.slice(from,end)};
-  };
+    const token=whole.slice(offset,end);
+    return `\\(${token}\\)`;
+  });
 
-  while(i<s.length){
-    // Preserve any already-delimited math exactly as supplied.
-    if(s.startsWith("\\(",i)){
-      const end=s.indexOf("\\)",i+2);
-      if(end>=0){ out+=s.slice(i,end+2); i=end+2; continue; }
-    }
-    if(s.startsWith("\\[",i)){
-      const end=s.indexOf("\\]",i+2);
-      if(end>=0){ out+=s.slice(i,end+2); i=end+2; continue; }
-    }
+  // 2) Wrap Unicode math symbols individually so words remain untouched.
+  // This also covers imported/OCR symbols such as √, ∑, ∞, ≤, ≥, α, β.
+  const unicodeMath=/[∑∏∐∫∬∭∮√∛∜∞≤≥≠≈≡∝±∓×÷·∂∇∈∉⊂⊆⊃⊇∪∩∅∀∃→←↔⇒⇔αβγδεζηθικλμνξοπρστυφχψωπ⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/g;
+  out=out.replace(unicodeMath,m=>`\\(${m}\\)`);
 
-    // Complete \\left(...\\right) or \\left[...\\right] group.
-    if(s.startsWith("\\left",i)){
-      const m=s.slice(i).match(/^\\left\s*([\(\[])/);
-      if(m){
-        const close=m[1]==="("?"\\right)":"\\right]";
-        const end=s.indexOf(close,i+m[0].length);
-        if(end>=0){
-          out+=`\\(${s.slice(i,end+close.length)}\\)`;
-          i=end+close.length;
-          continue;
-        }
-      }
-    }
+  // 3) Wrap equation-like spans in prose. Keep the span tight around the
+  // mathematical expression so words such as "Therefore" remain normal text.
+  const equation=/\b(?:[A-Za-zα-ωΑ-Ωπθλμνξρστφχψω]\s*(?:\^|_)(?:\{[^{}]*\}|[A-Za-z0-9]+)|[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψωπ]+\s*(?:=|≠|≤|≥|≈|≡|∝)\s*[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψωπ+\-*/().^_{}]+)/g;
+  out=out.replace(equation,(match)=>`\\(${match}\\)`);
 
-    if(s[i]==="\\"){
-      const parsed=consumeCommand(s,i);
-      if(parsed){
-        out+=`\\(${parsed.token}\\)`;
-        i=parsed.end;
-        continue;
-      }
-    }
-    out+=s[i];
-    i++;
-  }
-
-  // Unicode math symbols remain scoped individually.
-  out=out.replace(/[∑∏∐∫∬∭∮√∛∜∞≤≥≠≈≡∝±∓×÷·∂∇∈∉⊂⊆⊃⊇∪∩∅∀∃→←↔⇒⇔αβγδεζηθικλμνξοπρστυφχψωπ⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/g,m=>`\\(${m}\\)`);
-
-  // Bare equations remain readable while surrounding prose stays normal.
-  const equation=/\b(?:[A-Za-z](?:\s*(?:\^|_)(?:\{[^{}]*\}|[A-Za-z0-9]+))?|[0-9]+(?:\.\d+)?)\s*(?:=|≠|≤|≥|≈|≡|∝)\s*[0-9A-Za-zα-ωΑ-Ωπθλμνξοπρστυφχψωπ+\-*/().^_!]+/g;
-  out=out.replace(equation,m=>`\\(${m}\\)`);
-
-  // Clean accidental nested delimiters introduced by adjacent passes.
+  // 4) Protect accidental double wrapping caused by adjacent passes.
   out=out.replace(/\\\(\s*\\\(([^]*?)\\\)\s*\\\)/g,"\\($1\\)");
   return out;
 }
@@ -298,51 +214,120 @@ function accountStorageKey(authUser, key) {
   return `${key}::${accountId}`;
 }
 
-function usePersistedState(key, initial, authUser=null) {
-  const [value, setValue] = useState(() => {
-    try { return JSON.parse(localStorage.getItem(key)) ?? initial; } catch { return initial; }
-  });
-  const cloudKey = String(key).split("::")[0];
-  const uid = authUser?.uid || "";
-  const cloudReadyRef = useRef(false);
-  const remoteUpdateRef = useRef(false);
+const APP_STATE_DB_NAME = "topnotcher-local-state-v2";
+const APP_STATE_DB_VERSION = 1;
+let appStateDbPromise = null;
+const appStateWriteQueues = new Map();
 
-  useEffect(() => {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-  }, [key, value]);
-
-  useEffect(() => {
-    cloudReadyRef.current = false;
-    if (!uid || !firestoreConfigured) return () => {};
-    let alive = true;
-    const unsubscribe = subscribeAccountState(uid, cloudKey, (remoteValue, exists) => {
-      if (!alive) return;
-      if (exists && remoteValue !== undefined) {
-        remoteUpdateRef.current = true;
-        setValue(remoteValue);
-        cloudReadyRef.current = true;
-        queueMicrotask(() => { remoteUpdateRef.current = false; });
-      } else {
-        cloudReadyRef.current = true;
-        saveAccountState(uid, cloudKey, value).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
-      }
-    }, err => console.warn("TOPNOTCHER cloud sync failed", err));
-    return () => { alive = false; unsubscribe?.(); cloudReadyRef.current = false; };
-  }, [uid, cloudKey]);
-
-  useEffect(() => {
-    if (!uid || !firestoreConfigured || !cloudReadyRef.current || remoteUpdateRef.current) return;
-    saveAccountState(uid, cloudKey, value).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
-  }, [uid, cloudKey, value]);
-
-  return [value, setValue];
+function openAppStateDB(){
+  if(appStateDbPromise) return appStateDbPromise;
+  appStateDbPromise=new Promise((resolve,reject)=>{
+    if(typeof indexedDB === "undefined") return reject(new Error("IndexedDB is not available in this browser."));
+    const req=indexedDB.open(APP_STATE_DB_NAME,APP_STATE_DB_VERSION);
+    req.onupgradeneeded=()=>{
+      const db=req.result;
+      if(!db.objectStoreNames.contains("state")) db.createObjectStore("state",{keyPath:"key"});
+    };
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error||new Error("Could not open local state storage."));
+  }).catch(err=>{appStateDbPromise=null;throw err;});
+  return appStateDbPromise;
 }
 
-const MATERIAL_DB_NAME = "topnotcher-materials-v1";
+async function readLocalState(key){
+  const db=await openAppStateDB();
+  try{
+    return await new Promise((resolve,reject)=>{
+      const tx=db.transaction("state","readonly");
+      const req=tx.objectStore("state").get(key);
+      req.onsuccess=()=>resolve(req.result?.value);
+      req.onerror=()=>reject(req.error||new Error("Could not read local state."));
+    });
+  }finally{ db.close(); appStateDbPromise=null; }
+}
+
+function writeLocalState(key,value){
+  const previous=appStateWriteQueues.get(key)||Promise.resolve();
+  const next=previous.catch(()=>{}).then(async()=>{
+    const db=await openAppStateDB();
+    try{
+      await new Promise((resolve,reject)=>{
+        const tx=db.transaction("state","readwrite");
+        tx.objectStore("state").put({key,value,savedAt:new Date().toISOString()});
+        tx.oncomplete=resolve;
+        tx.onerror=()=>reject(tx.error||new Error("Could not save local state."));
+        tx.onabort=()=>reject(tx.error||new Error("Local state save was aborted."));
+      });
+    }finally{ db.close(); appStateDbPromise=null; }
+  });
+  appStateWriteQueues.set(key,next);
+  return next.finally(()=>{ if(appStateWriteQueues.get(key)===next) appStateWriteQueues.delete(key); });
+}
+
+function safeLocalStorageRead(key,initial){
+  try{
+    const raw=localStorage.getItem(key);
+    return raw==null ? initial : (JSON.parse(raw) ?? initial);
+  }catch{return initial;}
+}
+
+function safeLocalStorageWrite(key,value){
+  try{ localStorage.setItem(key,JSON.stringify(value)); return true; }
+  catch{return false;}
+}
+
+function requestPersistentLocalStorage(){
+  try{
+    if(navigator.storage?.persist) navigator.storage.persist().catch(()=>{});
+  }catch{}
+}
+
+function usePersistedState(key, initial, authUser=null) {
+  const [value,setValue]=useState(()=>safeLocalStorageRead(key,initial));
+  const hydratedKeyRef=useRef("");
+  const writeVersionRef=useRef(0);
+
+  useEffect(()=>{
+    requestPersistentLocalStorage();
+    let alive=true;
+    hydratedKeyRef.current="";
+    (async()=>{
+      try{
+        const stored=await readLocalState(key);
+        if(!alive) return;
+        if(stored!==undefined){
+          hydratedKeyRef.current=key;
+          setValue(stored);
+          safeLocalStorageWrite(key,stored);
+        }else{
+          hydratedKeyRef.current=key;
+          await writeLocalState(key,value);
+        }
+      }catch(err){
+        hydratedKeyRef.current=key;
+        console.warn("TOPNOTCHER local state read failed",err);
+      }
+    })();
+    return()=>{alive=false;};
+  },[key]);
+
+  useEffect(()=>{
+    if(hydratedKeyRef.current!==key) return;
+    const version=++writeVersionRef.current;
+    safeLocalStorageWrite(key,value);
+    writeLocalState(key,value).catch(err=>console.error("TOPNOTCHER local save failed",err));
+    return()=>{void version;};
+  },[key,value]);
+
+  return [value,setValue];
+}
+
+const MATERIAL_DB_NAME = "topnotcher-materials-v2";
+const MATERIAL_DB_VERSION = 1;
 function openMaterialDB(){
   return new Promise((resolve,reject)=>{
     if(typeof indexedDB === "undefined") return reject(new Error("IndexedDB is not available in this browser."));
-    const req=indexedDB.open(MATERIAL_DB_NAME,1);
+    const req=indexedDB.open(MATERIAL_DB_NAME,MATERIAL_DB_VERSION);
     req.onupgradeneeded=()=>{ const db=req.result; if(!db.objectStoreNames.contains("materials")) db.createObjectStore("materials",{keyPath:"id"}); };
     req.onsuccess=()=>resolve(req.result);
     req.onerror=()=>reject(req.error||new Error("Could not open material storage."));
@@ -351,8 +336,24 @@ function openMaterialDB(){
 async function saveDeckMaterial({scope,deckId,type,file}){
   const db=await openMaterialDB();
   const item={id:`${scope}::${deckId}::${type}::${Date.now()}::${Math.random().toString(36).slice(2)}`,scope,deckId,type,name:file.name,size:file.size,mime:file.type||"application/octet-stream",createdAt:new Date().toISOString(),blob:file};
-  await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");tx.objectStore("materials").put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not save material."));});
+  await new Promise((resolve,reject)=>{
+    const tx=db.transaction("materials","readwrite");
+    tx.objectStore("materials").put(item);
+    tx.oncomplete=resolve;
+    tx.onerror=()=>reject(tx.error||new Error("Could not save material. Your browser may be out of local storage space."));
+    tx.onabort=()=>reject(tx.error||new Error("The material save was aborted. Please try again."));
+  });
+  // Verify the write before reporting success to the UI. This prevents a file
+  // from appearing saved when the browser rejected or interrupted the write.
+  const saved=await new Promise((resolve,reject)=>{
+    const tx=db.transaction("materials","readonly");
+    const req=tx.objectStore("materials").get(item.id);
+    req.onsuccess=()=>resolve(req.result);
+    req.onerror=()=>reject(req.error||new Error("Could not verify material storage."));
+  });
   db.close();
+  if(!saved?.blob) throw new Error("The material could not be verified in local storage. Please try uploading it again.");
+  requestPersistentLocalStorage();
   return item;
 }
 async function listAllMaterials(scope){
@@ -1755,7 +1756,7 @@ function MaterialsDashboard({scope,decks,onBackToDecks,onRequestAccess}) {
         </section>)}
       </div>}
     </section>
-    <div className="materials-note"><FileArchive size={17}/><span><b>Storage note:</b> This library displays the files already stored by TOPNOTCHER's material uploader. The current uploader stores the actual file in this browser's local material storage; question/deck data can sync through your account, but the file blob itself is not yet cross-device cloud storage.</span></div>
+    <div className="materials-note"><FileArchive size={17}/><span><b>Storage note:</b> This library displays the files already stored by TOPNOTCHER's material uploader. The current version stores questions, decks, progress, schedules, and uploaded file blobs in this browser's persistent local storage. No Firestore or cloud file storage is used. Data remains on this browser until the user explicitly deletes it or the browser/site data is cleared.</span></div>
   </div>;
 }
 
