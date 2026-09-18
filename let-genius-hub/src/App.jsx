@@ -8,7 +8,7 @@ import {
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
   ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, KeyRound, Clock3, Copy, ExternalLink, Video, FileArchive, Download
 } from "lucide-react";
-import { subscribeAccountState, saveAccountState, firestoreConfigured } from "./firebase";
+import { subscribeAccountState, saveAccountState, firestoreConfigured, uploadAccountMaterial, deleteAccountMaterial, getAccountState } from "./firebase";
 
 let mathJaxPromise=null;
 
@@ -215,45 +215,139 @@ function accountStorageKey(authUser, key) {
   return `${key}::${accountId}`;
 }
 
+function mergeDurableState(localValue, remoteValue){
+  if(Array.isArray(localValue) && Array.isArray(remoteValue)){
+    const byId=new Map();
+    for(const item of remoteValue){const id=item&&item.id!==undefined?String(item.id):null;if(id===null)byId.set(Symbol(),item);else byId.set(id,item);}
+    for(const item of localValue){const id=item&&item.id!==undefined?String(item.id):null;if(id===null)byId.set(Symbol(),item);else if(!byId.has(id))byId.set(id,item);}
+    return [...byId.values()];
+  }
+  if(localValue && remoteValue && typeof localValue==="object" && typeof remoteValue==="object") return {...remoteValue,...localValue};
+  return localValue;
+}
+
 function usePersistedState(key, initial, authUser=null) {
-  const [value, setValue] = useState(() => {
+  const metaKey = `${key}::__meta`;
+  const readLocalMeta = () => {
+    try { return JSON.parse(localStorage.getItem(metaKey) || "null") || {}; } catch { return {}; }
+  };
+  const [value, setValueState] = useState(() => {
     try { return JSON.parse(localStorage.getItem(key)) ?? initial; } catch { return initial; }
   });
   const cloudKey = String(key).split("::")[0];
   const uid = authUser?.uid || "";
   const cloudReadyRef = useRef(false);
   const remoteUpdateRef = useRef(false);
+  const dirtyRef = useRef(false);
+  const localUpdatedAtRef = useRef(Number(readLocalMeta().updatedAt || 0));
+  const saveTimerRef = useRef(null);
+  const valueRef = useRef(value);
+  valueRef.current = value;
+
+  const persistLocal = (next, updatedAt = Date.now()) => {
+    try {
+      localStorage.setItem(key, JSON.stringify(next));
+      localStorage.setItem(metaKey, JSON.stringify({updatedAt}));
+    } catch {}
+  };
+
+  const setValue = (next) => {
+    const updatedAt = Date.now();
+    localUpdatedAtRef.current = updatedAt;
+    dirtyRef.current = true;
+    setValueState(prev => typeof next === "function" ? next(prev) : next);
+  };
 
   useEffect(() => {
-    try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+    // Local cache is always updated immediately. Cloud persistence is handled
+    // separately so a temporary Firestore outage never destroys the local copy.
+    persistLocal(value, localUpdatedAtRef.current || Date.now());
   }, [key, value]);
 
   useEffect(() => {
     cloudReadyRef.current = false;
+    dirtyRef.current = false;
+    localUpdatedAtRef.current = Number(readLocalMeta().updatedAt || 0);
     if (!uid || !firestoreConfigured) return () => {};
     let alive = true;
-    const unsubscribe = subscribeAccountState(uid, cloudKey, (remoteValue, exists) => {
+    const unsubscribe = subscribeAccountState(uid, cloudKey, (remoteValue, exists, remoteMeta={}) => {
       if (!alive) return;
+      const localMeta = readLocalMeta();
+      const localTs = Math.max(localUpdatedAtRef.current, Number(localMeta.updatedAt || 0));
+      const remoteTs = Number(remoteMeta?.clientUpdatedAt || 0);
+
       if (exists && remoteValue !== undefined) {
+        // A write made locally before the first cloud snapshot must NEVER be
+        // overwritten by a stale snapshot. This was the main source of users
+        // seeing newly imported/generated questions disappear after reload.
+        const remoteIsEmpty = Array.isArray(remoteValue) && remoteValue.length === 0;
+        const localIsNonEmpty = Array.isArray(valueRef.current) && valueRef.current.length > 0;
+        const localIsNewer = localTs > 0 && (remoteTs === 0 || localTs > remoteTs);
+        if (dirtyRef.current || (localIsNonEmpty && remoteIsEmpty) || localIsNewer) {
+          cloudReadyRef.current = true;
+          const merged = mergeDurableState(valueRef.current, remoteValue);
+          localUpdatedAtRef.current = Math.max(Date.now(), localTs, remoteTs);
+          persistLocal(merged, localUpdatedAtRef.current);
+          setValueState(merged);
+          saveAccountState(uid, cloudKey, merged, localUpdatedAtRef.current).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
+          return;
+        }
         remoteUpdateRef.current = true;
-        setValue(remoteValue);
+        localUpdatedAtRef.current = remoteTs || Date.now();
+        persistLocal(remoteValue, localUpdatedAtRef.current);
+        setValueState(remoteValue);
         cloudReadyRef.current = true;
         queueMicrotask(() => { remoteUpdateRef.current = false; });
       } else {
+        // First-time account: promote the existing local cache to the cloud.
+        // This also protects users upgrading from older browser-only versions.
         cloudReadyRef.current = true;
-        saveAccountState(uid, cloudKey, value).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
+        const promotedTs = Math.max(Date.now(), localTs);
+        saveAccountState(uid, cloudKey, valueRef.current, promotedTs).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
       }
-    }, err => console.warn("TOPNOTCHER cloud sync failed", err));
+    }, err => {
+      // Keep local state alive during transient Firestore/network errors.
+      console.warn("TOPNOTCHER cloud sync failed", err);
+      cloudReadyRef.current = true;
+    });
     return () => { alive = false; unsubscribe?.(); cloudReadyRef.current = false; };
   }, [uid, cloudKey]);
 
   useEffect(() => {
     if (!uid || !firestoreConfigured || !cloudReadyRef.current || remoteUpdateRef.current) return;
-    saveAccountState(uid, cloudKey, value).catch(err => console.warn("TOPNOTCHER cloud save failed", err));
+    const updatedAt = localUpdatedAtRef.current || Date.now();
+    clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveAccountState(uid, cloudKey, valueRef.current, updatedAt).then(() => {
+        dirtyRef.current = false;
+        try{localStorage.removeItem(`${key}::__pending`)}catch{}
+      }).catch(err => {
+        try{localStorage.setItem(`${key}::__pending`,JSON.stringify({value:valueRef.current,updatedAt:updatedAt}))}catch{}
+        // Retry automatically while the user remains on the page. The local
+        // cache remains intact even if the browser goes offline.
+        console.warn("TOPNOTCHER cloud save failed; will retry", err);
+        dirtyRef.current = true;
+        clearTimeout(saveTimerRef.current);
+        saveTimerRef.current = setTimeout(() => {
+          saveAccountState(uid, cloudKey, valueRef.current, Date.now()).then(() => { dirtyRef.current = false; try{localStorage.removeItem(`${key}::__pending`)}catch{} }).catch(()=>{});
+        }, 5000);
+      });
+    }, 150);
+    return () => clearTimeout(saveTimerRef.current);
+  }, [uid, cloudKey, value]);
+
+  useEffect(() => {
+    const retry = () => {
+      if (!uid || !firestoreConfigured || !cloudReadyRef.current) return;
+      saveAccountState(uid, cloudKey, valueRef.current, localUpdatedAtRef.current || Date.now()).then(() => { dirtyRef.current = false; }).catch(()=>{});
+    };
+    window.addEventListener("online", retry);
+    return () => window.removeEventListener("online", retry);
   }, [uid, cloudKey, value]);
 
   return [value, setValue];
 }
+
 
 const MATERIAL_DB_NAME = "topnotcher-materials-v1";
 function openMaterialDB(){
@@ -265,29 +359,106 @@ function openMaterialDB(){
     req.onerror=()=>reject(req.error||new Error("Could not open material storage."));
   });
 }
-async function saveDeckMaterial({scope,deckId,type,file}){
+async function saveLocalMaterial(item){
   const db=await openMaterialDB();
-  const item={id:`${scope}::${deckId}::${type}::${Date.now()}::${Math.random().toString(36).slice(2)}`,scope,deckId,type,name:file.name,size:file.size,mime:file.type||"application/octet-stream",createdAt:new Date().toISOString(),blob:file};
-  await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");tx.objectStore("materials").put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not save material."));});
+  await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");tx.objectStore("materials").put(item);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not save material locally."));});
   db.close();
-  return item;
 }
-async function listAllMaterials(scope){
+async function listLocalMaterials(scope){
   const db=await openMaterialDB();
   const rows=await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readonly");const req=tx.objectStore("materials").getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
   db.close();
   return rows.filter(x=>x.scope===scope).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
 }
-async function listDeckMaterials(scope,deckId,type){
+async function listLocalMaterialsForId(id){
   const db=await openMaterialDB();
   const rows=await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readonly");const req=tx.objectStore("materials").getAll();req.onsuccess=()=>resolve(req.result||[]);req.onerror=()=>reject(req.error);});
   db.close();
-  return rows.filter(x=>x.scope===scope && String(x.deckId)===String(deckId) && x.type===type).sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+  return rows.filter(x=>String(x.id)===String(id));
 }
-async function deleteDeckMaterial(id){
+
+async function deleteLocalMaterial(id){
   const db=await openMaterialDB();
-  await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");tx.objectStore("materials").delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not delete material."));});
+  await new Promise((resolve,reject)=>{const tx=db.transaction("materials","readwrite");tx.objectStore("materials").delete(id);tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error||new Error("Could not delete material locally."));});
   db.close();
+}
+
+async function saveDeckMaterial({scope,deckId,type,file,uid}){
+  const id=`${scope}::${deckId}::${type}::${Date.now()}::${Math.random().toString(36).slice(2)}`;
+  const item={id,scope,deckId,type,name:file.name,size:file.size,mime:file.type||"application/octet-stream",createdAt:new Date().toISOString(),blob:file,cloudStatus:"pending"};
+  // Always commit a local copy first. This is the immediate recovery layer.
+  await saveLocalMaterial(item);
+  if(!uid) throw new Error("Please sign in before saving study materials.");
+  
+  let cloud=null;
+  try {
+    cloud=await uploadAccountMaterial(uid,id,file);
+    const saved={...item,blob:file,storagePath:cloud.path,downloadURL:cloud.downloadURL,cloudStatus:"saved"};
+    await saveLocalMaterial(saved);
+    const current=await listLocalMaterials(scope);
+    const remote=await getAccountState(uid,"lgh-materials");
+    const deletedState=await getAccountState(uid,"lgh-material-deletions");
+    const deleted=new Set(Array.isArray(deletedState.value)?deletedState.value.map(String):[]);
+    const byId=new Map((Array.isArray(remote.value)?remote.value:[]).filter(x=>!deleted.has(String(x.id))).map(x=>[String(x.id),x]));
+    for(const row of current){const {blob,...meta}=row;if(!deleted.has(String(row.id)))byId.set(String(row.id),meta);}
+    await saveAccountState(uid,"lgh-materials",[...byId.values()],Date.now());
+    return saved;
+  } catch(err){
+    // Do not silently report a cloud save as complete. Keep the local copy and
+    // mark it pending so a later retry can upload it.
+    const pending={...item,cloudStatus:"pending",cloudError:String(err?.message||err),...(cloud?{storagePath:cloud.path,downloadURL:cloud.downloadURL}: {})};
+    await saveLocalMaterial(pending);
+    throw new Error("The material was saved on this device, but cloud saving did not complete. Keep this page open and retry the upload when online.");
+  }
+}
+
+async function listAllMaterials(scope,uid){
+  const local=await listLocalMaterials(scope);
+  if(!uid) return local;
+  try{
+    const remote=await getAccountState(uid,"lgh-materials");
+    const deletedState=await getAccountState(uid,"lgh-material-deletions");
+    const deleted=new Set(Array.isArray(deletedState.value)?deletedState.value.map(String):[]);
+    const remoteRows=(Array.isArray(remote.value)?remote.value:[]).filter(x=>!deleted.has(String(x.id)));
+    let localRows=(await listLocalMaterials(scope)).filter(x=>!deleted.has(String(x.id)));
+    for(const item of localRows.filter(x=>!x.storagePath&&x.blob)){
+      try{const cloud=await uploadAccountMaterial(uid,item.id,item.blob);await saveLocalMaterial({...item,storagePath:cloud.path,downloadURL:cloud.downloadURL,cloudStatus:"saved"});}
+      catch(err){console.warn("TOPNOTCHER local material migration failed",err);}
+    }
+    localRows=(await listLocalMaterials(scope)).filter(x=>!deleted.has(String(x.id)));
+    const localById=new Map(localRows.map(x=>[String(x.id),x]));
+    const byId=new Map(remoteRows.map(x=>[String(x.id),x]));
+    for(const item of localRows){if(!byId.has(String(item.id))&&item.storagePath){const {blob,...meta}=item;byId.set(String(item.id),meta);}}
+    const merged=[...byId.values()].map(meta=>{const localItem=localById.get(String(meta.id));return localItem?{...meta,blob:localItem.blob}:meta;});
+    await saveAccountState(uid,"lgh-materials",merged.map(({blob,...rest})=>rest),Math.max(Date.now(),Number(remote.clientUpdatedAt||0)));
+    return merged.sort((a,b)=>String(b.createdAt).localeCompare(String(a.createdAt)));
+  }catch(err){console.warn("TOPNOTCHER cloud material metadata unavailable; using local recovery copy.",err);return local;}
+}
+async function listDeckMaterials(scope,deckId,type,uid){
+  const rows=await listAllMaterials(scope,uid);
+  return rows.filter(x=>String(x.deckId)===String(deckId)&&x.type===type);
+}
+async function deleteDeckMaterial(id,uid){
+  const local=await listLocalMaterialsForId(id);
+  const localItem=local.find(x=>x.id===id);
+  let remoteItem=null;
+  if(uid){
+    const remote=await getAccountState(uid,"lgh-materials");
+    remoteItem=(Array.isArray(remote.value)?remote.value:[]).find(x=>String(x.id)===String(id))||null;
+    if((remoteItem?.storagePath||localItem?.storagePath)){
+      try{await deleteAccountMaterial(remoteItem?.storagePath||localItem?.storagePath);}catch(err){throw new Error("The cloud copy could not be deleted, so the material was not removed.");}
+    }
+  }
+  await deleteLocalMaterial(id);
+  if(uid){
+    const remote=await getAccountState(uid,"lgh-materials");
+    const metadata=(Array.isArray(remote.value)?remote.value:[]).filter(x=>String(x.id)!==String(id));
+    await saveAccountState(uid,"lgh-materials",metadata,Date.now());
+    const deletedState=await getAccountState(uid,"lgh-material-deletions");
+    const deleted=Array.isArray(deletedState.value)?deletedState.value.map(String):[];
+    if(!deleted.includes(String(id)))deleted.push(String(id));
+    await saveAccountState(uid,"lgh-material-deletions",deleted.slice(-2000),Date.now());
+  }
 }
 
 
@@ -610,7 +781,8 @@ function App({ authUser, onSignOut }) {
     if (!deck) return;
     if (!deck.passwordHash || unlockedDeckIds[String(deck.id)]) {
       if (item) {
-        const url=URL.createObjectURL(item.blob);
+        const url=item.downloadURL || (item.blob ? URL.createObjectURL(item.blob) : "");
+        if (!url) return;
         if (String(item.mime||"").startsWith("video/") || /\.(mp4|webm|mov|m4v)$/i.test(item.name||"")) window.open(url,"_blank","noopener,noreferrer");
         else { const a=document.createElement("a"); a.href=url; a.download=item.name||"material"; document.body.appendChild(a); a.click(); a.remove(); }
         setTimeout(()=>URL.revokeObjectURL(url),30000);
@@ -890,11 +1062,11 @@ function App({ authUser, onSignOut }) {
         return updated;
       })}/>} 
 
-      {page==="materials" && <MaterialsDashboard scope={accountStorageKey(authUser,"lgh-materials")} decks={decks} onBackToDecks={()=>setPage("decks")} onRequestAccess={requestMaterialAccess}/>}
+      {page==="materials" && <MaterialsDashboard scope={accountStorageKey(authUser,"lgh-materials")} uid={authUser?.uid} decks={decks} onBackToDecks={()=>setPage("decks")} onRequestAccess={requestMaterialAccess}/>}
 
       {showDeckModal && <DeckModal close={()=>{setShowDeckModal(false);setEditingDeck(null)}} save={saveDeck} initial={editingDeck} folders={folders}/>}
       {showFolderModal && <FolderModal close={()=>{setShowFolderModal(false);setEditingFolder(null)}} save={saveFolder} initial={editingFolder}/>} 
-      {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} materialScope={accountStorageKey(authUser,"lgh-materials")} onMaterialStored={()=>{}} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
+      {showAIModal && <AIQuestionModal questions={questions} deck={decks.find(d=>d.id===aiDeckId)} uid={authUser?.uid} materialScope={accountStorageKey(authUser,"lgh-materials")} onMaterialStored={()=>{}} close={()=>{setShowAIModal(false);setAiDeckId(null)}} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setShowAIModal(false);setAiDeckId(null)}}/>}
       {importQuestionsDeckId && <ImportQuestionsModal deck={decks.find(d=>d.id===importQuestionsDeckId)} existingQuestions={questions} close={()=>setImportQuestionsDeckId(null)} saveQuestions={items=>{setQuestions(qs=>[...qs,...items]);setImportQuestionsDeckId(null);}} />}
       {showQuestionModal && <QuestionModal close={()=>{setShowQuestionModal(false);setEditingQuestion(null);setQuestionDeckId(null);setEditingDuringStudy(false)}} save={saveQuestion} initial={editingQuestion} deckId={questionDeckId} duringStudy={editingDuringStudy}/>} 
       {showSessionModal && <SessionModal close={()=>{setShowSessionModal(false);setEditingSession(null)}} save={data=>{
@@ -909,7 +1081,7 @@ function App({ authUser, onSignOut }) {
         });
         setShowSessionModal(false);setEditingSession(null);
       }} initial={editingSession}/>} 
-      {materialViewer && <DeckMaterialsModal scope={accountStorageKey(authUser,"lgh-materials")} deckId={materialViewer.deckId} type={materialViewer.type} onClose={()=>setMaterialViewer(null)}/>}
+      {materialViewer && <DeckMaterialsModal scope={accountStorageKey(authUser,"lgh-materials")} uid={authUser?.uid} deckId={materialViewer.deckId} type={materialViewer.type} onClose={()=>setMaterialViewer(null)}/>}
       {drillSetup && <DrillCountModal setup={drillSetup} close={()=>setDrillSetup(null)} begin={beginDrill} decks={decks} questions={questions}/>}
       {showSettings && <SettingsModal close={()=>setShowSettings(false)} theme={theme} setTheme={setTheme} palette={palette} setPalette={setPalette} profile={profile} setProfile={setProfile} openProfile={()=>{setShowSettings(false);setPage("profile")}}/>} 
     </main>
@@ -1598,7 +1770,7 @@ function formatBytes(value){
   return `${(n/(1024*1024*1024)).toFixed(1)} GB`;
 }
 
-function MaterialsDashboard({scope,decks,onBackToDecks,onRequestAccess}) {
+function MaterialsDashboard({scope,decks,uid,onBackToDecks,onRequestAccess}) {
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
   const [filter,setFilter]=useState("all");
@@ -1607,11 +1779,11 @@ function MaterialsDashboard({scope,decks,onBackToDecks,onRequestAccess}) {
 
   const load=async()=>{
     setLoading(true);
-    try{ setItems(await listAllMaterials(scope)); }
+    try{ setItems(await listAllMaterials(scope,uid)); }
     catch(err){ console.error("Could not load material library",err); setItems([]); }
     finally{ setLoading(false); }
   };
-  useEffect(()=>{load();},[scope]);
+  useEffect(()=>{load();},[scope,uid]);
 
   const deckById=useMemo(()=>new Map((decks||[]).map(d=>[String(d.id),d])),[decks]);
   const getCategory=(item)=>{
@@ -1632,15 +1804,15 @@ function MaterialsDashboard({scope,decks,onBackToDecks,onRequestAccess}) {
   });
   const counts={pdf:items.filter(x=>kind(x)==="pdf").length,video:items.filter(x=>kind(x)==="video").length,document:items.filter(x=>kind(x)==="document").length};
   const openItem=(item)=>{
-    if(!item?.blob) return;
-    const url=URL.createObjectURL(item.blob);
+    if(!item?.blob && !item?.downloadURL) return;
+    const url=item.downloadURL || URL.createObjectURL(item.blob);
     if(kind(item)==="video") window.open(url,"_blank","noopener,noreferrer");
     else { const a=document.createElement("a"); a.href=url; a.download=item.name||"material"; document.body.appendChild(a); a.click(); a.remove(); }
     setTimeout(()=>URL.revokeObjectURL(url),30000);
   };
   const remove=async(item)=>{
     if(!confirm(`Delete ${item.name||"this material"}?`)) return;
-    try{ await deleteDeckMaterial(item.id); await load(); }
+    try{ await deleteDeckMaterial(item.id,uid); await load(); }
     catch(err){ alert("The material could not be deleted."); }
   };
   const folderGroups=["gened","profed","majorship"].map(cat=>({cat,label:categoryLabel[cat],items:filtered.filter(x=>getCategory(x)===cat)}));
@@ -1672,18 +1844,18 @@ function MaterialsDashboard({scope,decks,onBackToDecks,onRequestAccess}) {
         </section>)}
       </div>}
     </section>
-    <div className="materials-note"><FileArchive size={17}/><span><b>Storage note:</b> This library displays the files already stored by TOPNOTCHER's material uploader. The current uploader stores the actual file in this browser's local material storage; question/deck data can sync through your account, but the file blob itself is not yet cross-device cloud storage.</span></div>
+    <div className="materials-note"><FileArchive size={17}/><span><b>Storage note:</b> This library displays the files already stored by TOPNOTCHER's material uploader. Uploaded files are stored in the user account's Firebase Storage and their deck placement is synchronized through the account database. A local recovery copy is also retained when available.</span></div>
   </div>;
 }
 
-function DeckMaterialsModal({scope,deckId,type,onClose}) {
+function DeckMaterialsModal({scope,deckId,type,uid,onClose}) {
   const [items,setItems]=useState([]);
   const [busy,setBusy]=useState(false);
   const isVideo=type==="video";
   const title=isVideo?"Video Materials":"Study Materials";
   const subtitle=isVideo?"Upload video lessons and review them directly from this deck.":"PDF materials uploaded through AI Question Generator are saved here for later review.";
-  const reload=async()=>{try{setItems(await listDeckMaterials(scope,deckId,type));}catch(err){console.error(err);}};
-  useEffect(()=>{reload();},[scope,deckId,type]);
+  const reload=async()=>{try{setItems(await listDeckMaterials(scope,deckId,type,uid));}catch(err){console.error(err);}};
+  useEffect(()=>{reload();},[scope,deckId,type,uid]);
   const upload=async e=>{
     const files=[...(e.target.files||[])]; e.target.value="";
     if(!files.length) return;
@@ -1691,13 +1863,13 @@ function DeckMaterialsModal({scope,deckId,type,onClose}) {
     const invalid=files.find(f=>!allowed.test(f.name) && !(isVideo?String(f.type).startsWith("video/"):f.type==="application/pdf"));
     if(invalid){alert(isVideo?"Please upload an MP4, WebM, MOV, or M4V video.":"Study Materials accepts PDF files saved from the AI Question Generator.");return;}
     setBusy(true);
-    try{for(const file of files) await saveDeckMaterial({scope,deckId,type,file}); await reload();}
+    try{for(const file of files) await saveDeckMaterial({scope,deckId,type,file,uid}); await reload();}
     catch(err){alert(err?.message||"Could not save the material in this browser.");}
     finally{setBusy(false);}
   };
-  const remove=async id=>{if(!confirm("Delete this material from the deck?"))return;try{await deleteDeckMaterial(id);await reload();}catch(err){alert("Could not delete this material.");}};
-  const openFile=item=>{const url=URL.createObjectURL(item.blob);const a=document.createElement("a");a.href=url;a.download=item.name;a.target="_blank";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);};
-  return <div className="modal-backdrop"><div className="small-modal deck-materials-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">DECK MATERIALS</span><h2>{title}</h2><span className="muted">{subtitle}</span></div><button onClick={onClose}><X/></button></div><label className="material-upload-box"><input type="file" multiple accept={isVideo?"video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v":"application/pdf,.pdf"} onChange={upload}/><Upload size={22}/><b>{busy?"Saving…":`Upload ${isVideo?"Video":"PDF"}`}</b><span>{isVideo?"MP4, WebM, MOV, or M4V":"PDF files from AI Question Generator"}</span></label><div className="deck-material-list">{items.length?items.map(item=><div className="deck-material-item" key={item.id}><div className="deck-material-icon">{isVideo?<Video size={20}/>:<FileArchive size={20}/>}</div><div className="deck-material-info"><b>{item.name}</b><span>{(item.size/1024/1024).toFixed(2)} MB · {new Date(item.createdAt).toLocaleDateString()}</span>{isVideo&&<video className="deck-material-video" controls preload="metadata" src={URL.createObjectURL(item.blob)} />}</div><div className="deck-material-actions"><button className="secondary-btn compact" type="button" onClick={()=>openFile(item)}><Download size={15}/> Download</button><button className="danger-outline" type="button" onClick={()=>remove(item.id)}><Trash2 size={14}/> Delete</button></div></div>):<div className="empty"><FileArchive/><b>No {isVideo?"video":"study"} materials yet</b><span>{isVideo?"Upload video lessons for this deck.":"Upload a PDF through AI Question Generator and it will appear here automatically."}</span></div>}</div><div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button></div></div></div>;
+  const remove=async id=>{if(!confirm("Delete this material from the deck?"))return;try{await deleteDeckMaterial(id,uid);await reload();}catch(err){alert("Could not delete this material.");}};
+  const openFile=item=>{const url=item.downloadURL || (item.blob ? URL.createObjectURL(item.blob) : "");if(!url)return;const a=document.createElement("a");a.href=url;a.download=item.name;a.target="_blank";document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);};
+  return <div className="modal-backdrop"><div className="small-modal deck-materials-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">DECK MATERIALS</span><h2>{title}</h2><span className="muted">{subtitle}</span></div><button onClick={onClose}><X/></button></div><label className="material-upload-box"><input type="file" multiple accept={isVideo?"video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov,.m4v":"application/pdf,.pdf"} onChange={upload}/><Upload size={22}/><b>{busy?"Saving…":`Upload ${isVideo?"Video":"PDF"}`}</b><span>{isVideo?"MP4, WebM, MOV, or M4V":"PDF files from AI Question Generator"}</span></label><div className="deck-material-list">{items.length?items.map(item=><div className="deck-material-item" key={item.id}><div className="deck-material-icon">{isVideo?<Video size={20}/>:<FileArchive size={20}/>}</div><div className="deck-material-info"><b>{item.name}</b><span>{(item.size/1024/1024).toFixed(2)} MB · {new Date(item.createdAt).toLocaleDateString()}</span>{isVideo&&<video className="deck-material-video" controls preload="metadata" src={item.downloadURL || (item.blob ? URL.createObjectURL(item.blob) : "")} />}</div><div className="deck-material-actions"><button className="secondary-btn compact" type="button" onClick={()=>openFile(item)}><Download size={15}/> Download</button><button className="danger-outline" type="button" onClick={()=>remove(item.id)}><Trash2 size={14}/> Delete</button></div></div>):<div className="empty"><FileArchive/><b>No {isVideo?"video":"study"} materials yet</b><span>{isVideo?"Upload video lessons for this deck.":"Upload a PDF through AI Question Generator and it will appear here automatically."}</span></div>}</div><div className="modal-foot"><button className="secondary-btn" onClick={onClose}>Close</button></div></div></div>;
 }
 
 function DeckPasswordModal({deck,onCancel,onUnlocked,onPasswordReset}) {
@@ -1834,7 +2006,7 @@ function DeckModal({close,save,initial,folders=[]}) {
 function FolderModal({close,save,initial}) { const [name,setName]=useState(initial?.name||""); const [description,setDescription]=useState(initial?.description||""); return <div className="modal-backdrop"><div className="small-modal folder-modal"><div className="modal-head"><div><h2>{initial?"Edit Folder":"Create Study Folder"}</h2><span className="muted">Group related study decks together for easier access.</span></div><button onClick={close}><X/></button></div><label>Folder name<input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. LET 2026 Review"/></label><label>Description<textarea value={description} onChange={e=>setDescription(e.target.value)} placeholder="Optional folder description..."/></label><button className="primary-btn wide" disabled={!name.trim()} onClick={()=>save({id:initial?.id,name:name.trim(),description:description.trim()})}><Save size={17}/>{initial?"Save Changes":"Create Folder"}</button></div></div>; }
 
 
-function AIQuestionModal({questions=[],deck,close,saveQuestions,materialScope,onMaterialStored}) {
+function AIQuestionModal({questions=[],deck,close,saveQuestions,materialScope,uid,onMaterialStored}) {
   const [material,setMaterial]=useState("");
   const [sourceName,setSourceName]=useState("");
   const [count,setCount]=useState(50);
@@ -1877,10 +2049,12 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions,materialScope,on
         setError("");
         if(deck?.id && materialScope){
           try{
-            const saved=await saveDeckMaterial({scope:materialScope,deckId:deck.id,type:"study",file});
+            const saved=await saveDeckMaterial({scope:materialScope,deckId:deck.id,type:"study",file,uid});
             onMaterialStored?.(saved);
           }catch(storageError){
             console.warn("PDF was read successfully but could not be saved to Study Materials.",storageError);
+            setError(storageError?.message || "The PDF could not be securely saved to this account.");
+            return;
           }
         }
         return;
