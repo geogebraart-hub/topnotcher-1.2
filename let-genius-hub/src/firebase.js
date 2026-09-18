@@ -10,7 +10,7 @@ import {
   onAuthStateChanged,
   signOut
 } from "firebase/auth";
-import { getFirestore, doc, setDoc, getDoc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, doc, setDoc, getDoc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 const required = [
@@ -63,7 +63,19 @@ if (firebaseConfigured) {
     appId: firebaseConfig.VITE_FIREBASE_APP_ID
   });
   auth = getAuth(app);
-  db = getFirestore(app);
+  // Keep Firestore's client cache on disk. This is critical for TOPNOTCHER:
+  // writes made while a user is offline or immediately before a reload/close
+  // are retained and synchronized when connectivity returns. Multiple tabs
+  // share the same persistent cache where the browser supports it.
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() })
+    });
+  } catch {
+    // Another initialized Firestore instance or an older browser can make the
+    // persistent-cache initializer unavailable. Fall back to the normal client.
+    db = getFirestore(app);
+  }
   storage = getStorage(app);
   provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
@@ -259,12 +271,36 @@ export async function releaseAccountDevice(uid) {
   }
 }
 
+// Durable app-state synchronization. Array-based collections are merged by stable
+// item id inside a Firestore transaction so two tabs/devices cannot accidentally
+// overwrite each other's newly-created questions, decks, flashcards, sessions, etc.
+// Explicit deletions are stored as tombstones in the same document, so a stale
+// device cannot resurrect something the user deliberately deleted.
+function mergeDurableArray(remoteValue, incomingValue, deletedIds=[]) {
+  const remote = Array.isArray(remoteValue) ? remoteValue : [];
+  const incoming = Array.isArray(incomingValue) ? incomingValue : [];
+  const deleted = new Set((Array.isArray(deletedIds) ? deletedIds : []).map(String));
+  const byId = new Map();
+  const anonymous = [];
+  for (const item of remote) {
+    const id = item && item.id !== undefined && item.id !== null ? String(item.id) : null;
+    if (id === null) anonymous.push(item);
+    else if (!deleted.has(id)) byId.set(id, item);
+  }
+  for (const item of incoming) {
+    const id = item && item.id !== undefined && item.id !== null ? String(item.id) : null;
+    if (id === null) anonymous.push(item);
+    else if (!deleted.has(id)) byId.set(id, item);
+  }
+  return [...byId.values(), ...anonymous];
+}
+
 export async function getAccountState(uid, key) {
-  if (!db || !uid) return { exists:false, value:undefined, clientUpdatedAt:0 };
+  if (!db || !uid) return { exists:false, value:undefined, clientUpdatedAt:0, deletedIds:[] };
   const snap = await getDoc(doc(db, "accounts", uid, "appState", key));
-  if (!snap.exists()) return { exists:false, value:undefined, clientUpdatedAt:0 };
+  if (!snap.exists()) return { exists:false, value:undefined, clientUpdatedAt:0, deletedIds:[] };
   const data=snap.data() || {};
-  return { exists:true, value:data.value, clientUpdatedAt:Number(data.clientUpdatedAt || 0) };
+  return { exists:true, value:data.value, clientUpdatedAt:Number(data.clientUpdatedAt || 0), deletedIds:Array.isArray(data.deletedIds) ? data.deletedIds.map(String) : [] };
 }
 
 export function subscribeAccountState(uid, key, onValue, onError) {
@@ -272,14 +308,43 @@ export function subscribeAccountState(uid, key, onValue, onError) {
   const ref = doc(db, "accounts", uid, "appState", key);
   return onSnapshot(ref, snap => {
     const data=snap.exists() ? (snap.data() || {}) : {};
-    onValue(snap.exists() ? data.value : undefined, snap.exists(), {clientUpdatedAt:Number(data.clientUpdatedAt || 0)});
+    onValue(snap.exists() ? data.value : undefined, snap.exists(), {
+      clientUpdatedAt:Number(data.clientUpdatedAt || 0),
+      deletedIds:Array.isArray(data.deletedIds) ? data.deletedIds.map(String) : []
+    });
   }, onError);
 }
 
-export async function saveAccountState(uid, key, value, clientUpdatedAt=Date.now()) {
+export async function saveAccountState(uid, key, value, clientUpdatedAt=Date.now(), deletedIds=[]) {
   if (!db || !uid) return;
   const ref = doc(db, "accounts", uid, "appState", key);
-  await setDoc(ref, { value, clientUpdatedAt:Number(clientUpdatedAt)||Date.now(), updatedAt: serverTimestamp() }, { merge: true });
+  const incomingDeleted = Array.isArray(deletedIds) ? deletedIds.map(String) : [];
+  const payload = { value, deletedIds: incomingDeleted.slice(-5000), clientUpdatedAt:Number(clientUpdatedAt)||Date.now(), updatedAt: serverTimestamp() };
+  try {
+    await runTransaction(db, async transaction => {
+      const snap = await transaction.get(ref);
+      const existing = snap.exists() ? (snap.data() || {}) : {};
+      const existingDeleted = Array.isArray(existing.deletedIds) ? existing.deletedIds.map(String) : [];
+      const allDeleted = [...new Set([...existingDeleted, ...incomingDeleted])];
+      const hasArrayValue = Array.isArray(value) || Array.isArray(existing.value);
+      const nextValue = hasArrayValue
+        ? mergeDurableArray(existing.value, Array.isArray(value) ? value : [], allDeleted)
+        : value;
+      const ts = Math.max(Number(existing.clientUpdatedAt || 0), Number(clientUpdatedAt) || Date.now());
+      transaction.set(ref, {
+        value: nextValue,
+        deletedIds: allDeleted.slice(-5000),
+        clientUpdatedAt: ts,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+    });
+  } catch (transactionError) {
+    // Transactions cannot complete while the browser is offline. Do not lose
+    // the user's save: Firestore's persistent local cache queues this ordinary
+    // write and syncs it when the connection returns. The next online save
+    // transaction reconciles concurrent changes and tombstones.
+    await setDoc(ref, payload, { merge: true });
+  }
 }
 
 
