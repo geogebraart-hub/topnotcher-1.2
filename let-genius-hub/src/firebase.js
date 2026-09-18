@@ -10,7 +10,8 @@ import {
   onAuthStateChanged,
   signOut
 } from "firebase/auth";
-import { getFirestore, doc, setDoc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
+import { getFirestore, doc, setDoc, getDoc, onSnapshot, runTransaction, serverTimestamp } from "firebase/firestore";
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 
 const required = [
   "VITE_FIREBASE_API_KEY",
@@ -63,6 +64,7 @@ if (firebaseConfigured) {
   });
   auth = getAuth(app);
   db = getFirestore(app);
+  storage = getStorage(app);
   provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: "select_account" });
   setPersistence(auth, browserLocalPersistence).catch(console.error);
@@ -257,18 +259,46 @@ export async function releaseAccountDevice(uid) {
   }
 }
 
+export async function getAccountState(uid, key) {
+  if (!db || !uid) return { exists:false, value:undefined, clientUpdatedAt:0 };
+  const snap = await getDoc(doc(db, "accounts", uid, "appState", key));
+  if (!snap.exists()) return { exists:false, value:undefined, clientUpdatedAt:0 };
+  const data=snap.data() || {};
+  return { exists:true, value:data.value, clientUpdatedAt:Number(data.clientUpdatedAt || 0) };
+}
+
 export function subscribeAccountState(uid, key, onValue, onError) {
   if (!db || !uid) return () => {};
   const ref = doc(db, "accounts", uid, "appState", key);
   return onSnapshot(ref, snap => {
-    onValue(snap.exists() ? snap.data()?.value : undefined, snap.exists());
+    const data=snap.exists() ? (snap.data() || {}) : {};
+    onValue(snap.exists() ? data.value : undefined, snap.exists(), {clientUpdatedAt:Number(data.clientUpdatedAt || 0)});
   }, onError);
 }
 
-export async function saveAccountState(uid, key, value) {
+export async function saveAccountState(uid, key, value, clientUpdatedAt=Date.now()) {
   if (!db || !uid) return;
   const ref = doc(db, "accounts", uid, "appState", key);
-  await setDoc(ref, { value, updatedAt: serverTimestamp() }, { merge: true });
+  await setDoc(ref, { value, clientUpdatedAt:Number(clientUpdatedAt)||Date.now(), updatedAt: serverTimestamp() }, { merge: true });
+}
+
+
+
+export const firebaseStorageConfigured = Boolean(storage);
+
+export async function uploadAccountMaterial(uid, materialId, file) {
+  if (!storage || !uid) throw new Error("Cloud file storage is not configured.");
+  const safeName = String(file?.name || "material").replace(/[^a-zA-Z0-9._-]+/g, "_");
+  const path = `materials/${uid}/${materialId}-${safeName}`;
+  const ref = storageRef(storage, path);
+  const snapshot = await uploadBytes(ref, file, { contentType: file?.type || "application/octet-stream" });
+  const downloadURL = await getDownloadURL(snapshot.ref);
+  return { path, downloadURL };
+}
+
+export async function deleteAccountMaterial(path) {
+  if (!storage || !path) return;
+  await deleteObject(storageRef(storage, path));
 }
 
 export const firestoreConfigured = Boolean(db);
