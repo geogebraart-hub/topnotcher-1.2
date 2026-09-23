@@ -52,7 +52,6 @@ export function authorizedAccountDescription() {
 let auth = null;
 let provider = null;
 let db = null;
-let storage = null;
 
 if (firebaseConfigured) {
   const app = initializeApp({
