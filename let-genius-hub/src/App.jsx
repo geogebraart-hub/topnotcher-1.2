@@ -86,20 +86,32 @@ function hasMathExpression(value){
 }
 
 function prepareMathSource(value){
-  const s=normalizeLegacyMathNotation(value);
+  const original=String(value??"");
+  let s=normalizeLegacyMathNotation(original);
   if(!hasMathExpression(s)) return s;
-  // Explicit TeX delimiters are already scoped correctly; never alter them.
-  if(/\\\(|\\\)|\\\[|\\\]|\$\$|(^|[^\\])\$(?!\s)/.test(s)) return s;
 
-  // IMPORTANT: keep ordinary prose as ordinary text. Only the actual
-  // mathematical token/equation is wrapped in MathJax delimiters. This avoids
-  // turning a whole rationale sentence into math italics when it contains
-  // something such as "Notice that 100 = 10^2 and 121 = 11^2."
-  let out=s;
+  // MathJax must never be allowed to see a delimiter that a later regex pass
+  // can wrap again. The previous pipeline generated nested/overlapping math
+  // fragments (for example \overline{B} followed by \subseteq), which is what
+  // produced the duplicated glyphs and visually reversed/stacked numbers in
+  // Study Questions Now. Protect every math fragment while the remaining text
+  // is being scanned, then restore it once at the very end.
+  const protectedMath=[];
+  const protect=(fragment)=>{
+    const id=protectedMath.length;
+    protectedMath.push(fragment);
+    return `\uE000M${id}\uE001`;
+  };
 
-  // 1) Bare LaTeX commands with their immediate arguments, e.g. \sqrt{100},
-  // \frac{a}{b}, \sum_{i=1}^{n}, \alpha, \leq. Consume only the command's
-  // math expression rather than the surrounding sentence.
+  // 1) Protect explicit MathJax/LaTeX-delimited blocks first. They are already
+  // valid and must be passed through byte-for-byte (apart from legacy OCR
+  // normalization performed above).
+  const explicit=/(\\\([\\s\\S]*?\\\)|\\\[[\\s\\S]*?\\\]|\$\$[\\s\\S]*?\$\$|(^|[^\\])\$(?!\s)[\\s\\S]*?\$(?!\w))/g;
+  s=s.replace(explicit,(m)=>protect(m));
+
+  // 2) Protect bare LaTeX commands together with their immediate arguments.
+  // Crucially, the generated \(...\) is NOT fed back through the Unicode or
+  // equation regexes, so commands cannot become nested MathJax expressions.
   const latexCommand=/\\(?:dfrac|tfrac|cfrac|frac|sqrt|root|binom|overset|underset|overline|underline|vec|hat|bar|tilde|dot|ddot|mathbf|mathbb|mathrm|operatorname|text|sum|prod|coprod|int|iint|iiint|oint|limsup|liminf|lim|sin|cos|tan|cot|sec|csc|log|ln|exp|det|gcd|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|chi|psi|omega|infty|times|div|cdot|leq|geq|neq|approx|equiv|cong|propto|pm|mp|degree|forall|exists|in|notin|subseteq|subset|supseteq|supset|cup|cap|to|rightarrow|leftarrow|iff|therefore|because)\b/g;
   const consumeBalanced=(text,from)=>{
     if(text[from]!=="{") return from;
@@ -113,15 +125,13 @@ function prepareMathSource(value){
     }
     return text.length;
   };
-  out=out.replace(latexCommand,(match,offset,whole)=>{
+  s=s.replace(latexCommand,(match,offset,whole)=>{
     let end=offset+match.length;
     while(end<whole.length && /\s/.test(whole[end])) end++;
     if(whole[end]==="{") end=consumeBalanced(whole,end);
-    // Commands such as \frac{a}{b} and \binom{n}{r} have a second argument.
     let second=end;
     while(second<whole.length && /\s/.test(whole[second])) second++;
     if(whole[second]==="{" && /\\(?:dfrac|tfrac|cfrac|frac|binom|overset|underset|root)\b/.test(match)) end=consumeBalanced(whole,second);
-    // Include a simple subscript/superscript attached to the command.
     let suffix=end;
     while(suffix<whole.length && (whole[suffix]==="^"||whole[suffix]==="_")){
       suffix++;
@@ -130,23 +140,22 @@ function prepareMathSource(value){
       else if(suffix<whole.length) suffix++;
       end=suffix;
     }
-    const token=whole.slice(offset,end);
-    return `\\(${token}\\)`;
+    return protect(`\\(${whole.slice(offset,end)}\\)`);
   });
 
-  // 2) Wrap Unicode math symbols individually so words remain untouched.
-  // This also covers imported/OCR symbols such as √, ∑, ∞, ≤, ≥, α, β.
+  // 3) Protect compact bare equations containing Unicode operators. Keep the
+  // entire expression together instead of rendering each symbol independently.
+  const compactEquation=/\b[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψω]+(?:\s*(?:=|≠|≤|≥|≈|≡|∝|⊂|⊆|⊃|⊇|∪|∩|→|←|↔|⇒|⇔|\+|−|-|×|÷|\/|\*|\^|_)+\s*[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψω()[\]{}.,⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]+)+/g;
+  s=s.replace(compactEquation,m=>protect(`\\(${m}\\)`));
+
+  // 4) Unicode standalone math symbols are protected individually only when
+  // they were not already consumed by an equation above. This keeps symbols
+  // such as √, ∑, α and ⊆ clean without creating nested math fragments.
   const unicodeMath=/[∑∏∐∫∬∭∮√∛∜∞≤≥≠≈≡∝±∓×÷·∂∇∈∉⊂⊆⊃⊇∪∩∅∀∃→←↔⇒⇔αβγδεζηθικλμνξοπρστυφχψωπ⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/g;
-  out=out.replace(unicodeMath,m=>`\\(${m}\\)`);
+  s=s.replace(unicodeMath,m=>protect(`\\(${m}\\)`));
 
-  // 3) Wrap equation-like spans in prose. Keep the span tight around the
-  // mathematical expression so words such as "Therefore" remain normal text.
-  const equation=/\b(?:[A-Za-zα-ωΑ-Ωπθλμνξρστφχψω]\s*(?:\^|_)(?:\{[^{}]*\}|[A-Za-z0-9]+)|[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψωπ]+\s*(?:=|≠|≤|≥|≈|≡|∝)\s*[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψωπ+\-*/().^_{}]+)/g;
-  out=out.replace(equation,(match)=>`\\(${match}\\)`);
-
-  // 4) Protect accidental double wrapping caused by adjacent passes.
-  out=out.replace(/\\\(\s*\\\(([^]*?)\\\)\s*\\\)/g,"\\($1\\)");
-  return out;
+  // 5) Restore protected fragments exactly once.
+  return s.replace(/\uE000M(\d+)\uE001/g,(_,i)=>protectedMath[Number(i)]??"");
 }
 
 function MathText({text,className=""}){
