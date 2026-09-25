@@ -5648,3 +5648,52 @@ html,body{
 
 @media(max-width:700px){.paste-import-head{align-items:stretch;flex-direction:column}.paste-import-head .secondary-btn{width:100%}.import-mode-tabs button{padding:9px 8px}.paste-question-input{min-height:220px}}
 .import-duplicate-badge{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;background:#fff4d6;color:#8a5a00;border:1px solid #efd38b;font-size:10px;font-weight:800;white-space:nowrap}
+
+/* V102 MathJax rendering hardening — prevents duplicate/raw TeX from
+   appearing underneath the rendered equation in Study Questions Now. */
+.math-text{
+  display:inline-block!important;
+  max-width:100%!important;
+  min-width:0!important;
+  white-space:normal!important;
+  overflow-wrap:normal!important;
+  word-break:normal!important;
+  vertical-align:middle!important;
+  line-height:1.35!important;
+}
+.math-text > mjx-container,
+.math-text mjx-container{
+  display:inline-block!important;
+  max-width:100%!important;
+  margin:0!important;
+  padding:0!important;
+  vertical-align:middle!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+}
+.math-text mjx-container[display="true"]{
+  display:block!important;
+  width:max-content!important;
+  max-width:100%!important;
+  margin:.15em 0!important;
+}
+.math-text mjx-container svg{
+  max-width:100%!important;
+  height:auto!important;
+}
+.study-question-card .options button{
+  align-items:flex-start!important;
+  min-height:52px!important;
+  height:auto!important;
+  overflow:hidden!important;
+}
+.study-question-card .options button > .math-text{
+  flex:1 1 auto!important;
+  min-width:0!important;
+  width:0!important;
+  text-align:left!important;
+  overflow:visible!important;
+}
+.study-question-card .options button > .math-text mjx-container{
+  max-width:100%!important;
+}
