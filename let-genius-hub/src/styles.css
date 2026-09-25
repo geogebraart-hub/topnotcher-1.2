@@ -5623,20 +5623,28 @@ html,body{
   white-space:normal !important;
 }
 
-/* V102 — clipboard question import + resilient math option layout */
-.import-method-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin:12px 0 14px;}
-.import-method-row .secondary-btn.active{border-color:var(--primary);color:var(--primary);background:#f5f4ff;}
-.paste-question-panel{border:1px solid var(--line);border-radius:14px;background:var(--panel,#fff);padding:14px;margin:0 0 16px;}
-.paste-question-head{display:flex;flex-direction:column;gap:4px;margin-bottom:10px;}
-.paste-question-head span{font-size:12px;color:var(--muted);}
-.paste-question-panel textarea{width:100%;min-height:260px;resize:vertical;border:1px solid var(--line);border-radius:11px;padding:12px 13px;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;background:var(--input-bg,#fff);color:var(--text);}
-.paste-question-actions{display:flex;justify-content:flex-end;gap:9px;margin-top:10px;}
-.study-question-card .options button,.exam-options button{align-items:flex-start;min-width:0;}
-.study-question-card .options button .math-text,.exam-options button .math-text{flex:1;min-width:0;display:block;overflow-wrap:anywhere;word-break:normal;line-height:1.55;padding-top:2px;}
-.study-question-card .options button .math-text mjx-container,.exam-options button .math-text mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden;display:inline-block;vertical-align:middle;}
-.question-view-options>div{align-items:start;min-width:0;}
-.question-view-options>div .math-text{min-width:0;overflow-wrap:anywhere;}
-.question-view-options>div .math-text mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden;}
-.ai-options>div{align-items:flex-start;min-width:0;}
-.ai-options>div .math-text{min-width:0;overflow-wrap:anywhere;}
-.ai-options>div .math-text mjx-container{max-width:100%;overflow-x:auto;overflow-y:hidden;}
+/* Reliable clipboard question import */
+.import-mode-tabs{display:flex;gap:8px;margin:4px 0 14px;padding:4px;background:#f3f5f9;border:1px solid #e1e6ee;border-radius:12px}
+.import-mode-tabs button{flex:1;border:0;border-radius:9px;background:transparent;padding:10px 14px;font:inherit;font-weight:800;color:#64748b;cursor:pointer}
+.import-mode-tabs button.selected{background:#fff;color:var(--navy);box-shadow:0 2px 8px rgba(15,23,42,.08)}
+.paste-import-panel{border:1px solid #dce4ee;border-radius:13px;padding:14px;background:#fbfcfe;margin-bottom:14px}
+.paste-import-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+.paste-import-head>div{display:flex;flex-direction:column;gap:3px}
+.paste-import-head span{font-size:12px;color:#718096;line-height:1.45}
+.paste-question-input{display:block;width:100%;min-height:270px;box-sizing:border-box;resize:vertical;border:1px solid #cfd8e5;border-radius:10px;background:#fff;color:#17253a;padding:13px;font:13px/1.55 ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono",monospace;outline:none;white-space:pre-wrap;tab-size:2}
+.paste-question-input:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 12%,transparent)}
+.paste-import-note{display:flex;align-items:flex-start;gap:7px;margin-top:9px;color:#64748b;font-size:12px;line-height:1.45}
+.import-format-guide pre{white-space:pre-wrap;word-break:normal;overflow:auto}
+.import-options label{align-items:start}
+.import-options textarea{width:100%;min-height:42px;box-sizing:border-box;resize:vertical;border:1px solid #d9e1ea;border-radius:8px;background:#fff;color:#26364d;font:inherit;font-size:13px;line-height:1.45;padding:8px 10px;outline:none;white-space:pre-wrap}
+.import-options textarea:focus,.import-question-top textarea:focus,.import-bottom textarea:focus{border-color:var(--primary);box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 10%,transparent)}
+
+/* Never force question choices into a fixed-height box; mathematical content
+   needs room to wrap or scroll without clipping or changing the A-D alignment. */
+.study-question-card .options button,.exam-options button,.public-share-options button{height:auto!important;min-height:54px!important;max-height:none!important;align-items:flex-start!important}
+.study-question-card .options button .math-text,.exam-options button .math-text,.public-share-options button .math-text{min-width:0!important;max-width:100%!important;overflow-wrap:anywhere!important;word-break:normal!important;white-space:normal!important;line-height:1.5!important}
+.study-question-card .options button mjx-container,.exam-options button mjx-container,.public-share-options button mjx-container{max-width:100%!important;overflow-x:auto!important;overflow-y:hidden!important}
+.study-question-card .options button>span:first-child,.exam-options button>span:first-child,.public-share-options button>strong{flex:0 0 auto!important}
+
+@media(max-width:700px){.paste-import-head{align-items:stretch;flex-direction:column}.paste-import-head .secondary-btn{width:100%}.import-mode-tabs button{padding:9px 8px}.paste-question-input{min-height:220px}}
+.import-duplicate-badge{display:inline-flex;align-items:center;padding:3px 7px;border-radius:999px;background:#fff4d6;color:#8a5a00;border:1px solid #efd38b;font-size:10px;font-weight:800;white-space:nowrap}
