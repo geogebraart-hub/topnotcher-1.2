@@ -5697,3 +5697,52 @@ html,body{
 .study-question-card .options button > .math-text mjx-container{
   max-width:100%!important;
 }
+
+/* V102 FINAL — Study Now math rendering isolation.
+   MathJax must render each complete expression once, without bidi/transform
+   rules changing glyph order or forcing SVGs into a distorted box. */
+.study-question-card h2 .math-text,
+.study-question-card .options .math-text,
+.study-question-card .explanation .math-text{
+  direction:ltr!important;
+  unicode-bidi:isolate!important;
+  writing-mode:horizontal-tb!important;
+  transform:none!important;
+  text-orientation:mixed!important;
+  max-width:100%!important;
+  min-width:0!important;
+  vertical-align:middle!important;
+}
+.study-question-card .options button{
+  align-items:flex-start!important;
+  min-width:0!important;
+  overflow:hidden!important;
+}
+.study-question-card .options button>.math-text{
+  flex:1 1 auto!important;
+  min-width:0!important;
+  overflow:hidden!important;
+}
+.math-text mjx-container{
+  direction:ltr!important;
+  unicode-bidi:isolate!important;
+  writing-mode:horizontal-tb!important;
+  transform:none!important;
+  max-width:100%!important;
+  min-width:0!important;
+  overflow-x:auto!important;
+  overflow-y:hidden!important;
+  vertical-align:middle!important;
+}
+.math-text mjx-container svg{
+  display:inline-block!important;
+  transform:none!important;
+  max-width:none!important;
+  height:auto!important;
+  vertical-align:middle!important;
+}
+.math-text mjx-container[display="true"]{
+  display:block!important;
+  width:100%!important;
+  margin:.35em 0!important;
+}
