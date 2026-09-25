@@ -11,6 +11,7 @@ import {
 import { subscribeAccountState, saveAccountState, firestoreConfigured, uploadAccountMaterial, deleteAccountMaterial, getAccountState } from "./firebase";
 
 let mathJaxPromise=null;
+let mathRenderSerial=0;
 
 // V99 — stronger mathematical notation pipeline.
 // MathJax is loaded once and supports both explicit delimiters and common
@@ -50,39 +51,63 @@ function ensureMathJax(){
 
 function normalizeLegacyMathNotation(value){
   let s=String(value??"");
-  // Common OCR/PDF-export forms for combinations and fractions. These are
-  // normalized before MathJax parsing so legacy text such as _6C_4 and
-  // {6 svg 5}{2 svg 1} becomes real mathematical notation.
+  // Only normalize well-known OCR forms. Do not split or individually wrap
+  // mathematical symbols: doing that is what previously caused duplicated,
+  // stacked and visually reversed glyphs in Study Now.
   s=s.replace(/_\s*([A-Za-z0-9]+)\s*C\s*_\s*([A-Za-z0-9]+)/g,"\\binom{$1}{$2}");
   s=s.replace(/\b([A-Za-z0-9]+)\s*C\s*([A-Za-z0-9]+)\b/g,(m,a,b)=>/^[0-9]+$/.test(a)&&/^[0-9]+$/.test(b)?`\\binom{${a}}{${b}}`:m);
   s=s.replace(/(?<=\d)\s+svg\s+(?=\d)/gi," \\times ");
-  // Adjacent brace groups in a mathematical context are frequently an OCR
-  // representation of a fraction: {numerator}{denominator}.
-  if(/\\binom|[=≠≤≥≈≡∝]|\b\d+\s*[+\-*/×÷]\s*\d+/.test(s)){
-    s=s.replace(/\{([^{}]+)\}\s*\{([^{}]+)\}/g,"\\frac{$1}{$2}");
-  }
   return s;
 }
 
 function hasMathExpression(value){
   const s=String(value??"").trim();
   if(!s) return false;
-  const explicit=[
-    /\\\((?:.|\n)+?\\\)/,
-    /\\\[(?:.|\n)+?\\\]/,
-    /\$\$(?:.|\n)+?\$\$/,
-    /(^|[^\\])\$(?!\s)(?:.|\n)+?\$(?!\w)/,
-    /\\begin\s*\{(?:equation|equation\*|align|align\*|aligned|gather|gather\*|multline|multline\*|matrix|pmatrix|bmatrix|Bmatrix|vmatrix|Vmatrix|cases)\}/,
-    /\\(?:frac|dfrac|tfrac|cfrac|sqrt|root|sum|prod|coprod|int|iint|iiint|oint|lim|limsup|liminf|sin|cos|tan|cot|sec|csc|log|ln|exp|det|gcd|binom|mathbf|mathbb|mathrm|text|operatorname|left|right|overline|underline|vec|hat|bar|tilde|dot|ddot|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|sigma|phi|varphi|omega|pi|infty|times|div|cdot|leq|geq|neq|approx|equiv|cong|propto|pm|mp|degree|forall|exists|in|notin|subset|subseteq|cup|cap|to|rightarrow|leftarrow|iff|therefore|because)\b/,
-    /_\s*[A-Za-z0-9]+\s*C\s*_\s*[A-Za-z0-9]+/,
-    /\\binom\s*\{[^{}]+\}\s*\{[^{}]+\}/,
-    /\b[A-Za-z](?:\s*)[\^_](?:\s*(?:\{[^{}]*\}|[A-Za-z0-9]+))/,
-    /(?:[A-Za-z0-9)])\s*(?:=|≠|≤|≥|≈|≡|∝|<|>)\s*(?:[A-Za-z0-9(\\])/,
-    /\b\d+(?:\.\d+)?\s*(?:[+\-*/×÷±])\s*\d+(?:\.\d+)?\b/,
-    /[∑∏∐∫∬∭∮√∛∜∞≤≥≠≈≡∝±∓×÷·∂∇∈∉⊂⊆⊃⊇∪∩∅∀∃→←↔⇒⇔αβγδεζηθικλμνξοπρστυφχψωπ]/,
-    /[⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/
-  ];
-  return explicit.some(pattern=>pattern.test(s));
+  return /\\(?:frac|dfrac|tfrac|cfrac|sqrt|root|binom|overset|underset|overline|underline|vec|hat|bar|tilde|dot|ddot|mathbf|mathbb|mathrm|operatorname|text|sum|prod|coprod|int|iint|iiint|oint|limsup|liminf|lim|sin|cos|tan|cot|sec|csc|log|ln|exp|det|gcd|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|chi|psi|omega|infty|times|div|cdot|leq|geq|neq|approx|equiv|cong|propto|pm|mp|degree|forall|exists|in|notin|subseteq|subset|supseteq|supset|cup|cap|to|rightarrow|leftarrow|iff)\b/.test(s)
+    || /(?:^|[^\\])(?:\^|_)(?:\{[^{}]*\}|[A-Za-z0-9]+)/.test(s)
+    || /[=≠≤≥≈≡∝⊂⊆⊃⊇∪∩→←↔⇒⇔∑∏∐∫√∛∜∞±∓×÷·]/.test(s);
+}
+
+function wrapMathOnce(fragment){
+  const f=String(fragment??"");
+  if(!f.trim()) return f;
+  if(/^\\\(|^\\\[|^\$\$|^\$/.test(f.trim())) return f;
+  return `\\(${f}\\)`;
+}
+
+function consumeBalancedGroup(text, start){
+  if(text[start]!=="{") return start;
+  let depth=0;
+  for(let i=start;i<text.length;i++){
+    if(text[i]==="{") depth++;
+    else if(text[i]==="}"){
+      depth--;
+      if(depth===0) return i+1;
+    }
+  }
+  return text.length;
+}
+
+function consumeLatexCommand(text,start){
+  const command=text.slice(start).match(/^\\[A-Za-z]+/);
+  if(!command) return start;
+  let end=start+command[0].length;
+  // Commands such as \\frac, \\sqrt, \\overline and \\binom take one or more
+  // balanced arguments. Consume them as a single unit.
+  for(let n=0;n<3;n++){
+    let p=end;
+    while(p<text.length && /\s/.test(text[p])) p++;
+    if(text[p]==="{") end=consumeBalancedGroup(text,p);
+    else break;
+  }
+  // Include a superscript/subscript attached to the command or its argument.
+  while(end<text.length && (text[end]==="^"||text[end]==="_")){
+    end++;
+    while(end<text.length && /\s/.test(text[end])) end++;
+    if(text[end]==="{") end=consumeBalancedGroup(text,end);
+    else if(end<text.length) end++;
+  }
+  return end;
 }
 
 function prepareMathSource(value){
@@ -90,131 +115,132 @@ function prepareMathSource(value){
   let s=normalizeLegacyMathNotation(original);
   if(!hasMathExpression(s)) return s;
 
-  // MathJax must never be allowed to see a delimiter that a later regex pass
-  // can wrap again. The previous pipeline generated nested/overlapping math
-  // fragments (for example \overline{B} followed by \subseteq), which is what
-  // produced the duplicated glyphs and visually reversed/stacked numbers in
-  // Study Questions Now. Protect every math fragment while the remaining text
-  // is being scanned, then restore it once at the very end.
-  const protectedMath=[];
+  const protectedParts=[];
   const protect=(fragment)=>{
-    const id=protectedMath.length;
-    protectedMath.push(fragment);
+    const id=protectedParts.length;
+    protectedParts.push(fragment);
     return `\uE000M${id}\uE001`;
   };
 
-  // 1) Protect explicit MathJax/LaTeX-delimited blocks first. They are already
-  // valid and must be passed through byte-for-byte (apart from legacy OCR
-  // normalization performed above).
-  const explicit=/(\\\([\\s\\S]*?\\\)|\\\[[\\s\\S]*?\\\]|\$\$[\\s\\S]*?\$\$|(^|[^\\])\$(?!\s)[\\s\\S]*?\$(?!\w))/g;
-  s=s.replace(explicit,(m)=>protect(m));
+  // 1) Preserve explicit TeX exactly as supplied. Never run later detection
+  // passes over an already-delimited expression.
+  const explicit=/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|(^|[^\\])\$(?!\s)[\s\S]*?\$(?!\w))/g;
+  s=s.replace(explicit,m=>protect(m));
 
-  // 2) Protect bare LaTeX commands together with their immediate arguments.
-  // Crucially, the generated \(...\) is NOT fed back through the Unicode or
-  // equation regexes, so commands cannot become nested MathJax expressions.
-  const latexCommand=/\\(?:dfrac|tfrac|cfrac|frac|sqrt|root|binom|overset|underset|overline|underline|vec|hat|bar|tilde|dot|ddot|mathbf|mathbb|mathrm|operatorname|text|sum|prod|coprod|int|iint|iiint|oint|limsup|liminf|lim|sin|cos|tan|cot|sec|csc|log|ln|exp|det|gcd|alpha|beta|gamma|delta|epsilon|varepsilon|theta|vartheta|lambda|mu|nu|xi|pi|rho|sigma|tau|phi|varphi|chi|psi|omega|infty|times|div|cdot|leq|geq|neq|approx|equiv|cong|propto|pm|mp|degree|forall|exists|in|notin|subseteq|subset|supseteq|supset|cup|cap|to|rightarrow|leftarrow|iff|therefore|because)\b/g;
-  const consumeBalanced=(text,from)=>{
-    if(text[from]!=="{") return from;
-    let depth=0;
-    for(let i=from;i<text.length;i++){
-      if(text[i]==="{") depth++;
-      else if(text[i]==="}"){
-        depth--;
-        if(depth===0) return i+1;
+  // 2) Walk the remaining text from left to right. This is deliberately a
+  // single pass: the previous implementation collected string indexes and
+  // then mutated the string while iterating those stale indexes. That could
+  // move a later command into the wrong position and was the source of the
+  // flipped/duplicated symbols seen in Study Now.
+  let out="";
+  let i=0;
+  const relationCommand=/^\\(?:leq|geq|neq|approx|equiv|cong|propto|subseteq|subset|supseteq|supset|cup|cap|to|rightarrow|leftarrow|iff|times|div|cdot|pm|mp)\b/;
+  const isOperandChar=c=>/[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/.test(c||"");
+  while(i<s.length){
+    if(s[i]==="\\" && /[A-Za-z]/.test(s[i+1]||"")){
+      const start=i;
+      let end=consumeLatexCommand(s,i);
+      let sawRelation=relationCommand.test(s.slice(i,end));
+      // Keep adjacent LaTeX relation/operator and its operand in the SAME
+      // MathJax expression. Example: \\overline{B} \\subseteq A.
+      while(end<s.length){
+        let p=end;
+        while(p<s.length && /\s/.test(s[p])) p++;
+        if(p>=s.length) break;
+        if(s[p]==="\\" && /[A-Za-z]/.test(s[p+1]||"")){
+          const cmdEnd=consumeLatexCommand(s,p);
+          const cmd=s.slice(p,cmdEnd);
+          if(relationCommand.test(cmd) || sawRelation){
+            sawRelation=sawRelation||relationCommand.test(cmd);
+            end=cmdEnd;
+            continue;
+          }
+          break;
+        }
+        if(/[=≠≤≥≈≡∝⊂⊆⊃⊇∪∩→←↔⇒⇔+−\-*×÷/]/.test(s[p])){
+          sawRelation=true;
+          end=p+1;
+          while(end<s.length && /\s/.test(s[end])) end++;
+          while(end<s.length && isOperandChar(s[end])) end++;
+          continue;
+        }
+        if(sawRelation && isOperandChar(s[p])){
+          end=p+1;
+          while(end<s.length && isOperandChar(s[end])) end++;
+          continue;
+        }
+        break;
       }
+      // If the command is preceded by an obvious math operator/operand, pull
+      // that small left-hand side into the same expression: x = \\frac{a}{b}.
+      let left=start;
+      const tail=out.match(/([A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω)]+\s*(?:=|≠|≤|≥|≈|≡|⊂|⊆|⊃|⊇|\+|−|-|×|÷|\/|\*)\s*)$/);
+      if(tail) left=start-tail[0].length;
+      out=out.slice(0,out.length-(start-left))+wrapMathOnce(s.slice(left,end));
+      i=end;
+      continue;
     }
-    return text.length;
-  };
-  s=s.replace(latexCommand,(match,offset,whole)=>{
-    let end=offset+match.length;
-    while(end<whole.length && /\s/.test(whole[end])) end++;
-    if(whole[end]==="{") end=consumeBalanced(whole,end);
-    let second=end;
-    while(second<whole.length && /\s/.test(whole[second])) second++;
-    if(whole[second]==="{" && /\\(?:dfrac|tfrac|cfrac|frac|binom|overset|underset|root)\b/.test(match)) end=consumeBalanced(whole,second);
-    let suffix=end;
-    while(suffix<whole.length && (whole[suffix]==="^"||whole[suffix]==="_")){
-      suffix++;
-      while(suffix<whole.length && /\s/.test(whole[suffix])) suffix++;
-      if(whole[suffix]==="{") suffix=consumeBalanced(whole,suffix);
-      else if(suffix<whole.length) suffix++;
-      end=suffix;
-    }
-    return protect(`\\(${whole.slice(offset,end)}\\)`);
-  });
+    out+=s[i];
+    i++;
+  }
+  s=out;
 
-  // 3) Protect compact bare equations containing Unicode operators. Keep the
-  // entire expression together instead of rendering each symbol independently.
-  const compactEquation=/\b[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψω]+(?:\s*(?:=|≠|≤|≥|≈|≡|∝|⊂|⊆|⊃|⊇|∪|∩|→|←|↔|⇒|⇔|\+|−|-|×|÷|\/|\*|\^|_)+\s*[0-9A-Za-zα-ωΑ-Ωπθλμνξρστφχψω()[\]{}.,⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]+)+/g;
-  s=s.replace(compactEquation,m=>protect(`\\(${m}\\)`));
+  // 3) Plain Unicode/ASCII equations are rendered only when the COMPLETE
+  // candidate is an equation. This avoids the old failure where `x^2 + 3x - 4 = 0`
+  // was split into several independent MathJax fragments.
+  const wholeMath=/^[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜(){}\[\].,⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s=≠≤≥≈≡∝⊂⊆⊃⊇∪∩→←↔⇒⇔+−\-*×÷\/_]+$/;
+  const hasOperator=/(?:=|≠|≤|≥|≈|≡|∝|⊂|⊆|⊃|⊇|∪|∩|→|←|↔|⇒|⇔|\+|−|-|×|÷|\*|\/|\^|_)/;
+  const trimmed=s.trim();
+  if(trimmed && wholeMath.test(trimmed) && hasOperator.test(trimmed) && !/^\\[A-Za-z]+/.test(trimmed)){
+    s=protect(wrapMathOnce(trimmed));
+  }else{
+    // Mixed prose may contain a complete equation. Render the entire equation
+    // as one fragment, then handle any remaining compact exponent/subscript.
+    const inlineEquation=/\b[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜().{}⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉.,]+\s*(?:=|≠|≤|≥|≈|≡|∝|⊂|⊆|⊃|⊇|∪|∩|→|←|↔|⇒|⇔|\+|−|-|×|÷|\*|\/|\^|_)\s*[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜().{}⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉.,]+(?:\s*(?:=|≠|≤|≥|≈|≡|∝|⊂|⊆|⊃|⊇|∪|∩|→|←|↔|⇒|⇔|\+|−|-|×|÷|\*|\/|\^|_)\s*[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜().{}⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉.,]+)+/g;
+    s=s.replace(inlineEquation,m=>protect(wrapMathOnce(m.trim())));
+    const compact=/\b[A-Za-z0-9]+(?:\^|_)(?:\{[^{}]+\}|[A-Za-z0-9]+)\b/g;
+    s=s.replace(compact,m=>protect(wrapMathOnce(m)));
+  }
 
-  // 4) Unicode standalone math symbols are protected individually only when
-  // they were not already consumed by an equation above. This keeps symbols
-  // such as √, ∑, α and ⊆ clean without creating nested math fragments.
-  const unicodeMath=/[∑∏∐∫∬∭∮√∛∜∞≤≥≠≈≡∝±∓×÷·∂∇∈∉⊂⊆⊃⊇∪∩∅∀∃→←↔⇒⇔αβγδεζηθικλμνξοπρστυφχψωπ⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/g;
-  s=s.replace(unicodeMath,m=>protect(`\\(${m}\\)`));
-
-  // 5) Restore protected fragments exactly once.
-  return s.replace(/\uE000M(\d+)\uE001/g,(_,i)=>protectedMath[Number(i)]??"");
+  return s.replace(/\uE000M(\d+)\uE001/g,(_,n)=>protectedParts[Number(n)]??"");
 }
 
 function MathText({text,className=""}){
   const ref=useRef(null);
   const value=String(text??"");
   const source=prepareMathSource(value);
-  const shouldRender=source!==value || hasMathExpression(value);
+  const shouldRender=source!==value || /\\\(|\\\[|\$\$/.test(source);
 
   useEffect(()=>{
     let alive=true;
     const el=ref.current;
     if(!el) return undefined;
-
-    // MathJax mutates the DOM. React must not also own text nodes inside this
-    // element, otherwise a re-render can leave the original TeX/Unicode text
-    // underneath a second SVG rendering (the exact overlap seen in Study Now).
-    try{
-      if(window.MathJax?.typesetClear) window.MathJax.typesetClear([el]);
-    }catch{}
+    const renderId=++mathRenderSerial;
+    el.dataset.mathRenderId=String(renderId);
+    // MathJax owns this DOM subtree. React never renders a competing text node.
+    try{ window.MathJax?.typesetClear?.([el]); }catch{}
     el.replaceChildren(document.createTextNode(source));
-
     if(!shouldRender) return ()=>{
-      try{
-        if(window.MathJax?.typesetClear) window.MathJax.typesetClear([el]);
-      }catch{}
+      alive=false;
+      try{ window.MathJax?.typesetClear?.([el]); }catch{}
     };
-
     ensureMathJax().then(m=>{
-      if(!alive || !el || !m?.typesetPromise) return;
+      if(!alive||!el||el.dataset.mathRenderId!==String(renderId)||!m?.typesetPromise) return;
       try{
-        // Clear any stale MathJax bookkeeping/output before each pass.
-        if(m.typesetClear) m.typesetClear([el]);
+        m.typesetClear?.([el]);
+        // MathJax is allowed to typeset this element only once for this render.
+        // The render id prevents an older React effect from touching newer math.
         m.typesetPromise([el]).catch(()=>{});
       }catch{}
     }).catch(()=>{});
-
     return ()=>{
       alive=false;
-      try{
-        if(window.MathJax?.typesetClear) window.MathJax.typesetClear([el]);
-      }catch{}
+      if(el.dataset.mathRenderId===String(renderId)) delete el.dataset.mathRenderId;
+      try{ window.MathJax?.typesetClear?.([el]); }catch{}
     };
   },[source,shouldRender]);
 
-  // Deliberately render no React child here. MathJax owns the contents after
-  // the effect runs, preventing React reconciliation from duplicating math.
   return <span ref={ref} className={`${shouldRender?"math-text ":""}${className}`.trim()} aria-label={value}/>;
-}
-
-export function TopnotcherBrand({ compact = false }) {
-  return (
-    <div className={`topnotcher-brand ${compact ? "topnotcher-brand-compact" : ""}`} aria-label="TOPNOTCHER! By God's Grace">
-      <span className="topnotcher-logo-circle" aria-hidden="true"><span>★</span></span>
-      <div className="topnotcher-wordmark">
-        <div className="topnotcher-name">TOPNOTCHER!</div>
-        <div className="topnotcher-tagline">By God's Grace</div>
-      </div>
-    </div>
-  );
 }
 
 const CATEGORIES = [
