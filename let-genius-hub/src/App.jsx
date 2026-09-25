@@ -154,19 +154,46 @@ function MathText({text,className=""}){
   const value=String(text??"");
   const source=prepareMathSource(value);
   const shouldRender=source!==value || hasMathExpression(value);
+
   useEffect(()=>{
     let alive=true;
-    if(!ref.current) return;
-    // textContent prevents imported/manual material from becoming HTML.
-    ref.current.textContent=source;
-    if(shouldRender){
-      ensureMathJax().then(m=>{
-        if(alive&&m?.typesetPromise&&ref.current) m.typesetPromise([ref.current]).catch(()=>{});
-      }).catch(()=>{});
-    }
-    return ()=>{alive=false;};
+    const el=ref.current;
+    if(!el) return undefined;
+
+    // MathJax mutates the DOM. React must not also own text nodes inside this
+    // element, otherwise a re-render can leave the original TeX/Unicode text
+    // underneath a second SVG rendering (the exact overlap seen in Study Now).
+    try{
+      if(window.MathJax?.typesetClear) window.MathJax.typesetClear([el]);
+    }catch{}
+    el.replaceChildren(document.createTextNode(source));
+
+    if(!shouldRender) return ()=>{
+      try{
+        if(window.MathJax?.typesetClear) window.MathJax.typesetClear([el]);
+      }catch{}
+    };
+
+    ensureMathJax().then(m=>{
+      if(!alive || !el || !m?.typesetPromise) return;
+      try{
+        // Clear any stale MathJax bookkeeping/output before each pass.
+        if(m.typesetClear) m.typesetClear([el]);
+        m.typesetPromise([el]).catch(()=>{});
+      }catch{}
+    }).catch(()=>{});
+
+    return ()=>{
+      alive=false;
+      try{
+        if(window.MathJax?.typesetClear) window.MathJax.typesetClear([el]);
+      }catch{}
+    };
   },[source,shouldRender]);
-  return <span ref={ref} className={`${shouldRender?"math-text ":""}${className}`.trim()}>{source}</span>;
+
+  // Deliberately render no React child here. MathJax owns the contents after
+  // the effect runs, preventing React reconciliation from duplicating math.
+  return <span ref={ref} className={`${shouldRender?"math-text ":""}${className}`.trim()} aria-label={value}/>;
 }
 
 export function TopnotcherBrand({ compact = false }) {
