@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Library, ClipboardCheck, UserCircle,
   FileText, Flame, GraduationCap, Layers3, LogOut, Menu, Pencil, Play,
   Plus, Search, Settings, Sparkles, Star, Target, Trash2, Trophy, X, CheckCircle2,
-  ArrowLeft, Save, RotateCcw, Upload, Clipboard, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, KeyRound, Clock3, Copy, ExternalLink, Video, FileArchive, Download
+  ArrowLeft, Save, RotateCcw, Upload, WandSparkles, Loader2, Camera, Printer, ScanLine, FileDown, Link2, LockKeyhole, KeyRound, Clock3, Copy, ExternalLink, Video, FileArchive, Download
 } from "lucide-react";
 import { subscribeAccountState, saveAccountState, firestoreConfigured, uploadAccountMaterial, deleteAccountMaterial, getAccountState } from "./firebase";
 
@@ -2238,151 +2238,104 @@ function AIQuestionModal({questions=[],deck,close,saveQuestions,materialScope,ui
 
 
 function parseImportedQuestions(rawText) {
-  // Deterministic, marker-first parser. Explicit field markers are preferred;
-  // legacy numbered/A-D formatting remains supported as a fallback.
-  const text=String(rawText||'')
-    .replace(/\r\n?/g,'\n')
-    .replace(/[\u00a0\u2007\u202f]/g,' ')
-    .replace(/[\u2013\u2014]/g,'-');
-
-  const lines=text.split('\n').map(x=>x.trim()).filter(Boolean);
-  const normalize=x=>String(x||'').replace(/\s+/g,' ').trim();
+  // STRICT, loss-minimizing parser for the TOPNOTCHER clipboard format.
+  // Important: do not normalize/rewrite the user's question, choices, or math.
+  // Only remove the structural markers and line-ending whitespace required by
+  // the format. This guarantees that Preview reflects what was pasted.
+  const text=String(rawText??'').replace(/\r\n?/g,'\n').replace(/\uFEFF/g,'');
+  const rawLines=text.split('\n');
+  const trimStructural=line=>String(line??'').trim();
   const numberOf=line=>{
-    const m=String(line).match(/^(?:\[?\s*QUESTION\s*(?:NO\.?\s*)?|ITEM\s+)(\d{1,4})\s*\]?\s*(?:[.:)\-]|$)/i)
-      || String(line).match(/^(\d{1,4})\s*[.)\-:]\s*/);
+    const m=trimStructural(line).match(/^\[\s*QUESTION\s+(\d{1,4})\s*\]$/i);
     return m?Number(m[1]):null;
   };
-  const cleanQuestion=line=>normalize(String(line)
-    .replace(/^\[?\s*QUESTION\s*(?:NO\.?\s*)?\d{1,4}\s*\]?\s*(?:[.:)\-]\s*)?/i,'')
-    .replace(/^ITEM\s+\d{1,4}\s*(?:[.:)\-]\s*)?/i,'')
-    .replace(/^\d{1,4}\s*[.)\-:]\s*/,'')
-    .replace(/^\[?\s*QUESTION\s*\]?\s*[:\-]?\s*/i,''));
-
-  const isQuestionBoundary=line=>Boolean(numberOf(line)) || /^\[?\s*QUESTION\s*\d{1,4}\s*\]?/i.test(line) || /^ITEM\s+\d{1,4}/i.test(line);
-  const explicitQuestion=line=>/^\[?\s*QUESTION\s*\d{1,4}\s*\]?/i.test(line) || /^ITEM\s+\d{1,4}/i.test(line);
-  const markerOption=line=>{
-    let m=line.match(/^\[?\s*CHOICE\s*([A-D])\s*\]?\s*(?::|\.|\)|-)\s*(.*)$/i);
-    if(m) return {letter:m[1].toUpperCase(),text:m[2]};
-    m=line.match(/^\[?\s*OPTION\s*([A-D])\s*\]?\s*(?::|\.|\)|-)\s*(.*)$/i);
-    if(m) return {letter:m[1].toUpperCase(),text:m[2]};
-    // Explicit bracket labels: [A] text, [B] text, etc.
-    m=line.match(/^\[\s*([A-D])\s*\]\s*(.*)$/i);
-    if(m) return {letter:m[1].toUpperCase(),text:m[2]};
-    // Legacy labels require punctuation so ordinary prose such as
-    // "A student..." is never mistaken for choice A.
-    m=line.match(/^([A-D])\s*(?::|\.|\)|-)\s*(.*)$/i);
-    if(m) return {letter:m[1].toUpperCase(),text:m[2]};
-    return null;
-  };
-  const markerAnswer=line=>{
-    const m=line.match(/^\[?\s*(?:CORRECT\s+ANSWER|ANSWER)\s*\]?\s*[:\-]?\s*([A-D])\b(.*)$/i);
-    return m?{letter:m[1].toUpperCase(),tail:normalize(m[2])}:null;
-  };
-  const markerRationale=line=>{
-    const m=line.match(/^\[?\s*(?:RATIONALE|EXPLANATION|REASON|SOLUTION)\s*\]?\s*(?::|-)\s*(.*)$/i) || line.match(/^\[?\s*(?:RATIONALE|EXPLANATION|REASON|SOLUTION)\s*\]\s*(.*)$/i);
+  const isQuestionStart=line=>/^\[\s*QUESTION\s+\d{1,4}\s*\]$/i.test(trimStructural(line));
+  const isEnd=line=>/^\[\s*END\s+QUESTION\s*\]$/i.test(trimStructural(line));
+  const field=(line,name)=>{
+    const patterns={
+      "QUESTION TEXT":/^\[\s*QUESTION TEXT\s*\](?:[ \t]+|$)(.*)$/i,
+      "RATIONALE":/^\[\s*RATIONALE\s*\](?:[ \t]+|$)(.*)$/i
+    };
+    const m=String(line??"").match(patterns[name]);
     return m?m[1]:null;
   };
-  const isEndMarker=line=>/^\[?\s*(?:END\s+QUESTION|END\s+ITEM)\s*\]?$/i.test(line);
-
-  // First, recognize strongly marked blocks. These are intentionally strict:
-  // once ANSWER or RATIONALE begins, ordinary A-D text cannot steal content.
-  const parseMarkedBlock=block=>{
-    if(!block.length) return null;
-    let questionParts=[]; const options=['','','','']; let answer=-1; let rationale=[]; let state='question'; let sawExplicit=false; let sourceNumber=null;
-    for(const raw of block){
-      const line=raw.trim(); if(!line) continue;
-      if(/^\[?\s*(?:QUESTION|ITEM)\s*(?:NO\.?\s*)?\d{1,4}/i.test(line)){sawExplicit=true; sourceNumber=numberOf(line); const q=cleanQuestion(line); if(q) questionParts.push(q); state='question'; continue;}
-      if(/^\[?\s*(?:QUESTION\s*TEXT|STEM)\s*\]?/i.test(line)){sawExplicit=true; const q=line.replace(/^\[?\s*(?:QUESTION\s*TEXT|STEM)\s*\]?\s*(?::|-)\s*/i,'').replace(/^\[?\s*(?:QUESTION\s*TEXT|STEM)\s*\]\s*/i,''); if(q) questionParts.push(q); state='question'; continue;}
-      const am=markerAnswer(line); if(am){sawExplicit=true; answer=am.letter.charCodeAt(0)-65; if(am.tail) rationale.push(am.tail); state='answer'; continue;}
-      const rm=markerRationale(line); if(rm!==null){sawExplicit=true; if(rm) rationale.push(rm); state='rationale'; continue;}
-      if(/^\[?\s*(?:END\s+QUESTION|END\s+ITEM)\s*\]?$/i.test(line)){state='end'; continue;}
-      const om=markerOption(line);
-      if(om){sawExplicit=true; const idx=om.letter.charCodeAt(0)-65; if(idx>=0&&idx<4){options[idx]=normalize(om.text); state='options';} continue;}
-      if(state==='question') questionParts.push(line);
-      else if(state==='options'){
-        // Continuation belongs only to the most recently populated choice.
-        let last=-1; for(let i=3;i>=0;i--) if(options[i]){last=i;break;}
-        if(last>=0) options[last]=normalize(options[last]+' '+line);
-      }else if(state==='answer'||state==='rationale') rationale.push(line);
-    }
-    const question=normalize(questionParts.join(' '));
-    if(sawExplicit && question && options.every(Boolean)) return {question,options,correctAnswer:answer,rationale:normalize(rationale.join(' ')),sourceNumber};
-    return null;
+  const option=line=>{
+    const m=String(line??'').match(/^\[\s*([A-D])\s*\](?:[ \t]+|$)(.*)$/i);
+    return m?{letter:m[1].toUpperCase(),text:m[2]}:null;
+  };
+  const answer=line=>{
+    const m=String(line??'').match(/^\[\s*ANSWER\s*\](?:[ \t]+|$)([A-Da-d])\s*$/);
+    return m?m[1].toUpperCase():null;
   };
 
-  // Detect explicit blocks before legacy parsing. A block starts at QUESTION/ITEM
-  // and ends at END QUESTION or the next QUESTION/ITEM marker.
-  const marked=[]; let current=[];
-  for(const line of lines){
-    if(isQuestionBoundary(line) && (explicitQuestion(line) || /^ITEM\s+\d{1,4}/i.test(line))){
-      if(current.length){ const parsed=parseMarkedBlock(current); if(parsed) marked.push(parsed); }
-      current=[line];
-    }else if(current.length) current.push(line);
+  const blocks=[]; let current=null;
+  for(const raw of rawLines){
+    const line=raw.replace(/[ \t]+$/,'');
+    if(isQuestionStart(line)){
+      if(current) blocks.push(current);
+      current={number:numberOf(line),lines:[]};
+    }else if(current){
+      if(isEnd(line)){blocks.push(current);current=null;}
+      else current.lines.push(line);
+    }
   }
-  if(current.length){const parsed=parseMarkedBlock(current); if(parsed) marked.push(parsed);}
-  if(marked.length) return dedupeImported(marked);
+  if(current) blocks.push(current);
 
-  // Legacy fallback: split only on real question-number lines, then parse each
-  // block sequentially. A malformed item is not allowed to contaminate the next.
-  const starts=[];
-  lines.forEach((line,i)=>{if(isQuestionBoundary(line)) starts.push({i,line,number:numberOf(line)});});
-  const blocks=[];
-  for(let i=0;i<starts.length;i++) blocks.push(lines.slice(starts[i].i, i+1<starts.length?starts[i+1].i:lines.length));
-
-  const parsed=[];
+  const parsed=[]; const invalid=[];
   for(const block of blocks){
-    if(!block.length) continue;
-    let questionParts=[cleanQuestion(block[0])];
-    const sourceNumber=numberOf(block[0]);
-    let options=[]; let answer=-1; let rationale=[]; let state='question';
-    for(let i=1;i<block.length;i++){
-      const line=block[i];
-      const am=markerAnswer(line); if(am){answer=am.letter.charCodeAt(0)-65; if(am.tail) rationale.push(am.tail); state='answer'; continue;}
-      const rm=markerRationale(line); if(rm!==null){if(rm) rationale.push(rm); state='rationale'; continue;}
-      const om=markerOption(line);
-      if(om){const idx=om.letter.charCodeAt(0)-65; if(idx>=0&&idx<4){options[idx]=normalize(om.text); state='options';} continue;}
+    let questionParts=[]; const options=['','','','']; let correctAnswer=-1; let rationaleParts=[];
+    let state='question'; let sawQuestionText=false; let sawRationale=false;
+    for(const raw of block.lines){
+      const line=raw;
+      if(!line.trim()){
+        // Blank lines are meaningful inside text, but the final stored value is
+        // trimmed only at the outer boundary. Keep the separator while parsing.
+        if(state==='question') questionParts.push('');
+        else if(state==='rationale') rationaleParts.push('');
+        continue;
+      }
+      const qt=field(line,'QUESTION TEXT');
+      if(qt!==null){questionParts=[qt];sawQuestionText=true;state='question';continue;}
+      const om=option(line);
+      if(om){options[om.letter.charCodeAt(0)-65]=om.text;state='options';continue;}
+      const am=answer(line);
+      if(am){correctAnswer=am.charCodeAt(0)-65;state='answer';continue;}
+      const rm=field(line,'RATIONALE');
+      if(rm!==null){rationaleParts=[rm];sawRationale=true;state='rationale';continue;}
+      // In the strict format, continuation lines belong to the current field.
       if(state==='question') questionParts.push(line);
       else if(state==='options'){
-        let last=-1; for(let j=3;j>=0;j--) if(options[j]){last=j;break;}
-        if(last>=0) options[last]=normalize(options[last]+' '+line);
-      }else rationale.push(line);
+        let idx=-1; for(let i=3;i>=0;i--) if(options[i]!==''){idx=i;break;}
+        if(idx>=0) options[idx]+='\n'+line;
+      }else if(state==='rationale') rationaleParts.push(line);
+      // Text after ANSWER is intentionally ignored unless RATIONALE starts.
     }
-    const cleanOptions=[0,1,2,3].map(i=>normalize(options[i]||''));
-    const question=normalize(questionParts.join(' '));
-    if(question&&cleanOptions.every(Boolean)) parsed.push({question,options:cleanOptions,correctAnswer:Number.isInteger(answer)?answer:-1,rationale:normalize(rationale.join(' ')),sourceNumber});
+    const question=questionParts.join('\n').trim();
+    const cleanedOptions=options.map(x=>String(x).trim());
+    const rationale=rationaleParts.join('\n').trim();
+    const errors=[];
+    if(!sawQuestionText||!question) errors.push('missing [QUESTION TEXT]');
+    if(cleanedOptions.some(x=>!x)) errors.push('missing one or more A–D choices');
+    if(correctAnswer<0) errors.push('missing or invalid [ANSWER]');
+    if(!sawRationale) errors.push('missing [RATIONALE]');
+    if(errors.length) invalid.push({number:block.number,errors});
+    else parsed.push({question,options:cleanedOptions,correctAnswer,rationale,sourceNumber:block.number});
   }
-  return dedupeImported(parsed);
+  return {parsed,invalid,blocks:blocks.length};
 }
 
-function dedupeImported(items){
-  const seen=new Set();
-  return items.filter(item=>{
-    const key=normalizeImportedKey(item.question);
-    if(!key||seen.has(key)) return false;
-    seen.add(key); return true;
-  });
+function normalizeImportedKey(value){
+  // Used only for duplicate detection. It never modifies the imported content.
+  return String(value??'').normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 }
-function normalizeImportedKey(value){return String(value||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
-function detectImportedQuestionNumbers(rawText){
-  const lines=String(rawText||'').replace(/\r\n?/g,'\n').split('\n').map(x=>x.trim()).filter(Boolean);
-  const numbers=[];
-  for(const line of lines){
-    const m=line.match(/^(?:\[?\s*(?:QUESTION|ITEM)\s*(?:NO\.?\s*)?)(\d{1,4})\s*\]?\s*(?:[.:)\-]|$)/i)
-      || line.match(/^(\d{1,4})\s*[.)\-:]\s*/)
-      || line.match(/^(\d{1,4})\s*$/);
-    if(m) numbers.push(Number(m[1]));
-  }
-  return [...new Set(numbers)];
-}
-function importedNumberSummary(rawText,parsed){
-  const nums=detectImportedQuestionNumbers(rawText);
-  const parsedNums=(parsed||[]).map(x=>Number(x.sourceNumber)).filter(Number.isFinite);
-  if(!nums.length) return {detected:parsed.length,total:parsed.length,missing:[]};
-  const min=Math.min(...nums),max=Math.max(...nums);
-  const expected=[]; for(let n=min;n<=max;n++) expected.push(n);
-  const present=new Set(parsedNums);
-  const missing=expected.filter(n=>!present.has(n));
-  return {detected:nums.length,total:Math.max(nums.length,parsed.length),missing};
+function importedNumberSummary(rawText,parsed,invalid=[]){
+  const nums=(parsed||[]).map(x=>Number(x.sourceNumber)).filter(Number.isFinite);
+  const bad=(invalid||[]).map(x=>Number(x.number)).filter(Number.isFinite);
+  const all=[...nums,...bad];
+  if(!all.length) return {detected:0,total:0,missing:[]};
+  const min=Math.min(...all),max=Math.max(...all); const present=new Set(all);
+  const missing=[]; for(let n=min;n<=max;n++) if(!present.has(n)) missing.push(n);
+  return {detected:new Set(all).size,total:new Set(all).size,missing};
 }
 
 function ImportQuestionsModal({deck,existingQuestions=[],close,saveQuestions}) {
@@ -2390,25 +2343,36 @@ function ImportQuestionsModal({deck,existingQuestions=[],close,saveQuestions}) {
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState("");
   const [sourceName,setSourceName]=useState("");
-  const [importStats,setImportStats]=useState({detected:0,total:0,missing:[]});
-  const [pasteOpen,setPasteOpen]=useState(false);
-  const [pasteText,setPasteText]=useState("");
-  const parseQuestionText=raw=>{
-    setBusy(true);setError("");setSourceName("Pasted questions");
-    try{
-      const parsed=parseImportedQuestions(raw);
-      const stats=importedNumberSummary(raw,parsed);
-      setImportStats({...stats,parsed:parsed.length});
-      if(!parsed.length) throw new Error("No four-choice questions could be detected. Make sure the pasted text follows the TOPNOTCHER marked format.");
-      const existing=new Set(existingQuestions.map(q=>String(q.q||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()));
-      const unique=parsed.filter(x=>!existing.has(String(x.question).toLowerCase().replace(/[^a-z0-9]+/g," ").trim()));
-      setRows(unique.map((x,i)=>({id:`import-${Date.now()}-${i}`,...x,include:true})));
-      setPasteOpen(false);
-    }catch(err){console.error(err);setRows([]);setError(err?.message||"Could not parse the pasted questions.");}
-    finally{setBusy(false);}
+  const [inputMode,setInputMode]=useState('pdf');
+  const [pasteText,setPasteText]=useState('');
+  const [importStats,setImportStats]=useState({detected:0,total:0,missing:[],invalid:[]});
+  const existing=new Set(existingQuestions.map(q=>normalizeImportedKey(q.q)));
+  const applyParsed=(raw,source='Pasted clipboard')=>{
+    const result=parseImportedQuestions(raw);
+    const stats=importedNumberSummary(raw,result.parsed,result.invalid);
+    setImportStats({...stats,parsed:result.parsed.length,invalid:result.invalid});
+    if(!result.blocks){setRows([]);setError('No [QUESTION N] blocks were found. Paste the exact TOPNOTCHER format shown below.');return false;}
+    if(result.invalid.length){
+      setRows([]);
+      const first=result.invalid[0];
+      setError(`Question ${first.number??'?'} is incomplete: ${first.errors.join(', ')}.`);
+      return false;
+    }
+    if(!result.parsed.length){setRows([]);setError('No valid questions were parsed.');return false;}
+    const duplicateCount=result.parsed.filter(x=>existing.has(normalizeImportedKey(x.question))).length;
+    // Keep EVERY successfully parsed pasted block in Preview. Never silently
+    // remove a user's pasted question; duplicates are visibly marked and
+    // simply start unchecked so the preview remains a faithful representation.
+    setRows(result.parsed.map((x,i)=>{
+      const duplicate=existing.has(normalizeImportedKey(x.question));
+      return {id:`import-${Date.now()}-${i}`,...x,include:!duplicate,duplicate};
+    }));
+    setSourceName(source);
+    setError(duplicateCount?`${duplicateCount} question${duplicateCount===1?' is':'s are'} already in this deck. They remain visible in Preview and start unchecked.`:'');
+    return true;
   };
   const readPdf=async file=>{
-    setBusy(true);setError("");setSourceName(file.name);
+    setBusy(true);setError("");setInputMode('pdf');setSourceName(file.name);
     try{
       const pdfjs=await import("pdfjs-dist/legacy/build/pdf.mjs");
       const workerUrl=(await import("pdfjs-dist/legacy/build/pdf.worker.mjs?url")).default;
@@ -2417,69 +2381,34 @@ function ImportQuestionsModal({deck,existingQuestions=[],close,saveQuestions}) {
       const pdf=await pdfjs.getDocument({data:bytes,disableWorker:true,useWorkerFetch:false,isEvalSupported:false}).promise;
       const pages=[];
       for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){
-        const page=await pdf.getPage(pageNo);
-        const content=await page.getTextContent({disableCombineTextItems:false});
-        const items=(content.items||[]).filter(x=>String(x.str??"").trim() || x.hasEOL);
-        const lines=[];
-        for(const item of items){
-          const value=String(item.str??"");
-          const y=Number(item.transform?.[5]||0);
-          const x=Number(item.transform?.[4]||0);
-          // hasEOL is a strong PDF.js signal. Geometry is used as a fallback for
-          // PDFs that do not provide reliable end-of-line flags. A slightly wider
-          // tolerance keeps superscripts, subscripts, fractions, and math glyphs
-          // on the same logical line instead of fragmenting the source text.
-          let line=lines.find(l=>Math.abs(l.y-y)<=4.5);
-          if(!line){line={y,textParts:[]};lines.push(line);}
-          if(value.trim()) line.textParts.push({x,text:value,hasEOL:Boolean(item.hasEOL)});
-          if(item.hasEOL) line.hasEOL=true;
-        }
-        lines.sort((a,b)=>b.y-a.y);
-        lines.forEach(line=>{
-          line.text=line.textParts
-            .sort((a,b)=>a.x-b.x)
-            .map(part=>part.text)
-            .join(" ")
-            // Only normalize layout whitespace. Do NOT strip or replace math
-            // characters such as √ ∑ ∫ ≤ ≥ ≠ ± × ÷, Greek letters, or LaTeX.
-            .replace(/[ \t]+/g," ")
-            .trim();
-        });
-        pages.push(lines.map(x=>x.text).filter(Boolean).join("\n"));
+        const page=await pdf.getPage(pageNo); const content=await page.getTextContent({disableCombineTextItems:false});
+        const items=(content.items||[]).filter(x=>String(x.str??'').trim() || x.hasEOL); const lines=[];
+        for(const item of items){const value=String(item.str??'');const y=Number(item.transform?.[5]||0);const x=Number(item.transform?.[4]||0);let line=lines.find(l=>Math.abs(l.y-y)<=4.5);if(!line){line={y,textParts:[]};lines.push(line);}if(value.trim())line.textParts.push({x,text:value});}
+        lines.sort((a,b)=>b.y-a.y);pages.push(lines.map(l=>l.textParts.sort((a,b)=>a.x-b.x).map(p=>p.text).join(' ').replace(/[ \t]+/g,' ').trim()).filter(Boolean).join('\n'));
       }
-      const raw=pages.join("\n");
-      const parsed=parseImportedQuestions(raw);
-      const stats=importedNumberSummary(raw,parsed);
-      setImportStats({...stats,parsed:parsed.length});
-      if(!parsed.length) throw new Error("No four-choice questions could be detected. Use the marked TOPNOTCHER format shown below.");
-      const existing=new Set(existingQuestions.map(q=>String(q.q||"").toLowerCase().replace(/[^a-z0-9]+/g," ").trim()));
-      const unique=parsed.filter(x=>!existing.has(String(x.question).toLowerCase().replace(/[^a-z0-9]+/g," ").trim()));
-      setRows(unique.map((x,i)=>({id:`import-${Date.now()}-${i}`,...x,include:true})));
-    }catch(err){console.error(err);setRows([]);setError(err?.message||"Could not parse this PDF.");}
+      const raw=pages.join('\n'); const result=parseImportedQuestions(raw);
+      setImportStats({...importedNumberSummary(raw,result.parsed,result.invalid),parsed:result.parsed.length,invalid:result.invalid});
+      if(result.invalid.length){setRows([]);throw new Error(`The PDF contains an incomplete marked question (Question ${result.invalid[0].number??'?'}).`);}
+      setRows(result.parsed.map((x,i)=>{const duplicate=existing.has(normalizeImportedKey(x.question));return {id:`import-${Date.now()}-${i}`,...x,include:!duplicate,duplicate};}));
+    }catch(err){console.error(err);if(!rows.length)setError(err?.message||"Could not parse this PDF.");}
     finally{setBusy(false);}
   };
   const updateRow=(id,key,value)=>setRows(rs=>rs.map(r=>r.id===id?{...r,[key]:value}:r));
   const updateOption=(id,index,value)=>setRows(rs=>rs.map(r=>r.id===id?{...r,options:r.options.map((o,i)=>i===index?value:o)}:r));
   const importSelected=()=>{
     const chosen=rows.filter(r=>r.include);
-    if(!chosen.length){setError("Select at least one question to import.");return;}
-    if(chosen.some(r=>r.options.some(o=>!String(o).trim()))){setError("Every imported question needs four choices.");return;}
-    if(chosen.some(r=>!Number.isInteger(Number(r.correctAnswer))||Number(r.correctAnswer)<0||Number(r.correctAnswer)>3)){
-      setError("Set the correct answer for every selected question before importing.");return;
-    }
+    if(!chosen.length){setError('Select at least one question to import.');return;}
+    if(chosen.some(r=>r.options.some(o=>!String(o).trim()))){setError('Every imported question needs four choices.');return;}
+    if(chosen.some(r=>!Number.isInteger(Number(r.correctAnswer))||Number(r.correctAnswer)<0||Number(r.correctAnswer)>3)){setError('Set the correct answer for every selected question before importing.');return;}
     const now=Date.now();
-    saveQuestions(chosen.map((r,i)=>({id:now+i,deckId:deck.id,cat:deck.category,q:r.question.trim(),options:r.options.map(o=>o.trim()),answer:Number(r.correctAnswer),explanation:r.rationale?.trim()||"",topic:"Imported question",sourceMaterial:sourceName,aiGenerated:false,importedFromPdf:sourceName!=="Pasted questions"})));
+    saveQuestions(chosen.map((r,i)=>({id:now+i,deckId:deck.id,cat:deck.category,q:r.question,options:r.options,answer:Number(r.correctAnswer),explanation:r.rationale||'',topic:'Imported questions',sourceMaterial:sourceName,aiGenerated:false,importedFromPdf:inputMode==='pdf',importedFromPaste:inputMode==='paste'})));
   };
-  return <div className="modal-backdrop"><div className="small-modal import-questions-modal" onClick={e=>e.stopPropagation()}><div className="modal-head"><div><span className="question-label">QUESTION IMPORT</span><h2>Import Questions</h2><span className="muted">No AI is used. TOPNOTCHER only extracts existing text, then lets you review it before adding it to this deck.</span></div><button onClick={close}><X/></button></div><label className="material-upload-box import-question-upload"><input type="file" accept="application/pdf,.pdf" onChange={e=>{const f=e.target.files?.[0];e.target.value="";if(f)readPdf(f);}}/><Upload size={22}/><b>{busy?"Parsing PDF…":"Upload Question PDF"}</b><span>{sourceName||"Select a text-based PDF containing numbered questions and A–D choices."}</span></label>
-      <div className="import-method-row">
-        <button type="button" className={`secondary-btn ${pasteOpen?"active":""}`} onClick={()=>{setPasteOpen(v=>!v);setError("");}}>
-          <Clipboard size={18}/> Paste Questions
-        </button>
-        <span className="muted">Copy the strict TOPNOTCHER format and paste it directly — no AI credits used.</span>
-      </div>
-      {pasteOpen&&<div className="paste-question-panel">
-        <div className="paste-question-head"><div><b>Paste Question Text</b><span>Paste one or more complete [QUESTION] blocks from your clipboard.</span></div></div>
-        <textarea value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder={`[QUESTION 1]
+  const pasteAndParse=()=>{if(!pasteText.trim()){setError('Paste your questions into the box first.');return;}applyParsed(pasteText,'Clipboard paste');};
+  return <div className="modal-backdrop"><div className="small-modal import-questions-modal" onClick={e=>e.stopPropagation()}>
+    <div className="modal-head"><div><span className="question-label">QUESTION IMPORT</span><h2>Import Questions</h2><span className="muted">Choose PDF extraction or exact clipboard paste. Pasted content is parsed deterministically — it is not rewritten by AI.</span></div><button onClick={close}><X/></button></div>
+    <div className="import-mode-tabs"><button className={inputMode==='pdf'?'selected':''} onClick={()=>{setInputMode('pdf');setError('');}}>Upload PDF</button><button className={inputMode==='paste'?'selected':''} onClick={()=>{setInputMode('paste');setError('');}}>Paste Questions</button></div>
+    {inputMode==='paste'?<div className="paste-import-panel"><div className="paste-import-head"><div><b>Paste your formatted questions</b><span>Copy the complete blocks from your clipboard, then paste them below. The preview preserves the pasted wording, symbols, spacing, and math.</span></div><button type="button" className="secondary-btn compact" onClick={pasteAndParse}>Parse & Preview</button></div><textarea className="paste-question-input" value={pasteText} onChange={e=>setPasteText(e.target.value)} placeholder={'Paste here…\n\n[QUESTION 1]\n[QUESTION TEXT] Your question\n[A] Choice A\n[B] Choice B\n[C] Choice C\n[D] Choice D\n[ANSWER] B\n[RATIONALE] Your rationale\n[END QUESTION]'} spellCheck="false"/><div className="paste-import-note"><CheckCircle2 size={16}/><span>For exact results, keep each marker on its own line and use the complete format shown below.</span></div></div>:<label className="material-upload-box import-question-upload"><input type="file" accept="application/pdf,.pdf" onChange={e=>{const f=e.target.files?.[0];e.target.value='';if(f)readPdf(f);}}/><Upload size={22}/><b>{busy?'Parsing PDF…':'Upload Question PDF'}</b><span>{sourceName||'Select a text-based PDF containing numbered questions and A–D choices.'}</span></label>}
+    <div className="import-format-guide"><div className="import-format-head"><FileText size={16}/><div><b>Strict TOPNOTCHER format</b><span>When these markers are used, TOPNOTCHER maps each field directly to the preview without generating or paraphrasing content.</span></div></div><pre>{`[QUESTION 1]
 [QUESTION TEXT] What is the primary purpose of formative assessment?
 [A] To assign final grades to students
 [B] To monitor student learning during instruction
@@ -2487,31 +2416,13 @@ function ImportQuestionsModal({deck,existingQuestions=[],close,saveQuestions}) {
 [D] To determine school accreditation status
 [ANSWER] B
 [RATIONALE] Formative assessment monitors student learning during instruction and provides feedback that can improve teaching and learning.
-[END QUESTION]`} />
-        <div className="paste-question-actions">
-          <button type="button" className="secondary-btn" onClick={()=>setPasteText("")}>Clear</button>
-          <button type="button" className="primary-btn" disabled={!pasteText.trim()||busy} onClick={()=>parseQuestionText(pasteText)}><ClipboardCheck size={17}/> {busy?"Parsing…":"Parse & Preview"}</button>
-        </div>
-      </div>}
-      <div className="import-format-guide"><div className="import-format-head"><FileText size={16}/><div><b>Recommended: use explicit markers for maximum accuracy</b><span>These markers tell TOPNOTCHER exactly where the question, choices, answer, and rationale begin and end.</span></div></div><pre>{`[QUESTION 1]
-[QUESTION TEXT] What is the primary purpose of formative assessment?
-[A] To assign final grades to students
-[B] To monitor student learning during instruction
-[C] To rank students according to performance
-[D] To determine school accreditation status
-[ANSWER] B
-[RATIONALE] Formative assessment monitors student learning during instruction and provides feedback that can improve teaching and learning.
-[END QUESTION]
-
-[QUESTION 2]
-[QUESTION TEXT] Which principle emphasizes that learners construct knowledge through experience?
-[A] Behaviorism
-[B] Essentialism
-[C] Constructivism
-[D] Perennialism
-[ANSWER] C
-[RATIONALE] Constructivism holds that learners actively construct knowledge based on experience and prior understanding.
-[END QUESTION]`}</pre><div className="import-format-rules"><span><b>Question marker:</b> [QUESTION 1]</span><span><b>Question text marker:</b> [QUESTION TEXT]</span><span><b>Choice markers:</b> [A], [B], [C], [D] — each on its own line.</span><span><b>Answer marker:</b> [ANSWER] B</span><span><b>Rationale marker:</b> [RATIONALE] followed by the full explanation; multiple lines are allowed.</span><span><b>End marker:</b> [END QUESTION]</span><span><b>Legacy format is still supported:</b> 1. / A. / B. / C. / D. / Answer: B / Rationale: …</span><span><b>Important:</b> Never put rationale text directly after D. without the [RATIONALE] or Rationale: marker. Do not use two-column layouts.</span></div></div>{error&&<div className="ai-error">{error}</div>}{(importStats.total>0||rows.length>0)&&<div className="import-parse-status"><b>Parser check:</b> {importStats.parsed??rows.length} question blocks placed correctly{importStats.detected?` · ${importStats.detected} item numbers detected`:''}{importStats.missing?.length?` · Missing item numbers: ${importStats.missing.slice(0,20).join(', ')}${importStats.missing.length>20?'…':''}`:''}</div>}{rows.length>0&&<div className="import-preview"><div className="section-head"><div><h3>Preview & Edit</h3><span className="muted">Review extracted questions before importing. Questions with no detected answer need a correct answer selected.</span></div><span className="tag">{rows.filter(r=>r.include).length} selected</span></div>{rows.map((r,idx)=><div className="import-question-row" key={r.id}><div className="import-question-top"><label className="import-check"><input type="checkbox" checked={r.include} onChange={e=>updateRow(r.id,"include",e.target.checked)}/><b>Item {r.sourceNumber??idx+1}</b></label><textarea value={r.question} onChange={e=>updateRow(r.id,"question",e.target.value)} /></div><div className="import-options">{r.options.map((o,i)=><label key={i}><span>{String.fromCharCode(65+i)}.</span><input value={o} onChange={e=>updateOption(r.id,i,e.target.value)}/></label>)}</div><div className="import-bottom"><label>Correct answer<select value={r.correctAnswer<0?"":r.correctAnswer} onChange={e=>updateRow(r.id,"correctAnswer",e.target.value===""?-1:Number(e.target.value))}><option value="">Not detected — select</option><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></label><label>Rationale (optional)<textarea value={r.rationale||""} onChange={e=>updateRow(r.id,"rationale",e.target.value)} /></label></div></div>)}</div>}{!busy&&!rows.length&&!error&&<div className="import-empty"><FileText size={28}/><b>Upload a question PDF or paste questions to begin</b><span>The importer works without AI and does not consume AI-generation credits.</span></div>}<div className="modal-foot"><button className="secondary-btn" onClick={close}>Cancel</button>{rows.length>0&&<button className="primary-btn" onClick={importSelected}><Save size={17}/> Import {rows.filter(r=>r.include).length} Questions</button>}</div></div></div>;
+[END QUESTION]`}</pre></div>
+    {error&&<div className="ai-error">{error}</div>}
+    {(importStats.total>0||rows.length>0)&&<div className="import-parse-status"><b>Parser check:</b> {importStats.parsed??rows.length} valid question blocks{importStats.detected?` · ${importStats.detected} question numbers detected`:''}{importStats.missing?.length?` · Missing numbers: ${importStats.missing.slice(0,20).join(', ')}${importStats.missing.length>20?'…':''}`:''}</div>}
+    {rows.length>0&&<div className="import-preview"><div className="section-head"><div><h3>Preview & Edit</h3><span className="muted">This is the exact parsed content. Nothing is regenerated.</span></div><span className="tag">{rows.filter(r=>r.include).length} selected</span></div>{rows.map((r,idx)=><div className="import-question-row" key={r.id}><div className="import-question-top"><label className="import-check"><input type="checkbox" checked={r.include} onChange={e=>updateRow(r.id,'include',e.target.checked)}/><b>Item {r.sourceNumber??idx+1}</b>{r.duplicate&&<span className="import-duplicate-badge">Already in deck</span>}</label><textarea value={r.question} onChange={e=>updateRow(r.id,'question',e.target.value)} /></div><div className="import-options">{r.options.map((o,i)=><label key={i}><span>{String.fromCharCode(65+i)}.</span><textarea value={o} onChange={e=>updateOption(r.id,i,e.target.value)} spellCheck="false"/></label>)}</div><div className="import-bottom"><label>Correct answer<select value={r.correctAnswer} onChange={e=>updateRow(r.id,'correctAnswer',Number(e.target.value))}><option value="0">A</option><option value="1">B</option><option value="2">C</option><option value="3">D</option></select></label><label>Rationale<textarea value={r.rationale||''} onChange={e=>updateRow(r.id,'rationale',e.target.value)} spellCheck="false"/></label></div></div>)}</div>}
+    {!busy&&!rows.length&&!error&&inputMode==='pdf'&&<div className="import-empty"><FileText size={28}/><b>Upload a question PDF to begin</b><span>The importer works without AI and does not consume AI-generation credits.</span></div>}
+    <div className="modal-foot"><button className="secondary-btn" onClick={close}>Cancel</button>{rows.length>0&&<button className="primary-btn" onClick={importSelected}><Save size={17}/> Import {rows.filter(r=>r.include).length} Questions</button>}</div>
+  </div></div>;
 }
 
 function QuestionModal({close,save,initial,deckId,duringStudy=false}) {
