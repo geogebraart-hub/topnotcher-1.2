@@ -51,6 +51,15 @@ function ensureMathJax(){
 
 function normalizeLegacyMathNotation(value){
   let s=String(value??"");
+  // Clipboard/PDF pipelines sometimes deliver TeX with JSON-style escaping
+  // still present (for example \\{ instead of \{, or \\subseteq instead
+  // of \subseteq). MathJax treats a literal double backslash as a TeX line
+  // break, which is exactly what was producing the stray symbols and broken
+  // numbers in Study Now. Normalize only double-escaped TeX tokens; preserve
+  // genuine TeX line-breaks (\\ followed by whitespace/newline).
+  s=s.replace(/\\\\(?=[A-Za-z])/g,"\\");
+  s=s.replace(/\\\\(?=[{}()[\]$])/g,"\\");
+
   // Only normalize well-known OCR forms. Do not split or individually wrap
   // mathematical symbols: doing that is what previously caused duplicated,
   // stacked and visually reversed glyphs in Study Now.
@@ -135,6 +144,19 @@ function prepareMathSource(value){
 
   while(i<s.length){
     if(isMathCommandAt(i)){
+      // Include the simple operand immediately before a relation/operator so
+      // expressions such as "A \subseteq B" are rendered as ONE equation,
+      // not as plain "A" followed by a separate math fragment.
+      let start=i;
+      let left=start-1;
+      while(left>=0 && /\s/.test(s[left])) left--;
+      const leftEnd=left+1;
+      while(left>=0 && operand(s[left])) left--;
+      const leftStart=left+1;
+      if(leftStart<leftEnd && (leftStart===0 || /[\s(\[{,:;]/.test(s[leftStart-1]||""))){
+        start=leftStart;
+      }
+
       let end=consumeLatexCommand(s,i);
       let sawRelation=relation.test(s.slice(i,end));
 
@@ -168,7 +190,12 @@ function prepareMathSource(value){
         break;
       }
 
-      out+=wrapMathOnce(s.slice(i,end));
+      // We may have already emitted the simple left operand while scanning up
+      // to the TeX command. Remove that just-emitted slice before replacing it
+      // with the single complete math expression. This prevents output such as
+      // "A \(A \subseteq B\)" for a bare "A \subseteq B" source.
+      if(start<i) out=out.slice(0, Math.max(0, out.length-(i-start)));
+      out+=wrapMathOnce(s.slice(start,end));
       i=end;
       continue;
     }
@@ -187,7 +214,7 @@ function prepareMathSource(value){
 
   // A complete plain-text equation can safely be wrapped as one expression.
   const trimmed=out.trim();
-  const wholeMath=/^[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜(){}\[\].,⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s=≠≤≥≈≡∝⊂⊆⊃⊇∪∩→←↔⇒⇔+−\-*×÷\/_]+$/;
+  const wholeMath=/^[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜(){}\[\].,⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s=≠≤≥≈≡∝⊂⊆⊃⊇∪∩→←↔⇒⇔+−\-*×÷\/_\\]+$/;
   const hasOperator=/(?:=|≠|≤|≥|≈|≡|∝|⊂|⊆|⊃|⊇|∪|∩|→|←|↔|⇒|⇔|\+|−|-|×|÷|\*|\/|\^|_)/;
   if(trimmed && wholeMath.test(trimmed) && hasOperator.test(trimmed) && !/\\\(|\\\[|\$/.test(trimmed)){
     return wrapMathOnce(trimmed);
