@@ -24,7 +24,7 @@ function ensureMathJax(){
     tex:{
       inlineMath:[["\\(","\\)"],["$","$"]],
       displayMath:[["\\[","\\]"],["$$","$$"]],
-      processEscapes:true,
+      processEscapes:false,
       processEnvironments:true,
       processRefs:true,
       tags:"ams",
@@ -115,44 +115,40 @@ function prepareMathSource(value){
   let s=normalizeLegacyMathNotation(original);
   if(!hasMathExpression(s)) return s;
 
-  const protectedParts=[];
-  const protect=(fragment)=>{
-    const id=protectedParts.length;
-    protectedParts.push(fragment);
-    return `\uE000M${id}\uE001`;
-  };
+  // IMPORTANT: If the source already contains TeX delimiters, leave the
+  // expression completely untouched.  The old renderer protected delimited
+  // fragments and then wrapped surrounding text again, which could create
+  // nested delimiters such as \({x\(\in\)Z...}\). MathJax then displayed the
+  // inner delimiters literally and made fractions/symbols look corrupted.
+  const hasExplicitDelimiters=/\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|(^|[^\\])\$(?!\s)[\s\S]*?\$(?!\w)/.test(s);
+  if(hasExplicitDelimiters) return s;
 
-  // 1) Preserve explicit TeX exactly as supplied. Never run later detection
-  // passes over an already-delimited expression.
-  const explicit=/(\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\]|\$\$[\s\S]*?\$\$|(^|[^\\])\$(?!\s)[\s\S]*?\$(?!\w))/g;
-  s=s.replace(explicit,m=>protect(m));
-
-  // 2) Walk the remaining text from left to right. This is deliberately a
-  // single pass: the previous implementation collected string indexes and
-  // then mutated the string while iterating those stale indexes. That could
-  // move a later command into the wrong position and was the source of the
-  // flipped/duplicated symbols seen in Study Now.
+  // Bare LaTeX is common in imported reviewer material. Wrap each complete
+  // command/expression exactly once. This deliberately avoids rewriting any
+  // text after it has been wrapped, so a rendered expression can never be
+  // parsed a second time.
   let out="";
   let i=0;
-  const relationCommand=/^\\(?:leq|geq|neq|approx|equiv|cong|propto|subseteq|subset|supseteq|supset|cup|cap|to|rightarrow|leftarrow|iff|times|div|cdot|pm|mp)\b/;
-  const isOperandChar=c=>/[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/.test(c||"");
+  const relation=/^\\(?:leq|geq|neq|approx|equiv|cong|propto|subseteq|subset|supseteq|supset|cup|cap|to|rightarrow|leftarrow|iff|times|div|cdot|pm|mp)\b/;
+  const operand=c=>/[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉]/.test(c||"");
+  const isMathCommandAt=(pos)=>pos<s.length && s[pos]==="\\" && /[A-Za-z]/.test(s[pos+1]||"");
+
   while(i<s.length){
-    if(s[i]==="\\" && /[A-Za-z]/.test(s[i+1]||"")){
-      const start=i;
+    if(isMathCommandAt(i)){
       let end=consumeLatexCommand(s,i);
-      let sawRelation=relationCommand.test(s.slice(i,end));
-      // Keep adjacent LaTeX relation/operator and its operand in the SAME
-      // MathJax expression. Example: \\overline{B} \\subseteq A.
+      let sawRelation=relation.test(s.slice(i,end));
+
+      // Pull adjacent LaTeX operators and their operands into one expression.
       while(end<s.length){
         let p=end;
         while(p<s.length && /\s/.test(s[p])) p++;
         if(p>=s.length) break;
-        if(s[p]==="\\" && /[A-Za-z]/.test(s[p+1]||"")){
-          const cmdEnd=consumeLatexCommand(s,p);
-          const cmd=s.slice(p,cmdEnd);
-          if(relationCommand.test(cmd) || sawRelation){
-            sawRelation=sawRelation||relationCommand.test(cmd);
-            end=cmdEnd;
+        if(isMathCommandAt(p)){
+          const ce=consumeLatexCommand(s,p);
+          const cmd=s.slice(p,ce);
+          if(relation.test(cmd) || sawRelation){
+            sawRelation=sawRelation||relation.test(cmd);
+            end=ce;
             continue;
           }
           break;
@@ -161,50 +157,43 @@ function prepareMathSource(value){
           sawRelation=true;
           end=p+1;
           while(end<s.length && /\s/.test(s[end])) end++;
-          while(end<s.length && isOperandChar(s[end])) end++;
+          while(end<s.length && operand(s[end])) end++;
           continue;
         }
-        if(sawRelation && isOperandChar(s[p])){
+        if(sawRelation && operand(s[p])){
           end=p+1;
-          while(end<s.length && isOperandChar(s[end])) end++;
+          while(end<s.length && operand(s[end])) end++;
           continue;
         }
         break;
       }
-      // If the command is preceded by an obvious math operator/operand, pull
-      // that small left-hand side into the same expression: x = \\frac{a}{b}.
-      let left=start;
-      const tail=out.match(/([A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω)]+\s*(?:=|≠|≤|≥|≈|≡|⊂|⊆|⊃|⊇|\+|−|-|×|÷|\/|\*)\s*)$/);
-      if(tail) left=start-tail[0].length;
-      out=out.slice(0,out.length-(start-left))+wrapMathOnce(s.slice(left,end));
+
+      out+=wrapMathOnce(s.slice(i,end));
       i=end;
       continue;
     }
+
+    // Compact bare powers/subscripts such as x^2 or x_{1}.
+    const compact=s.slice(i).match(/^[A-Za-z0-9]+(?:\^|_)(?:\{[^{}]+\}|[A-Za-z0-9]+)/);
+    if(compact){
+      out+=wrapMathOnce(compact[0]);
+      i+=compact[0].length;
+      continue;
+    }
+
     out+=s[i];
     i++;
   }
-  s=out;
 
-  // 3) Plain Unicode/ASCII equations are rendered only when the COMPLETE
-  // candidate is an equation. This avoids the old failure where `x^2 + 3x - 4 = 0`
-  // was split into several independent MathJax fragments.
+  // A complete plain-text equation can safely be wrapped as one expression.
+  const trimmed=out.trim();
   const wholeMath=/^[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜(){}\[\].,⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉\s=≠≤≥≈≡∝⊂⊆⊃⊇∪∩→←↔⇒⇔+−\-*×÷\/_]+$/;
   const hasOperator=/(?:=|≠|≤|≥|≈|≡|∝|⊂|⊆|⊃|⊇|∪|∩|→|←|↔|⇒|⇔|\+|−|-|×|÷|\*|\/|\^|_)/;
-  const trimmed=s.trim();
-  if(trimmed && wholeMath.test(trimmed) && hasOperator.test(trimmed) && !/^\\[A-Za-z]+/.test(trimmed)){
-    s=protect(wrapMathOnce(trimmed));
-  }else{
-    // Mixed prose may contain a complete equation. Render the entire equation
-    // as one fragment, then handle any remaining compact exponent/subscript.
-    const inlineEquation=/\b[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜().{}⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉.,]+\s*(?:=|≠|≤|≥|≈|≡|∝|⊂|⊆|⊃|⊇|∪|∩|→|←|↔|⇒|⇔|\+|−|-|×|÷|\*|\/|\^|_)\s*[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜().{}⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉.,]+(?:\s*(?:=|≠|≤|≥|≈|≡|∝|⊂|⊆|⊃|⊇|∪|∩|→|←|↔|⇒|⇔|\+|−|-|×|÷|\*|\/|\^|_)\s*[A-Za-z0-9α-ωΑ-Ωπθλμνξρστφχψω√∛∜().{}⁰¹²³⁴⁵⁶⁷⁸⁹₀₁₂₃₄₅₆₇₈₉.,]+)+/g;
-    s=s.replace(inlineEquation,m=>protect(wrapMathOnce(m.trim())));
-    const compact=/\b[A-Za-z0-9]+(?:\^|_)(?:\{[^{}]+\}|[A-Za-z0-9]+)\b/g;
-    s=s.replace(compact,m=>protect(wrapMathOnce(m)));
+  if(trimmed && wholeMath.test(trimmed) && hasOperator.test(trimmed) && !/\\\(|\\\[|\$/.test(trimmed)){
+    return wrapMathOnce(trimmed);
   }
-
-  return s.replace(/\uE000M(\d+)\uE001/g,(_,n)=>protectedParts[Number(n)]??"");
+  return out;
 }
-
 function MathText({text,className=""}){
   const ref=useRef(null);
   const value=String(text??"");
