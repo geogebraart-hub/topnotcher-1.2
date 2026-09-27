@@ -232,6 +232,18 @@ function MathText({text,className=""}){
   return <span ref={ref} className={`${shouldRender?"math-text ":""}${className}`.trim()} aria-label={value}/>;
 }
 
+export function TopnotcherBrand({ compact = false }) {
+  return (
+    <div className={`topnotcher-brand ${compact ? "topnotcher-brand-compact" : ""}`} aria-label="TOPNOTCHER! By God's Grace">
+      <span className="topnotcher-logo-circle" aria-hidden="true"><span>★</span></span>
+      <div className="topnotcher-wordmark">
+        <div className="topnotcher-name">TOPNOTCHER!</div>
+        <div className="topnotcher-tagline">By God's Grace</div>
+      </div>
+    </div>
+  );
+}
+
 const CATEGORIES = [
   { id:"gened", label:"GenEd", title:"General Education", short:"GenEd", icon:BookOpen, color:"purple", desc:"English, Mathematics, Science, Filipino, Social Studies", items:150, hours:"2 hrs" },
   { id:"profed", label:"ProfEd", title:"Professional Education", short:"ProfEd", icon:GraduationCap, color:"green", desc:"Child Development, Curriculum, Teaching Strategies, Assessment", items:150, hours:"3 hrs" },
